@@ -14,6 +14,7 @@
         "php": ">=5.5"
     },
     "require-dev": {
+        "illuminate/support": "~5.1",
         "illuminate/database": "~5.1",
         "illuminate/redis": "~5.1",
         "phpunit/phpunit": "4.8.*",
@@ -21,7 +22,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Spiritix\\LadaCache\\": "src/"
+            "Spiritix\\LadaCache\\": "src/Spiritix/LadaCache/"
         }
     },
     "autoload-dev": {
