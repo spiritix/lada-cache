@@ -1,9 +1,5 @@
 {
     "providers": [
-<<<<<<< HEAD
         "Spiritix\\LadaCache\\LadaCacheServiceProvider"
-=======
-        "Maatwebsite\\Excel\\ExcelServiceProvider"
->>>>>>> c6e77f42f7cc220acea0d50c57d78fb4c469027d
     ]
 }
