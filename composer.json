@@ -1,7 +1,7 @@
 {
     "name": "spiritix/lada-cache",
     "type": "library",
-    "description": "An automated and scalable database caching layer for Laravel 5+",
+    "description": "A Redis based, automated and scalable database caching layer for Laravel 5+",
     "license": "MIT",
     "keywords": ["php","laravel","cache","caching","redis"],
     "authors": [
@@ -15,7 +15,8 @@
     },
     "require-dev": {
         "illuminate/database": "~5.1",
-        "phpunit/phpunit": "5.0.*",
+        "illuminate/redis": "~5.1",
+        "phpunit/phpunit": "4.8.*",
         "codeclimate/php-test-reporter": "dev-master"
     },
     "autoload": {

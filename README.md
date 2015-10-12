@@ -1,6 +1,6 @@
 # Lada Cache
 
-An automated and scalable database caching layer for Laravel 5+.
+A Redis based, automated and scalable database caching layer for Laravel 5+
 
 [![Build Status](https://travis-ci.org/spiritix/lada-cache.svg?branch=master)](https://travis-ci.org/spiritix/lada-cache)
 [![Code Climate](https://codeclimate.com/github/spiritix/lada-cache/badges/gpa.svg)](https://codeclimate.com/github/spiritix/lada-cache)
