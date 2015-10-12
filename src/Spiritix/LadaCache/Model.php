@@ -21,11 +21,6 @@ use Illuminate\Database\Eloquent\Model as EloquentModel;
  */
 class Model extends EloquentModel
 {
-    /**
-     * Get a new query builder instance for the connection.
-     *
-     * @return \Illuminate\Database\Query\Builder
-     */
     protected function newBaseQueryBuilder()
     {
         $conn = $this->getConnection();
