@@ -9,26 +9,26 @@
  * file that was distributed with this source code.
  */
 
-namespace Spiritix\LadaCache\Connection;
+namespace Spiritix\LadaCache\Database\Connection;
 
-use Spiritix\LadaCache\Connection;
-use Illuminate\Database\Query\Processors\SQLiteProcessor;
-use Doctrine\DBAL\Driver\PDOSqlite\Driver as DoctrineDriver;
-use Illuminate\Database\Query\Grammars\SQLiteGrammar as QueryGrammar;
-use Illuminate\Database\Schema\Grammars\SQLiteGrammar as SchemaGrammar;
+use Spiritix\LadaCache\Database\Connection;
+use Doctrine\DBAL\Driver\PDOPgSql\Driver as DoctrineDriver;
+use Illuminate\Database\Query\Processors\PostgresProcessor;
+use Illuminate\Database\Query\Grammars\PostgresGrammar as QueryGrammar;
+use Illuminate\Database\Schema\Grammars\PostgresGrammar as SchemaGrammar;
 
 /**
  * Todo
  *
- * @package Spiritix\LadaCache
+ * @package Spiritix\LadaCache\Database\Connection
  * @author  Matthias Isler <mi@matthias-isler.ch>
  */
-class SqlLiteConnection extends Connection
+class PostgresConnection extends Connection
 {
     /**
      * Get the default query grammar instance.
      *
-     * @return \Illuminate\Database\Query\Grammars\SQLiteGrammar
+     * @return \Illuminate\Database\Query\Grammars\PostgresGrammar
      */
     protected function getDefaultQueryGrammar()
     {
@@ -38,7 +38,7 @@ class SqlLiteConnection extends Connection
     /**
      * Get the default schema grammar instance.
      *
-     * @return \Illuminate\Database\Schema\Grammars\SQLiteGrammar
+     * @return \Illuminate\Database\Schema\Grammars\PostgresGrammar
      */
     protected function getDefaultSchemaGrammar()
     {
@@ -48,17 +48,17 @@ class SqlLiteConnection extends Connection
     /**
      * Get the default post processor instance.
      *
-     * @return \Illuminate\Database\Query\Processors\SQLiteProcessor
+     * @return \Illuminate\Database\Query\Processors\PostgresProcessor
      */
     protected function getDefaultPostProcessor()
     {
-        return new SQLiteProcessor;
+        return new PostgresProcessor;
     }
 
     /**
      * Get the Doctrine DBAL driver.
      *
-     * @return \Doctrine\DBAL\Driver\PDOSqlite\Driver
+     * @return \Doctrine\DBAL\Driver\PDOPgSql\Driver
      */
     protected function getDoctrineDriver()
     {

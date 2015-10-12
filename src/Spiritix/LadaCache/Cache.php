@@ -14,6 +14,9 @@ namespace Spiritix\LadaCache;
 /**
  * Todo
  *
+ * Adapted from Cm_Cache_Backend_Redis.
+ * @see https://github.com/colinmollenhour/Cm_Cache_Backend_Redis
+ *
  * @package Spiritix\LadaCache
  * @author  Matthias Isler <mi@matthias-isler.ch>
  */

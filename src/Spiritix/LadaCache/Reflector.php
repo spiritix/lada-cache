@@ -11,7 +11,7 @@
 
 namespace Spiritix\LadaCache;
 
-use Illuminate\Database\Query\Builder;
+use Spiritix\LadaCache\Database\QueryBuilder;
 
 /**
  * Todo
@@ -19,15 +19,22 @@ use Illuminate\Database\Query\Builder;
  * @package Spiritix\LadaCache
  * @author  Matthias Isler <mi@matthias-isler.ch>
  */
-class QueryBuilder extends Builder
+class Reflector
 {
     /**
-     * Run the query as a "select" statement against the connection.
+     * Query builder instance.
      *
-     * @return array
+     * @var QueryBuilder
      */
-    protected function runSelect()
+    protected $queryBuilder;
+
+    /**
+     * Initialize reflector.
+     *
+     * @param QueryBuilder $queryBuilder
+     */
+    public function __construct(QueryBuilder $queryBuilder)
     {
-        return $this->connection->select($this->toSql(), $this->getBindings(), ! $this->useWritePdo);
+        $this->queryBuilder = $queryBuilder;
     }
 }

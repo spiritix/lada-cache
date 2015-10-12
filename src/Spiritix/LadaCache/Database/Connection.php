@@ -9,7 +9,7 @@
  * file that was distributed with this source code.
  */
 
-namespace Spiritix\LadaCache;
+namespace Spiritix\LadaCache\Database;
 
 use Illuminate\Database\Connection as IlluminateConnection;
 

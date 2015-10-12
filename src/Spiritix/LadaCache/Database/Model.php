@@ -9,14 +9,14 @@
  * file that was distributed with this source code.
  */
 
-namespace Spiritix\LadaCache;
+namespace Spiritix\LadaCache\Database;
 
 use Illuminate\Database\Eloquent\Model as EloquentModel;
 
 /**
  * Todo
  *
- * @package Spiritix\LadaCache
+ * @package Spiritix\LadaCache\Database
  * @author  Matthias Isler <mi@matthias-isler.ch>
  */
 class Model extends EloquentModel

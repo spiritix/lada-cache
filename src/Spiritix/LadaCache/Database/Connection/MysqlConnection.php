@@ -9,9 +9,9 @@
  * file that was distributed with this source code.
  */
 
-namespace Spiritix\LadaCache\Connection;
+namespace Spiritix\LadaCache\Database\Connection;
 
-use Spiritix\LadaCache\Connection;
+use Spiritix\LadaCache\Database\Connection;
 use Illuminate\Database\Schema\MySqlBuilder;
 use Illuminate\Database\Query\Processors\MySqlProcessor;
 use Doctrine\DBAL\Driver\PDOMySql\Driver as DoctrineDriver;
@@ -21,7 +21,7 @@ use Illuminate\Database\Schema\Grammars\MySqlGrammar as SchemaGrammar;
 /**
  * Todo
  *
- * @package Spiritix\LadaCache
+ * @package Spiritix\LadaCache\Database\Connection
  * @author  Matthias Isler <mi@matthias-isler.ch>
  */
 class MysqlConnection extends Connection

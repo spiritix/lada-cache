@@ -9,9 +9,9 @@
  * file that was distributed with this source code.
  */
 
-namespace Spiritix\LadaCache\Connection;
+namespace Spiritix\LadaCache\Database\Connection;
 
-use Spiritix\LadaCache\Connection;
+use Spiritix\LadaCache\Database\Connection;
 use Closure;
 use Exception;
 use Throwable;
@@ -23,7 +23,7 @@ use Illuminate\Database\Schema\Grammars\SqlServerGrammar as SchemaGrammar;
 /**
  * Todo
  *
- * @package Spiritix\LadaCache
+ * @package Spiritix\LadaCache\Database\Connection
  * @author  Matthias Isler <mi@matthias-isler.ch>
  */
 class SqlServerConnection extends Connection
