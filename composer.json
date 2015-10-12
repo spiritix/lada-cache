@@ -15,7 +15,7 @@
     },
     "require-dev": {
         "illuminate/database": "~5.1",
-        "phpunit/phpunit": "5.0",
+        "phpunit/phpunit": "5.0.*",
         "codeclimate/php-test-reporter": "dev-master"
     },
     "autoload": {
