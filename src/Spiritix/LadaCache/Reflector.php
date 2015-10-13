@@ -22,6 +22,11 @@ use Spiritix\LadaCache\Database\QueryBuilder;
 class Reflector
 {
     /**
+     * Database tag prefix
+     */
+    const TAG_DATABASE_PREFIX = 'd:';
+
+    /**
      * Table tag prefix
      */
     const TAG_TABLE_PREFIX = 't:';
@@ -60,7 +65,9 @@ class Reflector
      */
     public function getHash()
     {
-        return md5($this->queryBuilder->toSql());
+        $identifier = $this->getDatabase() . $this->queryBuilder->toSql();
+
+        return md5($identifier);
     }
 
     /**
@@ -75,6 +82,18 @@ class Reflector
             $this->getColumns(),
             $this->getRows()
         );
+    }
+
+    /**
+     * Returns name of used database
+     *
+     * @return string
+     */
+    public function getDatabase()
+    {
+        return self::TAG_DATABASE_PREFIX . $this->queryBuilder
+            ->getConnection()
+            ->getDatabaseName();
     }
 
     /**

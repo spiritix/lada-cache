@@ -16,9 +16,6 @@ use Illuminate\Support\Facades\Redis;
 /**
  * Todo
  *
- * Adapted from Cm_Cache_Backend_Redis.
- * @see https://github.com/colinmollenhour/Cm_Cache_Backend_Redis
- *
  * @package Spiritix\LadaCache
  * @author  Matthias Isler <mi@matthias-isler.ch>
  */
@@ -49,6 +46,8 @@ class Cache
     public function has()
     {
         $hash = $this->reflector->getHash();
+
+        return Redis::exists($hash);
     }
 
     /**
@@ -60,6 +59,12 @@ class Cache
     {
         $hash = $this->reflector->getHash();
         $tags = $this->reflector->getTags();
+
+        Redis::set($hash, $this->encodeData($data));
+
+        foreach ($tags as $tag) {
+            Redis::sadd($tag, [$hash]);
+        }
     }
 
     /**
@@ -70,5 +75,32 @@ class Cache
     public function get()
     {
         $hash = $this->reflector->getHash();
+        $encoded = Redis::get($hash);
+
+        return $this->decodeData($encoded);
+    }
+
+    /**
+     * Encodes data in order to be stored as Redis string
+     *
+     * @param array $data Decoded data
+     *
+     * @return string
+     */
+    protected function encodeData(array $data)
+    {
+        return json_encode($data);
+    }
+
+    /**
+     * Decodes data from Redis to array
+     *
+     * @param string $data Decoded data
+     *
+     * @return array
+     */
+    protected function decodeData($data)
+    {
+        return json_decode($data);
     }
 }
