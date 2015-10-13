@@ -12,6 +12,7 @@
 namespace Spiritix\LadaCache\Database;
 
 use Illuminate\Database\Query\Builder;
+use Spiritix\LadaCache\Cache;
 use Spiritix\LadaCache\Reflector;
 
 /**
@@ -29,8 +30,17 @@ class QueryBuilder extends Builder
      */
     protected function runSelect()
     {
-        $reflector = new Reflector($this);
+        $cache = new Cache(new Reflector($this));
 
-        return $this->connection->select($this->toSql(), $this->getBindings(), ! $this->useWritePdo);
+        if ($cache->has()) {
+            return $cache->get();
+        }
+
+        $result = $this->connection->select($this->toSql(), $this->getBindings(), ! $this->useWritePdo);
+        $cache->set($result);
+
+        // We do not return $cache->get() here
+        // This would cause a separate cache request
+        return $result;
     }
 }
