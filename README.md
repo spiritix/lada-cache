@@ -62,9 +62,9 @@ class Post extends Spiritix\LadaCache\Database\Model {
 
 It's a good practice to create a base model class which extends the Lada Cache model and then will be extended by all your models.
 
-## Configuration
+## Known issues and limitations
 
-Todo
+- Does not work with (Raw SQL queries)[http://laravel.com/docs/5.1/database#running-queries]. This would require an SQL parser to be implemented which is quite hard and very inefficient.
 
 ## Contributing
 
