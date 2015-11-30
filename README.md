@@ -13,15 +13,44 @@ A Redis based, automated and scalable database caching layer for Laravel 5+
 
 ## Features
 
-Todo
+Lada Cache will automatically cache all queries in a Redis database.
+The library makes use of Laravel Redis which is based on predis/predis.
+
+*Work in progress, use at your own risk!*
 
 ## Requirements
 
-Todo
+- PHP 5.6+
+- Laravel 5+
+- Phpiredis is optional but will increase performance
 
 ## Installation
 
-Todo
+The AWS Service Provider can be installed via [Composer](http://getcomposer.org) by requiring the
+`spiritix/lada-cache` package in your project's `composer.json`.
+
+```json
+{
+    "require": {
+        "spiritix/lada-cache": "~1.0"
+    }
+}
+```
+
+Then run a composer update
+```sh
+php composer.phar update
+```
+
+Now must register the service provider when bootstrapping your Laravel application.
+Find the `providers` key in your `config/app.php` and register the Lada Cache Service Provider.
+
+```php
+    'providers' => array(
+        // ...
+        Spiritix\LadaCache\LadaCacheServiceProvider::class,
+    )
+```
 
 ## Configuration
 
