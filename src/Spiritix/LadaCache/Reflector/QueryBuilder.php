@@ -9,35 +9,35 @@
  * file that was distributed with this source code.
  */
 
-namespace Spiritix\LadaCache;
+namespace Spiritix\LadaCache\Reflector;
 
-use Spiritix\LadaCache\Database\QueryBuilder;
+use Spiritix\LadaCache\Database\QueryBuilder as EloquentQueryBuilder;
 
 /**
- * Todo
+ * Query builder reflector provides information about an Eloquent query builder object.
  *
- * @package Spiritix\LadaCache
+ * @package Spiritix\LadaCache\Reflector
  * @author  Matthias Isler <mi@matthias-isler.ch>
  */
-class Reflector
+class QueryBuilder
 {
     /**
-     * Database tag prefix
+     * Database tag prefix.
      */
     const TAG_DATABASE_PREFIX = 'd:';
 
     /**
-     * Table tag prefix
+     * Table tag prefix.
      */
     const TAG_TABLE_PREFIX = 't:';
 
     /**
-     * Column tag prefix
+     * Column tag prefix.
      */
     const TAG_COLUMN_PREFIX = 'c:';
 
     /**
-     * Row tag prefix
+     * Row tag prefix.
      */
     const TAG_ROW_PREFIX = 'r:';
 
@@ -51,9 +51,9 @@ class Reflector
     /**
      * Initialize reflector.
      *
-     * @param QueryBuilder $queryBuilder
+     * @param EloquentQueryBuilder $queryBuilder
      */
-    public function __construct(QueryBuilder $queryBuilder)
+    public function __construct(EloquentQueryBuilder $queryBuilder)
     {
         $this->queryBuilder = $queryBuilder;
     }
@@ -65,6 +65,8 @@ class Reflector
      */
     public function getHash()
     {
+        // Never remove the database from the identifier
+        // Query doesn't necessarily include it, will cause cache conflicts
         $identifier = $this->getDatabase() . $this->queryBuilder->toSql();
 
         return md5($identifier);
@@ -85,7 +87,7 @@ class Reflector
     }
 
     /**
-     * Returns name of used database
+     * Returns prefixed name of target database.
      *
      * @return string
      */
@@ -103,11 +105,19 @@ class Reflector
      */
     private function getTables()
     {
-        $tables = array_merge(
-            [$this->queryBuilder->from],
-            $this->queryBuilder->joins
-        );
+        // Get main table
+        $tables = [$this->queryBuilder->from];
 
+        // Add possible join tables
+        $joins = $this->queryBuilder->joins ?: [];
+        foreach ($joins as $join) {
+
+            if (!in_array($join->table, $tables)) {
+                $tables[] = $join->table;
+            }
+        }
+
+        // Add prefixes
         return array_map(function($table) {
             return self::TAG_TABLE_PREFIX . $table;
         }, $tables);
@@ -122,6 +132,7 @@ class Reflector
     {
         $columns = $this->queryBuilder->columns;
 
+        // Add prefixes
         return array_map(function($column) {
             return self::TAG_COLUMN_PREFIX . $column;
         }, $columns);
@@ -130,12 +141,15 @@ class Reflector
     /**
      * Returns prefixed affected rows.
      *
+     * @todo This must be implemented ASAP.
+     *
      * @return array
      */
     private function getRows()
     {
-        $rows = []; // TODO
+        $rows = [];
 
+        // Add prefixes
         return array_map(function($row) {
             return self::TAG_ROW_PREFIX . $row;
         }, $rows);

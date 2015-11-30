@@ -12,14 +12,16 @@
 namespace Spiritix\LadaCache;
 
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Database\Eloquent\Model;
 use Spiritix\LadaCache\Database\Connection\MysqlConnection;
 use Spiritix\LadaCache\Database\Connection\PostgresConnection;
 use Spiritix\LadaCache\Database\Connection\SqlLiteConnection;
 use Spiritix\LadaCache\Database\Connection\SqlServerConnection;
 
 /**
- * Todo
+ * Laravel service provider for Lada Cache.
+ *
+ * Since Lada Cache can't be used manually, a cache service is not required.
+ * We'll use this functionality to provide and publish the config as well as to override the default database connections.
  *
  * @package Spiritix\LadaCache
  * @author  Matthias Isler <mi@matthias-isler.ch>
@@ -45,12 +47,13 @@ class LadaCacheServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(
             __DIR__ . '/../../../config/lada-cache.php', 'lada-cache'
         );
-
-        $this->registerModelObservers();
     }
 
     /**
      * Register the service provider.
+     *
+     * Here we are overriding all connection singleton's from Laravel.
+     * This is the only way to make them use our custom query builder which makes use of the cache.
      */
     public function register()
     {
@@ -72,28 +75,6 @@ class LadaCacheServiceProvider extends ServiceProvider
         $this->app->singleton('db.connection.sqlserver', function ($app, $parameters) {
             list($connection, $database, $prefix, $config) = $parameters;
             return new SqlServerConnection($connection, $database, $prefix, $config);
-        });
-    }
-
-    /**
-     * Registers the model observers.
-     */
-    private function registerModelObservers()
-    {
-        Model::created(function($model) {
-            return true;
-        });
-
-        Model::updated(function($model) {
-            return true;
-        });
-
-        Model::deleted(function($model) {
-            return true;
-        });
-
-        Model::saved(function($model) {
-            return true;
         });
     }
 }

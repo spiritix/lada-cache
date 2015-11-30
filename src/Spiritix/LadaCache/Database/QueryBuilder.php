@@ -13,10 +13,10 @@ namespace Spiritix\LadaCache\Database;
 
 use Illuminate\Database\Query\Builder;
 use Spiritix\LadaCache\Cache;
-use Spiritix\LadaCache\Reflector;
+use Spiritix\LadaCache\Reflector\QueryBuilder as QueryBuilderReflector;
 
 /**
- * Todo
+ * Overrides Laravel's query builder class.
  *
  * @package Spiritix\LadaCache\Database
  * @author  Matthias Isler <mi@matthias-isler.ch>
@@ -26,11 +26,13 @@ class QueryBuilder extends Builder
     /**
      * Run the query as a "select" statement against the connection.
      *
+     * Check if a cached version is available and return it, otherwise add result to cache.
+     *
      * @return array
      */
     protected function runSelect()
     {
-        $cache = new Cache(new Reflector($this));
+        $cache = new Cache(new QueryBuilderReflector($this));
 
         if ($cache->has()) {
             return $cache->get();

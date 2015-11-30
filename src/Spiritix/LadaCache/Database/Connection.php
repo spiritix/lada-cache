@@ -14,7 +14,7 @@ namespace Spiritix\LadaCache\Database;
 use Illuminate\Database\Connection as IlluminateConnection;
 
 /**
- * Todo
+ * Overrides Laravel's database connection class.
  *
  * @package Spiritix\LadaCache
  * @author  Matthias Isler <mi@matthias-isler.ch>

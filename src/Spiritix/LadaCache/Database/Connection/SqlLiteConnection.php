@@ -18,7 +18,9 @@ use Illuminate\Database\Query\Grammars\SQLiteGrammar as QueryGrammar;
 use Illuminate\Database\Schema\Grammars\SQLiteGrammar as SchemaGrammar;
 
 /**
- * Todo
+ * Overrides Laravel's SQL Lite connection class.
+ *
+ * @todo Fix the code smell copied from Laravel.
  *
  * @package Spiritix\LadaCache\Database\Connection
  * @author  Matthias Isler <mi@matthias-isler.ch>

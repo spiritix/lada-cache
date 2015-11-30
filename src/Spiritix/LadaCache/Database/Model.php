@@ -12,15 +12,48 @@
 namespace Spiritix\LadaCache\Database;
 
 use Illuminate\Database\Eloquent\Model as EloquentModel;
+use Spiritix\LadaCache\Invalidator;
 
 /**
- * Todo
+ * Overrides Laravel's model class.
  *
  * @package Spiritix\LadaCache\Database
  * @author  Matthias Isler <mi@matthias-isler.ch>
  */
 class Model extends EloquentModel
 {
+    /**
+     * The "booting" method of the model.
+     *
+     * We'll hook into all model events here for invalidating cache items.
+     *
+     * @return void
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::created(function($model) {
+            $invalidator = new Invalidator($model);
+            $invalidator->invalidate();
+        });
+
+        static::updated(function($model) {
+            $invalidator = new Invalidator($model);
+            $invalidator->invalidate();
+        });
+
+        static::deleted(function($model) {
+            $invalidator = new Invalidator($model);
+            $invalidator->invalidate();
+        });
+
+        static::saved(function($model) {
+            $invalidator = new Invalidator($model);
+            $invalidator->invalidate();
+        });
+    }
+
     /**
      * Get a new query builder instance for the connection.
      *

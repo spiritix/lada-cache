@@ -11,10 +11,11 @@
 
 namespace Spiritix\LadaCache;
 
+use Spiritix\LadaCache\Reflector\QueryBuilder as QueryBuilderReflector;
 use Illuminate\Support\Facades\Redis;
 
 /**
- * Todo
+ * Cache is responsible for storing data in cache and providing cached data.
  *
  * @package Spiritix\LadaCache
  * @author  Matthias Isler <mi@matthias-isler.ch>
@@ -22,24 +23,24 @@ use Illuminate\Support\Facades\Redis;
 class Cache
 {
     /**
-     * Reflector instance
+     * Reflector instance.
      *
-     * @var Reflector
+     * @var QueryBuilderReflector
      */
     protected $reflector;
 
     /**
-     * Initialize cache instance
+     * Initialize cache instance.
      *
-     * @param Reflector $reflector
+     * @param QueryBuilderReflector $reflector
      */
-    public function __construct(Reflector $reflector)
+    public function __construct(QueryBuilderReflector $reflector)
     {
         $this->reflector = $reflector;
     }
 
     /**
-     * Check if cached version of query is available
+     * Check if cached version of query is available.
      *
      * @return bool
      */
@@ -51,7 +52,10 @@ class Cache
     }
 
     /**
-     * Set result of a query
+     * Store result of a query in cache.
+     *
+     * This method does not check if the target query has already been cached.
+     * Use has() to prevent this issue.
      *
      * @param array $data Query result
      */
@@ -68,7 +72,10 @@ class Cache
     }
 
     /**
-     * Gets result of a cached query
+     * Returns result of a cached query.
+     *
+     * This method does not check if the query has been cached before, may return unexpected values if not.
+     * Use has() to prevent this issue.
      *
      * @return array
      */
@@ -81,7 +88,7 @@ class Cache
     }
 
     /**
-     * Encodes data in order to be stored as Redis string
+     * Encodes data in order to be stored as Redis string.
      *
      * @param array $data Decoded data
      *
@@ -93,7 +100,7 @@ class Cache
     }
 
     /**
-     * Decodes data from Redis to array
+     * Decodes data from Redis to array.
      *
      * @param string $data Decoded data
      *

@@ -18,7 +18,9 @@ use Illuminate\Database\Query\Grammars\PostgresGrammar as QueryGrammar;
 use Illuminate\Database\Schema\Grammars\PostgresGrammar as SchemaGrammar;
 
 /**
- * Todo
+ * Overrides Laravel's PostgreSQL connection class.
+ *
+ * @todo Fix the code smell copied from Laravel.
  *
  * @package Spiritix\LadaCache\Database\Connection
  * @author  Matthias Isler <mi@matthias-isler.ch>
