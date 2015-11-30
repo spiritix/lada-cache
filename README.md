@@ -32,7 +32,7 @@ Lada Cache can be installed via [Composer](http://getcomposer.org) by requiring 
 ```json
 {
     "require": {
-        "spiritix/lada-cache": "~1.0"
+        "spiritix/lada-cache": "dev-master"
     }
 }
 ```
@@ -42,7 +42,7 @@ Then run a composer update
 php composer.phar update
 ```
 
-Now must register the service provider when bootstrapping your Laravel application.
+Now you must register the service provider when bootstrapping your Laravel application.
 Find the `providers` key in your `config/app.php` and register the Lada Cache Service Provider.
 
 ```php
