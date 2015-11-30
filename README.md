@@ -29,7 +29,12 @@ Todo
 
 ## Contributing
 
-Todo
+Bug reports, feature requests and contributions are welcome.
+Please consider the following guidelines before submitting pull requests:
+
+- Coding style must be followed (mostly PSR-2 with some differences)
+- Tests must be submitted (100% coverage, all tests passing)
+- Issue number must be referenced in PR
 
 ## License
 
