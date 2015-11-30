@@ -76,7 +76,7 @@ Bug reports, feature requests and contributions are welcome.
 Please consider the following guidelines before submitting pull requests:
 
 - Coding style must be followed (mostly PSR-2 with some differences)
-- Tests must be submitted (100% coverage, all tests passing)
+- Tests must be submitted and pass
 - Issue number must be referenced in PR
 
 ## License
