@@ -12,6 +12,7 @@
 namespace Spiritix\LadaCache\Database;
 
 use Illuminate\Database\Eloquent\Model as EloquentModel;
+use Spiritix\LadaCache\Reflector\Model as ModelReflector;
 use Spiritix\LadaCache\Invalidator;
 
 /**
@@ -34,22 +35,22 @@ class Model extends EloquentModel
         parent::boot();
 
         static::created(function($model) {
-            $invalidator = new Invalidator($model);
+            $invalidator = new Invalidator(new ModelReflector($model));
             $invalidator->invalidate();
         });
 
         static::updated(function($model) {
-            $invalidator = new Invalidator($model);
+            $invalidator = new Invalidator(new ModelReflector($model));
             $invalidator->invalidate();
         });
 
         static::deleted(function($model) {
-            $invalidator = new Invalidator($model);
+            $invalidator = new Invalidator(new ModelReflector($model));
             $invalidator->invalidate();
         });
 
         static::saved(function($model) {
-            $invalidator = new Invalidator($model);
+            $invalidator = new Invalidator(new ModelReflector($model));
             $invalidator->invalidate();
         });
     }

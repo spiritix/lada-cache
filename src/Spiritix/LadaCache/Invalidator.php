@@ -11,7 +11,8 @@
 
 namespace Spiritix\LadaCache;
 
-use Illuminate\Database\Eloquent\Model;
+use Spiritix\LadaCache\Reflector\Model as ModelReflector;
+use Illuminate\Support\Facades\Redis;
 
 /**
  * Invalidator is responsible for invalidating data in the cache as soon as it changes or expires.
@@ -21,15 +22,37 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Invalidator
 {
-    protected $model;
+    /**
+     * Reflector instance.
+     *
+     * @var ModelReflector
+     */
+    protected $reflector;
 
-    public function __construct(Model $model)
+    /**
+     * Initialize invalidator instance.
+     *
+     * @param ModelReflector $reflector
+     */
+    public function __construct(ModelReflector $reflector)
     {
-        $this->model = $model;
+        $this->reflector = $reflector;
     }
 
     public function invalidate()
     {
-        var_dump($this->model);die();
+        $tags = $this->reflector->getTags();
+
+        foreach ($tags as $tag) {
+
+            if (!Redis::exists($tag)) {
+                continue;
+            }
+
+            $hashes = Redis::smembers($tags);
+            $command = implode(' ', $hashes);
+
+            Redis::del($command);
+        }
     }
 }

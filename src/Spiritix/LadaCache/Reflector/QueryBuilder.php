@@ -19,28 +19,8 @@ use Spiritix\LadaCache\Database\QueryBuilder as EloquentQueryBuilder;
  * @package Spiritix\LadaCache\Reflector
  * @author  Matthias Isler <mi@matthias-isler.ch>
  */
-class QueryBuilder
+class QueryBuilder extends AbstractReflector
 {
-    /**
-     * Database tag prefix.
-     */
-    const TAG_DATABASE_PREFIX = 'd:';
-
-    /**
-     * Table tag prefix.
-     */
-    const TAG_TABLE_PREFIX = 't:';
-
-    /**
-     * Column tag prefix.
-     */
-    const TAG_COLUMN_PREFIX = 'c:';
-
-    /**
-     * Row tag prefix.
-     */
-    const TAG_ROW_PREFIX = 'r:';
-
     /**
      * Query builder instance.
      *
@@ -67,43 +47,30 @@ class QueryBuilder
     {
         // Never remove the database from the identifier
         // Query doesn't necessarily include it, will cause cache conflicts
-        $identifier = $this->getDatabase() . $this->queryBuilder->toSql();
+        $database = $this->prefix($this->getDatabase(), self::PREFIX_DATABASE);
+        $identifier = $database . $this->queryBuilder->toSql();
 
         return md5($identifier);
     }
 
     /**
-     * Returns an array of all prefixed tags.
-     *
-     * @return array
-     */
-    public function getTags()
-    {
-        return array_merge(
-            $this->getTables(),
-            $this->getColumns(),
-            $this->getRows()
-        );
-    }
-
-    /**
-     * Returns prefixed name of target database.
+     * {@inheritdoc}
      *
      * @return string
      */
-    public function getDatabase()
+    protected function getDatabase()
     {
-        return self::TAG_DATABASE_PREFIX . $this->queryBuilder
+        return $this->queryBuilder
             ->getConnection()
-            ->getDatabaseName();
+            ->getDatabaseName(); // Fuck this shit
     }
 
     /**
-     * Returns prefixed affected tables.
+     * {@inheritdoc}
      *
      * @return array
      */
-    private function getTables()
+    protected function getTables()
     {
         // Get main table
         $tables = [$this->queryBuilder->from];
@@ -117,41 +84,18 @@ class QueryBuilder
             }
         }
 
-        // Add prefixes
-        return array_map(function($table) {
-            return self::TAG_TABLE_PREFIX . $table;
-        }, $tables);
+        return $tables;
     }
 
     /**
-     * Returns prefixed affected columns.
-     *
-     * @return array
-     */
-    private function getColumns()
-    {
-        $columns = $this->queryBuilder->columns;
-
-        // Add prefixes
-        return array_map(function($column) {
-            return self::TAG_COLUMN_PREFIX . $column;
-        }, $columns);
-    }
-
-    /**
-     * Returns prefixed affected rows.
+     * {@inheritdoc}
      *
      * @todo This must be implemented ASAP.
      *
      * @return array
      */
-    private function getRows()
+    protected function getRows()
     {
-        $rows = [];
-
-        // Add prefixes
-        return array_map(function($row) {
-            return self::TAG_ROW_PREFIX . $row;
-        }, $rows);
+        return [];
     }
 }
