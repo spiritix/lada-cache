@@ -1,3 +1,5 @@
+*Work in progress, use at your own risk!*
+
 # Lada Cache
 
 A Redis based, automated and scalable database caching layer for Laravel 5+
@@ -13,23 +15,69 @@ A Redis based, automated and scalable database caching layer for Laravel 5+
 
 ## Features
 
-Todo
+- Automatically caches all database queries
+- Intelligent cache invalidation with high granularity
+- Works with existing code, no changes required after setup
+- Bases on Laravel Redis (supports [cluster](http://laravel.com/docs/5.1/redis#introduction))
 
 ## Requirements
 
-Todo
+- PHP 5.6+
+- Redis 2+
+- Laravel 5+
+- [Predis](https://github.com/nrk/predis) 
+- [Phpiredis](https://github.com/nrk/phpiredis) is optional but will increase performance
 
 ## Installation
 
-Todo
+Lada Cache can be installed via [Composer](http://getcomposer.org) by requiring the
+`spiritix/lada-cache` package in your project's `composer.json`.
 
-## Configuration
+```json
+{
+    "require": {
+        "spiritix/lada-cache": "dev-master"
+    }
+}
+```
 
-Todo
+Then run a composer update
+```sh
+php composer.phar update
+```
+
+Now you must register the service provider when bootstrapping your Laravel application.
+Find the `providers` key in your `config/app.php` and register the Lada Cache Service Provider.
+
+```php
+    'providers' => array(
+        // ...
+        Spiritix\LadaCache\LadaCacheServiceProvider::class,
+    )
+```
+
+Finally all your models must extend the `Spiritix\LadaCache\Database\Model` class.
+
+```php
+class Post extends Spiritix\LadaCache\Database\Model {
+    //
+}
+```
+
+It's a good practice to create a base model class which extends the Lada Cache model and then will be extended by all your models.
+
+## Known issues and limitations
+
+- Does not work with [raw SQL queries](http://laravel.com/docs/5.1/database#running-queries). This would require an SQL parser to be implemented which is quite hard and very inefficient.
 
 ## Contributing
 
-Todo
+Bug reports, feature requests and contributions are welcome.
+Please consider the following guidelines before submitting pull requests:
+
+- Coding style must be followed (mostly PSR-2 with some differences)
+- Tests must be submitted (100% coverage, all tests passing)
+- Issue number must be referenced in PR
 
 ## License
 
