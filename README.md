@@ -1,3 +1,5 @@
+*Work in progress, use at your own risk!*
+
 # Lada Cache
 
 A Redis based, automated and scalable database caching layer for Laravel 5+
@@ -13,15 +15,17 @@ A Redis based, automated and scalable database caching layer for Laravel 5+
 
 ## Features
 
-Lada Cache will automatically cache all queries in a Redis database.
-The library makes use of Laravel Redis which is based on predis/predis.
-
-*Work in progress, use at your own risk!*
+- Automatically caches all database queries
+- Intelligent data invalidation with high granularity
+- Works with existing code, no changes required after setup
+- Runs 
 
 ## Requirements
 
 - PHP 5.6+
+- Redis 2+
 - Laravel 5+
+- [Predis](https://github.com/nrk/predis) 
 - [Phpiredis](https://github.com/nrk/phpiredis) is optional but will increase performance
 
 ## Installation
