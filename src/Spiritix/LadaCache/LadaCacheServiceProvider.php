@@ -12,10 +12,11 @@
 namespace Spiritix\LadaCache;
 
 use Illuminate\Support\ServiceProvider;
-use Spiritix\LadaCache\Connection\MysqlConnection;
-use Spiritix\LadaCache\Connection\PostgresConnection;
-use Spiritix\LadaCache\Connection\SqlLiteConnection;
-use Spiritix\LadaCache\Connection\SqlServerConnection;
+use Illuminate\Database\Eloquent\Model;
+use Spiritix\LadaCache\Database\Connection\MysqlConnection;
+use Spiritix\LadaCache\Database\Connection\PostgresConnection;
+use Spiritix\LadaCache\Database\Connection\SqlLiteConnection;
+use Spiritix\LadaCache\Database\Connection\SqlServerConnection;
 
 /**
  * Todo
