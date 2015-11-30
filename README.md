@@ -16,9 +16,9 @@ A Redis based, automated and scalable database caching layer for Laravel 5+
 ## Features
 
 - Automatically caches all database queries
-- Intelligent data invalidation with high granularity
+- Intelligent cache invalidation with high granularity
 - Works with existing code, no changes required after setup
-- Runs 
+- Bases on Laravel Redis (supports [cluster](http://laravel.com/docs/5.1/redis#introduction))
 
 ## Requirements
 
