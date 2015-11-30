@@ -20,7 +20,7 @@ use Spiritix\LadaCache\Database\Connection\SqlServerConnection;
 /**
  * Laravel service provider for Lada Cache.
  *
- * Since Lada Cache can't be used manually, a cache service is not required.
+ * Since Lada Cache can't be "used" manually, a cache service is not required.
  * We'll use this functionality to provide and publish the config as well as to override the default database connections.
  *
  * @package Spiritix\LadaCache
@@ -53,7 +53,7 @@ class LadaCacheServiceProvider extends ServiceProvider
      * Register the service provider.
      *
      * Here we are overriding all connection singleton's from Laravel.
-     * This is the only way to make them use our custom query builder which makes use of the cache.
+     * This is the only way to make them use our custom query builder which then uses our cache.
      */
     public function register()
     {

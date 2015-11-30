@@ -15,7 +15,7 @@ use Spiritix\LadaCache\Reflector\Model as ModelReflector;
 use Illuminate\Support\Facades\Redis;
 
 /**
- * Invalidator is responsible for invalidating data in the cache as soon as it changes or expires.
+ * Invalidator is responsible for invalidating data in the cache as soon as it changes.
  *
  * @package Spiritix\LadaCache
  * @author  Matthias Isler <mi@matthias-isler.ch>
@@ -39,20 +39,32 @@ class Invalidator
         $this->reflector = $reflector;
     }
 
+    /**
+     * Invalidates data in the cache.
+     *
+     * Will send all affected tags to the cache and ask for hashes having at least one of the provided tags.
+     * Finally it's going to delete all affected items in the cache.
+     */
     public function invalidate()
     {
-        $tags = $this->reflector->getTags();
+        $hashes = [];
 
+        // Loop trough tags
+        $tags = $this->reflector->getTags(true);
         foreach ($tags as $tag) {
 
+            // Check if a set exists
             if (!Redis::exists($tag)) {
                 continue;
             }
 
-            $hashes = Redis::smembers($tags);
-            $command = implode(' ', $hashes);
-
-            Redis::del($command);
+            // Add hashes to collection
+            $hashes += Redis::smembers($tag);
         }
+
+        // Now delete all affected hashes at once
+        // This is much faster than firing one request per hash
+        $command = implode(' ', array_unique($hashes));
+        Redis::del($command);
     }
 }

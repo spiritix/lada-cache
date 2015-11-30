@@ -40,7 +40,7 @@ class Cache
     }
 
     /**
-     * Check if cached version of query is available.
+     * Check if cached version of the query result is available.
      *
      * @return bool
      */
@@ -64,8 +64,11 @@ class Cache
         $hash = $this->reflector->getHash();
         $tags = $this->reflector->getTags();
 
+        // Store data in cache
         Redis::set($hash, $this->encodeData($data));
 
+        // Add cache key to all tag sets
+        // Thanks to this we can easily invalidate the data by tag afterwards
         foreach ($tags as $tag) {
             Redis::sadd($tag, [$hash]);
         }

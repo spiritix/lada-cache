@@ -12,7 +12,7 @@
 namespace Spiritix\LadaCache\Reflector;
 
 /**
- * Reflector abstract.
+ * A reflector parses a "database action" (not necessarily SQL) and provides information about it.
  *
  * @package Spiritix\LadaCache\Reflector
  * @author  Matthias Isler <mi@matthias-isler.ch>
@@ -51,38 +51,49 @@ abstract class AbstractReflector
     /**
      * Returns affected row(s) as array (primary keys).
      *
+     * Must return an empty array if it could not determine affected rows.
+     *
      * @return array
      */
     abstract protected function getRows();
 
     /**
-     * Returns an array of all tags for current query.
+     * Returns an array of all tags for current action.
      *
-     * If no rows are available the tags must look like this:
-     * [TABLE_PREFIX . TABLE1, TABLE_PREFIX . TABLE2]
-     *
-     * If rows are available, the tags must look like this:
-     * [TABLE_PREFIX . TABLE1 . ROW_PREFIX . ROW1, TABLE_PREFIX . TABLE1 . ROW_PREFIX . ROW2,
-     *  TABLE_PREFIX . TABLE2 . ROW_PREFIX . ROW1, TABLE_PREFIX . TABLE2 . ROW_PREFIX . ROW2]
+     * @param bool $forceTables If set to true, the function will add the table tags to the row tags.
+     *                          By default if rows are available, table tags will not be returned.
      *
      * @return array
      */
-    public function getTags()
+    public function getTags($forceTables = false)
     {
-        $tables = $this->prefix($this->getTables(), self::PREFIX_TABLE);
-
-        $rows = $this->getRows();
-        if (empty($rows)) {
-
-            return $tables;
-        }
-
         $tags = [];
-        foreach ($tables as $table) {
-            $tags += $this->prefix($rows, $table . self::PREFIX_ROW);
+        $considerRows = (bool) config('lada-cache.consider-rows');
+
+        // Get affected database and tables, add prefix
+        $tables = $this->prefix($this->getTables(), self::PREFIX_TABLE);
+        $database = $this->prefix($this->getDatabase(), self::PREFIX_DATABASE);
+
+        // Check if affected rows are available or if granularity is set to not consider rows
+        // In this case just use the previously prepared tables as tags
+        $rows = $this->getRows();
+        if (empty($rows) || $considerRows === false) {
+
+            return $this->prefix($tables, $database);
         }
 
-        return $tags;
+        // Now loop trough tables and create a tag for each row
+        // Every tag is built like TABLE_PREFIX . TABLE . ROW_PREFIX . ROW
+        foreach ($tables as $table) {
+            $tags += $this->prefix($rows, $this->prefix(self::PREFIX_ROW, $table));
+        }
+
+        // Add tables to tags if required
+        if ($forceTables) {
+            $tags = array_merge($tables, $tags);
+        }
+
+        return $this->prefix($tags, $database);
     }
 
     /**
@@ -97,7 +108,7 @@ abstract class AbstractReflector
     {
         if (is_array($value)) {
             return array_map(function($item) use($prefix) {
-                return $prefix . $item;
+                return $this->prefix($item, $prefix);
             }, $value);
         }
 
