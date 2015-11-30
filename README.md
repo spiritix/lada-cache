@@ -26,7 +26,7 @@ The library makes use of Laravel Redis which is based on predis/predis.
 
 ## Installation
 
-The AWS Service Provider can be installed via [Composer](http://getcomposer.org) by requiring the
+Lada Cache can be installed via [Composer](http://getcomposer.org) by requiring the
 `spiritix/lada-cache` package in your project's `composer.json`.
 
 ```json
