@@ -60,11 +60,16 @@ class Invalidator
 
             // Add hashes to collection
             $hashes += Redis::smembers($tag);
+
+            // Delete tag set
+            Redis::del($tag);
         }
 
-        // Now delete all affected hashes at once
-        // This is much faster than firing one request per hash
-        $command = implode(' ', array_unique($hashes));
-        Redis::del($command);
+        // Now delete items
+        $hashes = array_unique($hashes);
+        foreach ($hashes as $hash) {
+
+            Redis::del($hash);
+        }
     }
 }

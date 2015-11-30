@@ -1,7 +1,8 @@
 <?php
 
-namespace Spiritix\LadaCache\Tests;
+namespace Spiritix\LadaCache\Tests\Reflector;
 
+use Spiritix\LadaCache\Tests\TestCase;
 use Spiritix\LadaCache\Reflector\AbstractReflector;
 
 class AbstractReflectorTest extends TestCase
