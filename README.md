@@ -22,7 +22,7 @@ The library makes use of Laravel Redis which is based on predis/predis.
 
 - PHP 5.6+
 - Laravel 5+
-- Phpiredis is optional but will increase performance
+- [Phpiredis](https://github.com/nrk/phpiredis) is optional but will increase performance
 
 ## Installation
 
@@ -51,6 +51,16 @@ Find the `providers` key in your `config/app.php` and register the Lada Cache Se
         Spiritix\LadaCache\LadaCacheServiceProvider::class,
     )
 ```
+
+Finally all your models must extend the `Spiritix\LadaCache\Database\Model` class.
+
+```php
+class Post extends Spiritix\LadaCache\Database\Model {
+    //
+}
+```
+
+It's a good practice to create a base model class which extends the Lada Cache model and then will be extended by all your models.
 
 ## Configuration
 
