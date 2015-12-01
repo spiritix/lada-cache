@@ -18,13 +18,14 @@ A Redis based, automated and scalable database caching layer for Laravel 5+
 - Automatically caches all database queries
 - Intelligent cache invalidation with high granularity
 - Works with existing code, no changes required after setup
-- Bases on Laravel Redis (supports [cluster](http://laravel.com/docs/5.1/redis#introduction))
+- Makes use of Laravel Redis (supports [clustering](http://laravel.com/docs/5.1/redis#introduction))
+- PHP7 and HHVM ready
 
 ## Requirements
 
 - PHP 5.6+
 - Redis 2+
-- Laravel 5+
+- Laravel 5.1+
 - [Predis](https://github.com/nrk/predis) 
 - [Phpiredis](https://github.com/nrk/phpiredis) is optional but will increase performance
 
@@ -64,7 +65,7 @@ class Post extends Spiritix\LadaCache\Database\Model {
 }
 ```
 
-It's a good practice to create a base model class which extends the Lada Cache model and then will be extended by all your models.
+It's a good practice to create a base model class which extends the Lada Cache model and then gets extended by all your models.
 
 ## Configuration
 
@@ -74,18 +75,27 @@ Use the following command to publish the ``lada-cache.php``config file to your c
 php artisan vendor:publish
 ```
 
+## Console commands
+
+You may truncate the cache by running the following command:
+
+```shell
+php artisan lada-cache:flush
+```
+
 ## Known issues and limitations
 
 - Does not work with [raw SQL queries](http://laravel.com/docs/5.1/database#running-queries). This would require an SQL parser to be implemented which is quite hard and very inefficient. As long as you are only using raw queries for reading data it just won't get cached. Serious issues will only occur if you use raw queries to write data (which you shouldn't be doing anyway).
+- Cache must be truncated manually after a migration is executed.
 
 ## Contributing
 
-Bug reports, feature requests and contributions are welcome.
+Bug reports, feature requests and code contributions are welcome.
 Please consider the following guidelines before submitting pull requests:
 
 - Coding style must be followed (mostly PSR-2 with some differences)
-- Tests must be submitted and pass
-- Issue number must be referenced in PR
+- Tests must be submitted 
+- [Create an issue](https://github.com/spiritix/lada-cache/issues/new) for discussion before submitting PR
 
 ## License
 
