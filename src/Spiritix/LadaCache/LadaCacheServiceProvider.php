@@ -54,25 +54,27 @@ class LadaCacheServiceProvider extends ServiceProvider
      *
      * Here we are overriding all connection singleton's from Laravel.
      * This is the only way to make them use our custom query builder which then uses our cache.
+     *
+     * @todo Bind singleton to IoC container as soon as this issue is fixed: https://github.com/laravel/framework/issues/11122
      */
     public function register()
     {
-        $this->app->singleton('db.connection.mysql', function ($app, $parameters) {
+        $this->app->bind('db.connection.mysql', function ($app, $parameters) {
             list($connection, $database, $prefix, $config) = $parameters;
             return new MysqlConnection($connection, $database, $prefix, $config);
         });
 
-        $this->app->singleton('db.connection.postgres', function ($app, $parameters) {
+        $this->app->bind('db.connection.postgres', function ($app, $parameters) {
             list($connection, $database, $prefix, $config) = $parameters;
             return new PostgresConnection($connection, $database, $prefix, $config);
         });
 
-        $this->app->singleton('db.connection.sqllite', function ($app, $parameters) {
+        $this->app->bind('db.connection.sqllite', function ($app, $parameters) {
             list($connection, $database, $prefix, $config) = $parameters;
             return new SqlLiteConnection($connection, $database, $prefix, $config);
         });
 
-        $this->app->singleton('db.connection.sqlserver', function ($app, $parameters) {
+        $this->app->bind('db.connection.sqlserver', function ($app, $parameters) {
             list($connection, $database, $prefix, $config) = $parameters;
             return new SqlServerConnection($connection, $database, $prefix, $config);
         });
