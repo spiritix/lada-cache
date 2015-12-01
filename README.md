@@ -66,9 +66,17 @@ class Post extends Spiritix\LadaCache\Database\Model {
 
 It's a good practice to create a base model class which extends the Lada Cache model and then will be extended by all your models.
 
+## Configuration
+
+Use the following command to publish the ``lada-cache.php``config file to your configuration folder:
+
+```shell
+php artisan vendor:publish
+```
+
 ## Known issues and limitations
 
-- Does not work with [raw SQL queries](http://laravel.com/docs/5.1/database#running-queries). This would require an SQL parser to be implemented which is quite hard and very inefficient.
+- Does not work with [raw SQL queries](http://laravel.com/docs/5.1/database#running-queries). This would require an SQL parser to be implemented which is quite hard and very inefficient. As long as you are only using raw queries for reading data it just won't get cached. Serious issues will only occur if you use raw queries to write data (which you shouldn't be doing anyway).
 
 ## Contributing
 
