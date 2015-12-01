@@ -4,6 +4,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Disabling cache
+    |--------------------------------------------------------------------------
+    |
+    | By setting this value to false, the cache will be disabled completely.
+    | This may be useful for debugging purposes.
+    |
+    */
+    'active' => env('LADA_CACHE_ACTIVE', true),
+
+    /*
+    |--------------------------------------------------------------------------
     | Cache granularity
     |--------------------------------------------------------------------------
     |

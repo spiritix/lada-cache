@@ -42,10 +42,18 @@ class Cache
     /**
      * Check if cached version of the query result is available.
      *
+     * Will always return false if cache has been disabled in config.
+     *
      * @return bool
      */
     public function has()
     {
+        $active = (bool) config('lada-cache.active');
+
+        if ($active === false) {
+            return false;
+        }
+
         $hash = $this->reflector->getHash();
 
         return Redis::exists($hash);
