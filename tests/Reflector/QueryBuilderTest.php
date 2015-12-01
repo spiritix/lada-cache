@@ -6,5 +6,8 @@ use Spiritix\LadaCache\Tests\TestCase;
 
 class QueryBuilderTest extends TestCase
 {
-
+    public function testGetHash()
+    {
+        //
+    }
 }

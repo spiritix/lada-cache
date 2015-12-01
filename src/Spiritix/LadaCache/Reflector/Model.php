@@ -43,7 +43,7 @@ class Model extends AbstractReflector implements ReflectorInterface
      *
      * @return string
      */
-    public function getDatabase()
+    protected function getDatabase()
     {
         return $this->model->getConnection()
             ->getDatabaseName();
@@ -54,7 +54,7 @@ class Model extends AbstractReflector implements ReflectorInterface
      *
      * @return array
      */
-    public function getTables()
+    protected function getTables()
     {
         return [$this->model->getTable()];
     }
@@ -64,7 +64,7 @@ class Model extends AbstractReflector implements ReflectorInterface
      *
      * @return array
      */
-    public function getRows()
+    protected function getRows()
     {
         return [$this->model->getKey()];
     }

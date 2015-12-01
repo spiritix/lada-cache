@@ -6,5 +6,8 @@ use Spiritix\LadaCache\Tests\TestCase;
 
 class FlushCommandTest extends TestCase
 {
-
+    public function testHandle()
+    {
+        //
+    }
 }
