@@ -22,6 +22,15 @@ use Spiritix\LadaCache\Database\QueryBuilder as EloquentQueryBuilder;
 class QueryBuilder extends AbstractReflector
 {
     /**
+     * Since the query builder doesn't know about the related model, we have no way to figure out the name of the
+     * primary key column. If someone is not using this value as primary key column it won't break anything, it just
+     * wont consider the row ID's when creating the cache tags.
+     *
+     * @todo Get the primary key column from the model.
+     */
+    const PRIMARY_KEY_COLUMN = 'id';
+
+    /**
      * Query builder instance.
      *
      * @var QueryBuilder
@@ -90,12 +99,76 @@ class QueryBuilder extends AbstractReflector
     /**
      * {@inheritdoc}
      *
-     * @todo This must be implemented ASAP.
-     *
      * @return array
      */
     protected function getRows()
     {
-        return [];
+        $rows = [];
+
+        $wheres = $this->queryBuilder->wheres ?: [];
+        foreach ($wheres as $where) {
+
+            // Skip unsupported clauses
+            if (!isset($where['column'])) {
+                continue;
+            }
+
+            list($table, $column) = $this->splitTableAndColumn($where['column']);
+
+            // Make sure that the where clause applies for the main table
+            if ($table !== null && $table != $this->queryBuilder->from) {
+                continue;
+            }
+
+            // Make sure that the where clause applies for the primary key column
+            if ($column != self::PRIMARY_KEY_COLUMN) {
+                continue;
+            }
+
+            if ($where['type'] == 'Basic') {
+
+                if ($where['operator'] == '=' && is_int($where['value'])) {
+                    $rows[] = $where['value'];
+                }
+            }
+
+            if ($where['type'] == 'In') {
+                $rows += $where['values'];
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Splits an SQL column identifier into table and column.
+     *
+     * @param string $sqlString SQL column identifier
+     *
+     * @return array [table|null, column]
+     */
+    protected function splitTableAndColumn($sqlString)
+    {
+        // Most column identifiers don't contain a database or table name
+        // In this case just return what we've got
+        if (strpos($sqlString, '.') === false) {
+            return [null, $sqlString];
+        }
+
+        $parts = explode('.', $sqlString);
+
+        // If we have three parts, the identifier also contains the database name
+        if (count($parts) === 3) {
+            $table = $parts[1];
+        }
+        // Otherwise it contains table and column
+        else {
+            $table = $parts[0];
+        }
+
+        // Column is always the last part
+        $column = end($parts);
+
+        return [$table, $column];
     }
 }
