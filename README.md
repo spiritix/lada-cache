@@ -2,7 +2,7 @@
 
 # Lada Cache
 
-A Redis based, automated and scalable database caching layer for Laravel 5+
+A Redis based, automated and scalable database caching layer for Laravel 5.1+
 
 [![Build Status](https://travis-ci.org/spiritix/lada-cache.svg?branch=master)](https://travis-ci.org/spiritix/lada-cache)
 [![Code Climate](https://codeclimate.com/github/spiritix/lada-cache/badges/gpa.svg)](https://codeclimate.com/github/spiritix/lada-cache)
@@ -95,7 +95,7 @@ Please consider the following guidelines before submitting pull requests:
 
 - Coding style must be followed (mostly PSR-2 with some differences)
 - Tests must be submitted 
-- [Create an issue](https://github.com/spiritix/lada-cache/issues/new) for discussion before submitting PR
+- [Create an issue](https://github.com/spiritix/lada-cache/issues/new) for discussion before submitting a PR
 
 ## License
 
