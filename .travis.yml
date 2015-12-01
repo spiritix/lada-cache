@@ -1,0 +1,26 @@
+language: php
+
+php:
+  - 5.6
+  - 7.0
+  - nightly
+  - hhvm
+
+matrix:
+    allow_failures:
+        - php: nightly
+        - php: hhvm
+
+before_script:
+  - composer self-update
+  - composer install --prefer-source --no-interaction
+
+script:
+  - vendor/bin/phpunit
+
+after_script:
+  - vendor/bin/test-reporter
+
+addons:
+  code_climate:
+    repo_token: c169da2961829181a4c1c3dbb4e51a4d7f3e0f9f260730145518de6652b37564
