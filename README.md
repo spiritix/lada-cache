@@ -21,6 +21,17 @@ A Redis based, automated and scalable database caching layer for Laravel 5.1+
 - Makes use of Laravel Redis (supports [clustering](http://laravel.com/docs/5.1/redis#introduction))
 - PHP7 and HHVM ready
 
+## Why?
+
+Most RDBMS provide internal caching systems (for example Mysql Query Cache). Unfortunately these caching systems have some very serious limitations:
+
+- They do not cache queries over multiple tables (especially joins)
+- The invalidation granularity is very low
+- They are not distributed, if you have multiple database servers the cache will be created on all of them
+- They are not scalable
+
+This library offers a solution for all these problems.
+
 ## Requirements
 
 - PHP 5.6+
