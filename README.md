@@ -37,7 +37,7 @@ Lada Cache can be installed via [Composer](http://getcomposer.org) by requiring 
 ```json
 {
     "require": {
-        "spiritix/lada-cache": "0.*"
+        "spiritix/lada-cache": "dev-master"
     }
 }
 ```

@@ -19,6 +19,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | This prefix will be prepended to all items in Redis store.
+    | Do not change this value in production, it will cause unexpected behavior.
     |
     */
     'prefix' => 'lada:',

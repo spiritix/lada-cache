@@ -90,14 +90,9 @@ class Manager
      */
     public function flush()
     {
-        $keys = $this->redis->keys('*');
+        $keys = $this->redis->keys($this->redis->prefix('*'));
 
         foreach ($keys as $key) {
-
-            // Remove prefix from key
-            // Will be added afterwards automatically
-            $key = substr($key, strlen($this->redis->prefix));
-
             $this->redis->del($key);
         }
     }

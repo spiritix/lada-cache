@@ -39,6 +39,18 @@ class Redis
     }
 
     /**
+     * Adds the cache prefix to an item key.
+     *
+     * @param string $key
+     *
+     * @return string
+     */
+    public function prefix($key)
+    {
+        return $this->prefix . $key;
+    }
+
+    /**
      * Forward call to Redis facade.
      *
      * @param string $name
@@ -48,11 +60,6 @@ class Redis
      */
     public function __call($name, $arguments)
     {
-        // Prepend prefix
-        if (isset($arguments[0])) {
-            $arguments[0] = $this->prefix . $arguments[0];
-        }
-
         return forward_static_call_array(array(RedisFacade::class, $name), $arguments);
     }
 }

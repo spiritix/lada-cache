@@ -73,7 +73,7 @@ class Cache
 
         $hash = $this->reflector->getHash();
 
-        return $this->redis->exists($hash);
+        return $this->redis->exists($this->redis->prefix($hash));
     }
 
     /**
@@ -90,12 +90,14 @@ class Cache
         $tags = $this->reflector->getTags();
 
         // Store data in cache
+        $hash = $this->redis->prefix($hash);
         $this->redis->set($hash, $this->encodeData($data));
 
         // Add cache key to all tag sets
         // Thanks to this we can easily invalidate the data by tag afterwards
         foreach ($tags as $tag) {
-            $this->redis->sadd($tag, [$hash]);
+
+            $this->redis->sadd($this->redis->prefix($tag), [$hash]);
         }
     }
 
@@ -110,7 +112,7 @@ class Cache
     public function get()
     {
         $hash = $this->reflector->getHash();
-        $encoded = $this->redis->get($hash);
+        $encoded = $this->redis->get($this->redis->prefix($hash));
 
         return $this->decodeData($encoded);
     }
@@ -129,8 +131,10 @@ class Cache
         $tags = $this->reflector->getTags(true);
         foreach ($tags as $tag) {
 
+            $tag = $this->redis->prefix($tag);
+
             // Check if a set exists
-            if ($this->redis->exists($tag)) {
+            if (!$this->redis->exists($tag)) {
                 continue;
             }
 
