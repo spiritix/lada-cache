@@ -1,5 +1,3 @@
-*Work in progress, use at your own risk!*
-
 # Lada Cache
 
 A Redis based, automated and scalable database caching layer for Laravel 5.1+
