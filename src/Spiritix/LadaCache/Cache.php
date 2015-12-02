@@ -174,6 +174,6 @@ class Cache
      */
     protected function decodeData($data)
     {
-        return json_decode($data);
+        return json_decode($data, true);
     }
 }

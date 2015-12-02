@@ -100,9 +100,8 @@ abstract class AbstractReflector implements ReflectorInterface
         }
 
         // Now loop trough tables and create a tag for each row
-        // Every tag is built like TABLE_PREFIX . TABLE . ROW_PREFIX . ROW
         foreach ($tables as $table) {
-            $tags += $this->prefix($rows, $this->prefix(self::PREFIX_ROW, $table));
+            $tags = array_merge($tags, $this->prefix($rows, $this->prefix(self::PREFIX_ROW, $table)));
         }
 
         // Add tables to tags if required
