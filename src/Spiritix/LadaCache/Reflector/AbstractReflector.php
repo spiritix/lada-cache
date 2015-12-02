@@ -22,17 +22,17 @@ abstract class AbstractReflector implements ReflectorInterface
     /**
      * Database prefix.
      */
-    const PREFIX_DATABASE = 'd:';
+    const PREFIX_DATABASE = 'tags:database:';
 
     /**
      * Table prefix.
      */
-    const PREFIX_TABLE = 't:';
+    const PREFIX_TABLE = ':table:';
 
     /**
      * Row prefix.
      */
-    const PREFIX_ROW = 'r:';
+    const PREFIX_ROW = ':row:';
 
     /**
      * Package configuration.
