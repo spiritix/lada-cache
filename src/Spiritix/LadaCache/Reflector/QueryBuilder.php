@@ -55,9 +55,10 @@ class QueryBuilder extends AbstractReflector implements ReflectorInterface
     public function getHash()
     {
         // Never remove the database from the identifier
-        // Query doesn't necessarily include it, will cause cache conflicts
-        $database = $this->prefix($this->getDatabase(), self::PREFIX_DATABASE);
-        $identifier = $database . $this->queryBuilder->toSql();
+        // Most SQL queries do not include the target database
+        $identifier = $this->getDatabase() .
+                      $this->queryBuilder->toSql() .
+                      serialize($this->queryBuilder->getBindings());
 
         return md5($identifier);
     }
