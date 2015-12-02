@@ -94,6 +94,13 @@ You may truncate the cache by running the following command:
 php artisan lada-cache:flush
 ```
 
+If you want to temporary disable the cache (for example before running migrations) use these commands:
+
+```shell
+php artisan lada-cache:disable
+php artisan lada-cache:enable
+```
+
 ## Known issues and limitations
 
 - Does not work with [raw SQL queries](http://laravel.com/docs/5.1/database#running-queries). This would require an SQL parser to be implemented which is quite hard and very inefficient. As long as you are only using raw queries for reading data it just won't get cached. Serious issues will only occur if you use raw queries to write data (which you shouldn't be doing anyway).

@@ -13,6 +13,8 @@ namespace Spiritix\LadaCache;
 
 use Illuminate\Support\ServiceProvider;
 use Spiritix\LadaCache\Console\FlushCommand;
+use Spiritix\LadaCache\Console\EnableCommand;
+use Spiritix\LadaCache\Console\DisableCommand;
 use Spiritix\LadaCache\Database\Connection\MysqlConnection;
 use Spiritix\LadaCache\Database\Connection\PostgresConnection;
 use Spiritix\LadaCache\Database\Connection\SqlLiteConnection;
@@ -27,6 +29,11 @@ use Spiritix\LadaCache\Database\Connection\SqlServerConnection;
 class LadaCacheServiceProvider extends ServiceProvider
 {
     /**
+     * The package configuration file.
+     */
+    const CONFIG_FILE = 'lada-cache.php';
+
+    /**
      * Indicates if loading of the provider is deferred.
      *
      * @var bool
@@ -39,11 +46,11 @@ class LadaCacheServiceProvider extends ServiceProvider
     public function boot()
     {
         $this->publishes([
-            __DIR__ . '/../../../config/lada-cache.php' => config_path('lada-cache.php'),
+            __DIR__ . '/../../../config/' . self::CONFIG_FILE => config_path(self::CONFIG_FILE),
         ]);
 
         $this->mergeConfigFrom(
-            __DIR__ . '/../../../config/lada-cache.php', 'lada-cache'
+            __DIR__ . '/../../../config/' . self::CONFIG_FILE, str_replace('.php', '', self::CONFIG_FILE)
         );
     }
 
@@ -105,6 +112,18 @@ class LadaCacheServiceProvider extends ServiceProvider
             return new FlushCommand();
         });
 
-        $this->commands('command.lada-cache.flush');
+        $this->app['command.lada-cache.enable'] = $this->app->share(function() {
+            return new EnableCommand();
+        });
+
+        $this->app['command.lada-cache.disable'] = $this->app->share(function() {
+            return new DisableCommand();
+        });
+
+        $this->commands([
+            'command.lada-cache.flush',
+            'command.lada-cache.enable',
+            'command.lada-cache.disable',
+        ]);
     }
 }
