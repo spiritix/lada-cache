@@ -29,6 +29,25 @@ Most RDBMS provide internal caching systems (for example Mysql Query Cache). Unf
 
 This library offers a solution for all these problems.
 
+## Performance
+
+Due to the fact that Redis is faster than for example MySQL, a performance gain of 30-50% is possible even for very simple and fast queries (<0.001s). However the cache starts getting very efficient for more complex queries (> 0.01s, 90% performance gain, > 0.1s, 99% performance gain). Please note that these benchmarks have been done for queries that don't return much data. If your query is very simple but returns 1GB of data, the cache won't make it faster at all.
+
+In a typical web application the time consumed for database interaction is usually only 5 - 20%, so expect a performance gain somewhere in this area. 
+
+## Should I use it
+
+#### No
+- The percentage of time spent for database interaction in your overall page loading time is smaller than ~10%
+- Your queries are typically of a low complexity
+- Your queries are typically returning a big amount of data
+
+#### Yes
+- More than ~10% of page loading time spent in database
+- Your queries are typically of a medium to high complexity
+- Your queries are typically returning a low to medium amount of data
+- You want to reduce the load on your database server(s)
+
 ## Requirements
 
 - PHP 5.6+
