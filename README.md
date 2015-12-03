@@ -135,12 +135,12 @@ php artisan lada-cache:enable
 
 ## Contributing
 
-Bug reports, feature requests and code contributions are welcome.
+Contributions in any form are welcome.
 Please consider the following guidelines before submitting pull requests:
 
-- Coding style must be followed (mostly PSR-2 with some differences)
-- Tests must be submitted 
-- [Create an issue](https://github.com/spiritix/lada-cache/issues/new) for discussion before submitting a PR
+- **Coding standard** - It's mostly [PSR-2](https://github.com/php-fig/fig-standards/blob/master/accepted/PSR-2-coding-style-guide.md) with some differences. 
+- **Add tests!** - Your PR won't be accepted if it doesn't have tests.
+- **Create feature branches** - I won't pull from your master branch.
 
 ## License
 
