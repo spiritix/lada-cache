@@ -15,7 +15,7 @@ A Redis based, automated and scalable database caching layer for Laravel 5.1+
 - Automatically caches all database queries
 - Intelligent cache invalidation with high granularity
 - Works with existing code, no changes required after setup
-- Makes use of Laravel Redis (supports [clustering](http://laravel.com/docs/5.1/redis#introduction))
+- Makes use of [Laravel Redis](http://laravel.com/docs/5.1/redis) (supports [clustering](http://laravel.com/docs/5.1/redis#introduction))
 - PHP7 and HHVM ready
 
 ## Why?
@@ -28,6 +28,17 @@ Most RDBMS provide internal caching systems (for example Mysql Query Cache). Unf
 - They are not scalable
 
 This library offers a solution for all these problems.
+
+## Why only Redis?
+
+As you may have discovered while looking at the source code, this library is built directly on top of [Laravel Redis](http://laravel.com/docs/5.1/redis) and not [Laravel Cache](http://laravel.com/docs/5.1/cache) which would make more sense from a general point of view.
+However there are several important reasons for this decision:
+
+- Storage must be in-memory (wouldn't make much sense otherwise)
+- Storage must be easily scalable (try to implement that with for example Memcached)
+- Storage must support tags. Redis provides the set data type which allows a very easy and performant implementation. One may argue that Memcached also support tags, but that's a widespread misperception. It is possible to implement tags in Memcached using [this approach](https://code.google.com/p/memcached/wiki/NewProgrammingTricks#Namespacing), but that results in 1+[quantity of tags] requests for every read operation which is not very performant.
+
+If you still want to use another storage system, please feel free to contribute.
 
 ## Performance
 
