@@ -19,7 +19,7 @@ use Spiritix\LadaCache\Database\Model as EloquentModel;
  * @package Spiritix\LadaCache\Reflector
  * @author  Matthias Isler <mi@matthias-isler.ch>
  */
-class Model extends AbstractReflector implements ReflectorInterface
+class Model extends AbstractReflector
 {
     /**
      * Model instance.

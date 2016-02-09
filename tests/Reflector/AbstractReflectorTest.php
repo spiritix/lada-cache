@@ -14,7 +14,6 @@ class AbstractReflectorTest extends TestCase
         parent::setUp();
 
         $this->stub = $this->getMockForAbstractClass(AR::class);
-        $this->stub->setConfig(config('lada-cache'));
 
         $this->stub->method('getDatabase')
             ->will($this->returnValue('database'));

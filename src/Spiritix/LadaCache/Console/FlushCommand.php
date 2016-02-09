@@ -40,8 +40,8 @@ class FlushCommand extends Command
      */
     public function handle()
     {
-        $manager = app()->make('LadaCache');
-        $manager->flush();
+        $cache = app()->make('lada.cache');
+        $cache->flush();
 
         $this->info('Cache flushed');
     }

@@ -19,7 +19,7 @@ use Spiritix\LadaCache\Database\QueryBuilder as EloquentQueryBuilder;
  * @package Spiritix\LadaCache\Reflector
  * @author  Matthias Isler <mi@matthias-isler.ch>
  */
-class QueryBuilder extends AbstractReflector implements ReflectorInterface
+class QueryBuilder extends AbstractReflector
 {
     /**
      * Since the query builder doesn't know about the related model, we have no way to figure out the name of the

@@ -25,7 +25,7 @@ class Model extends EloquentModel
     /**
      * The "booting" method of the model.
      *
-     * We'll hook into all model events here for invalidating cache items.
+     * We'll hook into all model events here for invalidating cached items.
      *
      * @return void
      */
@@ -33,26 +33,26 @@ class Model extends EloquentModel
     {
         parent::boot();
 
-        $manager = app()->make('LadaCache');
+        $invalidator = app()->make('lada.invalidator');
 
-        static::created(function($model) use($manager) {
-            $cache = $manager->resolve(new ModelReflector($model));
-            $cache->invalidate();
+        static::created(function($model) use($invalidator) {
+            $reflector = new ModelReflector($model);
+            $invalidator->invalidate($reflector->getTags(true));
         });
 
-        static::updated(function($model) use($manager) {
-            $cache = $manager->resolve(new ModelReflector($model));
-            $cache->invalidate();
+        static::updated(function($model) use($invalidator) {
+            $reflector = new ModelReflector($model);
+            $invalidator->invalidate($reflector->getTags(true));
         });
 
-        static::deleted(function($model) use($manager) {
-            $cache = $manager->resolve(new ModelReflector($model));
-            $cache->invalidate();
+        static::deleted(function($model) use($invalidator) {
+            $reflector = new ModelReflector($model);
+            $invalidator->invalidate($reflector->getTags(true));
         });
 
-        static::saved(function($model) use($manager) {
-            $cache = $manager->resolve(new ModelReflector($model));
-            $cache->invalidate();
+        static::saved(function($model) use($invalidator) {
+            $reflector = new ModelReflector($model);
+            $invalidator->invalidate($reflector->getTags(true));
         });
     }
 

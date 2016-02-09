@@ -12,14 +12,12 @@ class RedisTest extends TestCase
     {
         parent::setUp();
 
-        $this->redis = new Redis(config('lada-cache'));
+        $this->redis = new Redis('prefix:');
     }
 
     public function testPrefix()
     {
-        $expected = config('lada-cache.prefix') . 'value';
-
-        $this->assertEquals($expected, $this->redis->prefix('value'));
+        $this->assertEquals('prefix:value', $this->redis->prefix('value'));
     }
 
     public function testCall()

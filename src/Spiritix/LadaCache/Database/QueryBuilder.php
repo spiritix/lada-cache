@@ -31,15 +31,23 @@ class QueryBuilder extends Builder
      */
     protected function runSelect()
     {
-        $manager = app()->make('LadaCache');
-        $cache = $manager->resolve(new QueryBuilderReflector($this));
-
-        if ($cache->has()) {
-            return $cache->get();
+        if (config('lada-cache.active') === false) {
+            return parent::runSelect();
         }
 
-        $result = $this->connection->select($this->toSql(), $this->getBindings(), ! $this->useWritePdo);
-        $cache->set($result);
+        $cache = app()->make('lada.cache');
+        $reflector = new QueryBuilderReflector($this);
+
+        // Check if a cached version is available
+        $key = $reflector->getHash();
+        if ($cache->has($key)) {
+
+            return $cache->get($key);
+        }
+
+        // If not execute query and add to cache
+        $result = parent::runSelect();
+        $cache->set($key, $reflector->getTags(), $result);
 
         // We do not return $cache->get() here
         // This would cause a separate cache request

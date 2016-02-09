@@ -11,8 +11,6 @@
 
 namespace Spiritix\LadaCache;
 
-use Spiritix\LadaCache\Reflector\ReflectorInterface;
-
 /**
  * The actual cache.
  *
@@ -22,13 +20,6 @@ use Spiritix\LadaCache\Reflector\ReflectorInterface;
 class Cache
 {
     /**
-     * Reflector instance.
-     *
-     * @var ReflectorInterface
-     */
-    protected $reflector;
-
-    /**
      * Redis instance.
      *
      * @var Redis
@@ -36,144 +27,85 @@ class Cache
     protected $redis;
 
     /**
-     * Cache configuration.
+     * Encoder instance.
      *
-     * @var array
+     * @var Encoder
      */
-    protected $config = [];
+    protected $encoder;
 
     /**
      * Initialize cache.
      *
-     * @param ReflectorInterface $reflector
-     * @param Redis              $redis
-     * @param array              $config
+     * @param Redis   $redis
+     * @param Encoder $encoder
+     * @param array   $config
      */
-    public function __construct(ReflectorInterface $reflector, Redis $redis, array $config)
+    public function __construct(Redis $redis, Encoder $encoder)
     {
-        $this->reflector = $reflector;
         $this->redis = $redis;
-        $this->config = $config;
+        $this->encoder = $encoder;
     }
 
     /**
-     * Check if cached version of the query result is available.
+     * Check if a key exists in the cache.
      *
-     * Will always return false if cache has been disabled in config.
+     * @param string $key
      *
      * @return bool
      */
-    public function has()
+    public function has($key)
     {
-        $active = (bool) $this->config['active'];
-        if ($active === false) {
-
-            return false;
-        }
-
-        $hash = $this->reflector->getHash();
-
-        return $this->redis->exists($this->redis->prefix($hash));
+        return $this->redis->exists($this->redis->prefix($key));
     }
 
     /**
-     * Store result of a query in cache.
+     * Store a value for a given key in the cache.
      *
-     * This method does not check if the target query has already been cached.
+     * This method does not check if there is a value available for the given key, may cause unexpected behavior if not.
      * Use has() to prevent this issue.
      *
-     * @param array $data Query result
+     * @param string $key
+     * @param array  $tags
+     * @param mixed  $data
      */
-    public function set(array $data)
+    public function set($key, array $tags, $data)
     {
-        $hash = $this->reflector->getHash();
-        $tags = $this->reflector->getTags();
+        $key = $this->redis->prefix($key);
+        $this->redis->set($key, $this->encoder->encode($data));
 
-        // Store data in cache
-        $hash = $this->redis->prefix($hash);
-        $this->redis->set($hash, $this->encodeData($data));
-
-        // Add cache key to all tag sets
-        // Thanks to this we can easily invalidate the data by tag afterwards
         foreach ($tags as $tag) {
-
-            $this->redis->sadd($this->redis->prefix($tag), [$hash]);
+            $this->redis->sadd($this->redis->prefix($tag), [$key]);
         }
     }
 
     /**
-     * Returns result of a cached query.
+     * Returns value of a cached key.
      *
-     * This method does not check if the query has been cached before, may return unexpected values if not.
+     * This method does not check if there is a value available for the given key, may return unexpected values if not.
      * Use has() to prevent this issue.
      *
-     * @return array
+     * @param string $key
+     *
+     * @return mixed
      */
-    public function get()
+    public function get($key)
     {
-        $hash = $this->reflector->getHash();
-        $encoded = $this->redis->get($this->redis->prefix($hash));
+        $encoded = $this->redis->get($this->redis->prefix($key));
 
-        return $this->decodeData($encoded);
+        return $this->encoder->decode($encoded);
     }
 
     /**
-     * Invalidates data in the cache.
+     * Deletes all items from cache.
      *
-     * Will send all affected tags to the cache and ask for hashes having at least one of the provided tags.
-     * Finally it's going to delete all affected items in the cache.
+     * This should only be used for maintenance purposes (slow performance).
      */
-    public function invalidate()
+    public function flush()
     {
-        $hashes = [];
+        $keys = $this->redis->keys($this->redis->prefix('*'));
 
-        // Loop trough tags
-        $tags = $this->reflector->getTags(true);
-        foreach ($tags as $tag) {
-
-            $tag = $this->redis->prefix($tag);
-
-            // Check if a set exists
-            if (!$this->redis->exists($tag)) {
-                continue;
-            }
-
-            // Add hashes to collection
-            $hashes += $this->redis->smembers($tag);
-
-            // Delete tag set
-            $this->redis->del($tag);
+        foreach ($keys as $key) {
+            $this->redis->del($key);
         }
-
-        // Now delete items
-        $hashes = array_unique($hashes);
-        foreach ($hashes as $hash) {
-
-            $this->redis->del($hash);
-        }
-    }
-
-    /**
-     * Encodes data in order to be stored as Redis string.
-     *
-     * @param array $data Decoded data
-     *
-     * @return string
-     */
-    protected function encodeData(array $data)
-    {
-        return json_encode($data);
-    }
-
-    /**
-     * Decodes data from Redis to array.
-     *
-     * @param string $data Decoded data
-     *
-     * @return array
-     */
-    protected function decodeData($data)
-    {
-        return json_decode($data, true);
     }
 }

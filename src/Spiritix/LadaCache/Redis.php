@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\Redis as RedisFacade;
 class Redis
 {
     /**
-     * Prefix that will be prepended to all items in Redis store.
+     * Prefix that will be prepended to all items.
      *
      * @var string
      */
@@ -31,11 +31,11 @@ class Redis
     /**
      * Initialize Redis handler.
      *
-     * @param array $config
+     * @param string $prefix
      */
-    public function __construct(array $config)
+    public function __construct($prefix)
     {
-        $this->prefix = (string) $config['prefix'];
+        $this->prefix = (string) $prefix;
     }
 
     /**

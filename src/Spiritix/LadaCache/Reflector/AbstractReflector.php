@@ -17,7 +17,7 @@ namespace Spiritix\LadaCache\Reflector;
  * @package Spiritix\LadaCache\Reflector
  * @author  Matthias Isler <mi@matthias-isler.ch>
  */
-abstract class AbstractReflector implements ReflectorInterface
+abstract class AbstractReflector
 {
     /**
      * Database prefix.
@@ -33,13 +33,6 @@ abstract class AbstractReflector implements ReflectorInterface
      * Row prefix.
      */
     const PREFIX_ROW = ':row:';
-
-    /**
-     * Package configuration.
-     *
-     * @var array
-     */
-    protected $config = [];
 
     /**
      * Returns affected database.
@@ -65,16 +58,6 @@ abstract class AbstractReflector implements ReflectorInterface
     abstract protected function getRows();
 
     /**
-     * Set package configuration.
-     *
-     * @param array $config
-     */
-    public function setConfig(array $config)
-    {
-        $this->config = $config;
-    }
-
-    /**
      * Returns an array of all tags for current action.
      *
      * @param bool $forceTables If set to true, the function will add the table tags to the row tags.
@@ -85,17 +68,17 @@ abstract class AbstractReflector implements ReflectorInterface
     public function getTags($forceTables = false)
     {
         $tags = [];
-        $considerRows = (bool) $this->config['consider-rows'];
 
         // Get affected database and tables, add prefix
         $tables = $this->prefix($this->getTables(), self::PREFIX_TABLE);
         $database = $this->prefix($this->getDatabase(), self::PREFIX_DATABASE);
 
+        $rows = $this->getRows();
+        $considerRows = (bool) config('lada-cache.consider-rows');
+
         // Check if affected rows are available or if granularity is set to not consider rows
         // In this case just use the previously prepared tables as tags
-        $rows = $this->getRows();
         if (empty($rows) || $considerRows === false) {
-
             return $this->prefix($tables, $database);
         }
 
@@ -113,9 +96,9 @@ abstract class AbstractReflector implements ReflectorInterface
     }
 
     /**
-     * Prepends a prefix to a value.
+     * Prepends a prefix to one or multiple values.
      *
-     * @param string|array $value  Either a string or an array of strings
+     * @param string|array $value  Either a string or an array of strings.
      * @param string       $prefix The prefix to be prepended.
      *
      * @return string|array

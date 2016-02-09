@@ -11,10 +11,10 @@
 
 namespace Spiritix\LadaCache\Console;
 
-use Illuminate\Console\Command as IlluminateCommand;
-use Spiritix\LadaCache\LadaCacheServiceProvider;
-use Illuminate\Support\Facades\File;
 use Exception;
+use Illuminate\Console\Command as IlluminateCommand;
+use Illuminate\Support\Facades\File;
+use Spiritix\LadaCache\LadaCacheServiceProvider;
 
 /**
  * Console command.

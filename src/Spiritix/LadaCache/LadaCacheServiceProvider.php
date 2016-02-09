@@ -59,18 +59,34 @@ class LadaCacheServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        $this->registerSingleton();
+        $this->registerSingletons();
         $this->registerConnections();
         $this->registerCommand();
     }
 
     /**
-     * Registers the cache manager in the IoC container.
+     * Get the services provided by the provider.
+     *
+     * @return array
      */
-    private function registerSingleton()
+    public function provides()
     {
-        $this->app->singleton('LadaCache', function() {
-            return new Manager();
+        return ['lada.cache', 'lada.invalidator'];
+    }
+
+    /**
+     * Registers the cache services in the IoC container.
+     */
+    private function registerSingletons()
+    {
+        $redis = new Redis(config('lada-cache.prefix'));
+
+        $this->app->singleton('lada.cache', function() use ($redis) {
+            return new Cache($redis, new Encoder());
+        });
+
+        $this->app->singleton('lada.invalidator', function() use ($redis) {
+            return new Invalidator($redis);
         });
     }
 
