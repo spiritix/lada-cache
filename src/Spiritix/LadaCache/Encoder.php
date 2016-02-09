@@ -26,7 +26,7 @@ class Encoder
      *
      * @return string
      */
-    public function encode(mixed $data)
+    public function encode($data)
     {
         return json_encode($data);
     }
