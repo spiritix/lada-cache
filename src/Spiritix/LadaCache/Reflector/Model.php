@@ -19,7 +19,7 @@ use Spiritix\LadaCache\Database\Model as EloquentModel;
  * @package Spiritix\LadaCache\Reflector
  * @author  Matthias Isler <mi@matthias-isler.ch>
  */
-class Model extends AbstractReflector
+class Model implements ReflectorInterface
 {
     /**
      * Model instance.
@@ -43,7 +43,7 @@ class Model extends AbstractReflector
      *
      * @return string
      */
-    protected function getDatabase()
+    public function getDatabase()
     {
         return $this->model->getConnection()
             ->getDatabaseName();
@@ -54,7 +54,7 @@ class Model extends AbstractReflector
      *
      * @return array
      */
-    protected function getTables()
+    public function getTables()
     {
         return [$this->model->getTable()];
     }
@@ -64,7 +64,7 @@ class Model extends AbstractReflector
      *
      * @return array
      */
-    protected function getRows()
+    public function getRows()
     {
         return [$this->model->getKey()];
     }

@@ -41,7 +41,7 @@ class EnableCommand extends Command
         if ($this->writeConfig('active', "env('LADA_CACHE_ACTIVE', true)")) {
 
             $this->info('Cache enabled');
-            $this->info('Please note that this has no effect if you have LADA_CACHE_ACTIVE=false in your .env file');
+            $this->warn('Please note that this has no effect if you have LADA_CACHE_ACTIVE=false in your .env file');
         }
     }
 }

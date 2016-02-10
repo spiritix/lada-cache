@@ -19,7 +19,7 @@ use Spiritix\LadaCache\Database\QueryBuilder as EloquentQueryBuilder;
  * @package Spiritix\LadaCache\Reflector
  * @author  Matthias Isler <mi@matthias-isler.ch>
  */
-class QueryBuilder extends AbstractReflector
+class QueryBuilder implements HashableReflectorInterface
 {
     /**
      * Since the query builder doesn't know about the related model, we have no way to figure out the name of the
@@ -48,27 +48,11 @@ class QueryBuilder extends AbstractReflector
     }
 
     /**
-     * Returns a hash of the current query.
-     *
-     * @return string
-     */
-    public function getHash()
-    {
-        // Never remove the database from the identifier
-        // Most SQL queries do not include the target database
-        $identifier = $this->getDatabase() .
-                      $this->queryBuilder->toSql() .
-                      serialize($this->queryBuilder->getBindings());
-
-        return md5($identifier);
-    }
-
-    /**
      * {@inheritdoc}
      *
      * @return string
      */
-    protected function getDatabase()
+    public function getDatabase()
     {
         return $this->queryBuilder
             ->getConnection()
@@ -80,7 +64,7 @@ class QueryBuilder extends AbstractReflector
      *
      * @return array
      */
-    protected function getTables()
+    public function getTables()
     {
         // Get main table
         $tables = [$this->queryBuilder->from];
@@ -102,7 +86,7 @@ class QueryBuilder extends AbstractReflector
      *
      * @return array
      */
-    protected function getRows()
+    public function getRows()
     {
         $rows = [];
 
@@ -139,6 +123,26 @@ class QueryBuilder extends AbstractReflector
         }
 
         return $rows;
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return string
+     */
+    public function getSql()
+    {
+        return $this->queryBuilder->toSql();
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return array
+     */
+    public function getParameters()
+    {
+        return $this->queryBuilder->getBindings();
     }
 
     /**

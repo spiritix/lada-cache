@@ -12,7 +12,9 @@
 namespace Spiritix\LadaCache\Database;
 
 use Illuminate\Database\Query\Builder;
+use Spiritix\LadaCache\Hasher;
 use Spiritix\LadaCache\Reflector\QueryBuilder as QueryBuilderReflector;
+use Spiritix\LadaCache\Tagger;
 
 /**
  * Overrides Laravel's query builder class.
@@ -31,15 +33,21 @@ class QueryBuilder extends Builder
      */
     protected function runSelect()
     {
+        // Check if cache is active
         if (config('lada-cache.active') === false) {
             return parent::runSelect();
         }
 
+        // Resolve the actual cache
         $cache = app()->make('lada.cache');
+
+        // Initialize all the utils
         $reflector = new QueryBuilderReflector($this);
+        $hasher = new Hasher($reflector);
+        $tagger = new Tagger($reflector, false);
 
         // Check if a cached version is available
-        $key = $reflector->getHash();
+        $key = $hasher->getHash();
         if ($cache->has($key)) {
 
             return $cache->get($key);
@@ -47,7 +55,7 @@ class QueryBuilder extends Builder
 
         // If not execute query and add to cache
         $result = parent::runSelect();
-        $cache->set($key, $reflector->getTags(), $result);
+        $cache->set($key, $tagger->getTags(), $result);
 
         // We do not return $cache->get() here
         // This would cause a separate cache request

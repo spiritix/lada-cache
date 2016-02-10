@@ -9,76 +9,86 @@
  * file that was distributed with this source code.
  */
 
-namespace Spiritix\LadaCache\Reflector;
+namespace Spiritix\LadaCache;
+
+use Spiritix\LadaCache\Reflector\ReflectorInterface;
 
 /**
- * A reflector parses a "database action" (not necessarily SQL) and provides information about it.
+ * Tagger creates a list of tags for a query using a reflector.
  *
- * @package Spiritix\LadaCache\Reflector
+ * @package Spiritix\LadaCache
  * @author  Matthias Isler <mi@matthias-isler.ch>
  */
-abstract class AbstractReflector
+class Tagger
 {
     /**
-     * Database prefix.
+     * Database tag prefix.
      */
     const PREFIX_DATABASE = 'tags:database:';
 
     /**
-     * Table prefix.
+     * Table tag prefix.
      */
     const PREFIX_TABLE = ':table:';
 
     /**
-     * Row prefix.
+     * Row tag prefix.
      */
     const PREFIX_ROW = ':row:';
 
     /**
-     * Returns affected database.
+     * Reflector instance.
      *
-     * @return string
+     * @var ReflectorInterface
      */
-    abstract protected function getDatabase();
+    private $reflector;
 
     /**
-     * Returns affected table(s) as array.
+     * Defines if tables should be considered as tags.
+     *
+     * @var bool
+     */
+    private $considerTables = true;
+
+    /**
+     * Defines if rows should be considered as tags.
+     *
+     * @var bool
+     */
+    private $considerRows = true;
+
+    /**
+     * Initialize tagger.
+     *
+     * @param ReflectorInterface $reflector      Reflector instance
+     * @param bool               $considerTables If tables should be considered as tags
+     */
+    public function __construct(ReflectorInterface $reflector, $considerTables = true)
+    {
+        $this->reflector = $reflector;
+        $this->considerTables = $considerTables;
+
+        $this->considerRows = (bool) config('lada-cache.consider-rows');
+    }
+
+    /**
+     * Compiles and returns the tags.
      *
      * @return array
      */
-    abstract protected function getTables();
-
-    /**
-     * Returns affected row(s) as array (primary keys).
-     *
-     * Must return an empty array if it could not determine affected rows.
-     *
-     * @return array
-     */
-    abstract protected function getRows();
-
-    /**
-     * Returns an array of all tags for current action.
-     *
-     * @param bool $forceTables If set to true, the function will add the table tags to the row tags.
-     *                          By default if rows are available, table tags will not be returned.
-     *
-     * @return array
-     */
-    public function getTags($forceTables = false)
+    public function getTags()
     {
         $tags = [];
 
-        // Get affected database and tables, add prefix
-        $tables = $this->prefix($this->getTables(), self::PREFIX_TABLE);
-        $database = $this->prefix($this->getDatabase(), self::PREFIX_DATABASE);
-
-        $rows = $this->getRows();
-        $considerRows = (bool) config('lada-cache.consider-rows');
+        // Get affected database and tables, add prefixes
+        $tables = $this->prefix($this->reflector->getTables(), self::PREFIX_TABLE);
+        $database = $this->prefix($this->reflector->getDatabase(), self::PREFIX_DATABASE);
 
         // Check if affected rows are available or if granularity is set to not consider rows
         // In this case just use the previously prepared tables as tags
-        if (empty($rows) || $considerRows === false) {
+        $rows = $this->reflector->getRows();
+        if (empty($rows) || $this->considerRows === false) {
+
             return $this->prefix($tables, $database);
         }
 
@@ -87,8 +97,8 @@ abstract class AbstractReflector
             $tags = array_merge($tags, $this->prefix($rows, $this->prefix(self::PREFIX_ROW, $table)));
         }
 
-        // Add tables to tags if required
-        if ($forceTables) {
+        // Add tables to tags if requested
+        if ($this->considerTables) {
             $tags = array_merge($tables, $tags);
         }
 

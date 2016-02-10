@@ -13,6 +13,7 @@ namespace Spiritix\LadaCache\Database;
 
 use Illuminate\Database\Eloquent\Model as EloquentModel;
 use Spiritix\LadaCache\Reflector\Model as ModelReflector;
+use Spiritix\LadaCache\Tagger;
 
 /**
  * Overrides Laravel's model class.
@@ -36,23 +37,23 @@ class Model extends EloquentModel
         $invalidator = app()->make('lada.invalidator');
 
         static::created(function($model) use($invalidator) {
-            $reflector = new ModelReflector($model);
-            $invalidator->invalidate($reflector->getTags(true));
+            $tagger = new Tagger(new ModelReflector($model));
+            $invalidator->invalidate($tagger->getTags());
         });
 
         static::updated(function($model) use($invalidator) {
-            $reflector = new ModelReflector($model);
-            $invalidator->invalidate($reflector->getTags(true));
+            $tagger = new Tagger(new ModelReflector($model));
+            $invalidator->invalidate($tagger->getTags());
         });
 
         static::deleted(function($model) use($invalidator) {
-            $reflector = new ModelReflector($model);
-            $invalidator->invalidate($reflector->getTags(true));
+            $tagger = new Tagger(new ModelReflector($model));
+            $invalidator->invalidate($tagger->getTags());
         });
 
         static::saved(function($model) use($invalidator) {
-            $reflector = new ModelReflector($model);
-            $invalidator->invalidate($reflector->getTags(true));
+            $tagger = new Tagger(new ModelReflector($model));
+            $invalidator->invalidate($tagger->getTags());
         });
     }
 
