@@ -61,4 +61,24 @@ class QueryBuilder extends Builder
 
         return $result;
     }
+
+    /**
+     * Delete a record from the database.
+     *
+     * Unfortunately Laravel does not fire the deleted event for models if one uses the ->detach() method.
+     * Therefore we have to hook into the query builder delete method here to prevent this issue.
+     *
+     * @param  mixed $id
+     *
+     * @return int
+     */
+    public function delete($id = null)
+    {
+        $invalidator = app()->make('lada.invalidator');
+
+        $tagger = new Tagger(new QueryBuilderReflector($this));
+        $invalidator->invalidate($tagger->getTags());
+
+        return parent::delete($id);
+    }
 }
