@@ -57,8 +57,6 @@ class QueryBuilder extends Builder
         $result = parent::runSelect();
         $cache->set($key, $tagger->getTags(), $result);
 
-        // We do not return $cache->get() here
-        // This would cause a separate cache request
         return $result;
     }
 }
