@@ -13,6 +13,7 @@ namespace Spiritix\LadaCache\Database;
 
 use Illuminate\Database\Query\Builder;
 use Spiritix\LadaCache\Hasher;
+use Spiritix\LadaCache\Manager;
 use Spiritix\LadaCache\Reflector\QueryBuilder as QueryBuilderReflector;
 use Spiritix\LadaCache\Tagger;
 
@@ -33,16 +34,17 @@ class QueryBuilder extends Builder
      */
     protected function runSelect()
     {
-        // Check if cache is active
-        if (config('lada-cache.active') === false) {
+        $reflector = new QueryBuilderReflector($this);
+        $manager = new Manager($reflector);
+
+        // Check if query should be cached
+        if (!$manager->shouldCache()) {
             return parent::runSelect();
         }
 
         // Resolve the actual cache
         $cache = app()->make('lada.cache');
 
-        // Initialize all the utils
-        $reflector = new QueryBuilderReflector($this);
         $hasher = new Hasher($reflector);
         $tagger = new Tagger($reflector, false);
 

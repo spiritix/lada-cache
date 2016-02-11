@@ -38,4 +38,39 @@ return [
     */
     'consider-rows' => true,
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | Include tables
+    |--------------------------------------------------------------------------
+    |
+    | If you want to cache only specific tables, put the table names into this
+    | array. Then as soon as a query contains a table which is not specified in
+    | here, it will not be cached. If you have this feature enabled, the value
+    | of "exclude-tables" will be ignored and has no effect.
+    |
+    | Instead of hard coding table names in the configuration, it is a good
+    | practice to initialize a new model instance and get the table name from
+    | there like in the following example:
+    |
+    | 'include-tables' => [
+    |     (new \App\Models\User())->getTable(),
+    |     (new \App\Models\Post())->getTable(),
+    | ],
+    |
+    */
+    'include-tables' => [],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Exclude tables
+    |--------------------------------------------------------------------------
+    |
+    | If you want to cache all tables but some specific ones, put them into this
+    | array. As soon as a query contains at least one table specified in here, it
+    | will not be cached.
+    |
+    */
+    'exclude-tables' => [],
+
 ];

@@ -14,6 +14,7 @@ A Redis based, automated and scalable database caching layer for Laravel 5.1+
 - Automatically caches all database queries
 - Intelligent cache invalidation with high granularity
 - Works with existing code, no changes required after setup
+- Possibility to cache only specific models or exclude some models
 - Makes use of [Laravel Redis](http://laravel.com/docs/5.1/redis) (supports [clustering](http://laravel.com/docs/5.1/redis#introduction))
 - PHP7 and HHVM ready
 
@@ -95,6 +96,7 @@ Find the `providers` key in your `config/app.php` and register the Lada Cache Se
 ```
 
 Finally all your models must extend the `Spiritix\LadaCache\Database\Model` class.
+It's a good practice to create a base model class which extends the Lada Cache model and then gets extended by all your models.
 
 ```php
 class Post extends Spiritix\LadaCache\Database\Model {
@@ -102,7 +104,9 @@ class Post extends Spiritix\LadaCache\Database\Model {
 }
 ```
 
-It's a good practice to create a base model class which extends the Lada Cache model and then gets extended by all your models.
+_Don't try to only have specific models extending the Lada Cache model, this will result in unexpected behavior.
+Unfortunately there is no way in Laravel to figure what model a table belongs to and therefore we can't implement it like this.
+In the configuration you will find the possibility to include or exclude specific models._
 
 ## Configuration
 
