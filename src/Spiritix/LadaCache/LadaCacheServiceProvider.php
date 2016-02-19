@@ -19,6 +19,7 @@ use Spiritix\LadaCache\Database\Connection\MysqlConnection;
 use Spiritix\LadaCache\Database\Connection\PostgresConnection;
 use Spiritix\LadaCache\Database\Connection\SqlLiteConnection;
 use Spiritix\LadaCache\Database\Connection\SqlServerConnection;
+use Spiritix\LadaCache\Debug\CacheCollector;
 
 /**
  * Laravel service provider for Lada Cache.
@@ -88,6 +89,13 @@ class LadaCacheServiceProvider extends ServiceProvider
         $this->app->singleton('lada.invalidator', function() use ($redis) {
             return new Invalidator($redis);
         });
+
+        $this->app->singleton('lada.collector', function() {
+            return new CacheCollector(LARAVEL_START);
+        });
+
+        $d = $this->app->make('debugbar');
+        $d->addCollector($this->app->make('lada.collector'));
     }
 
     /**

@@ -34,6 +34,10 @@ class QueryBuilder extends Builder
      */
     protected function runSelect()
     {
+
+        $c = app()->make('lada.collector');
+        $c->startTime();
+
         $reflector = new QueryBuilderReflector($this);
         $manager = new Manager($reflector);
 
@@ -52,7 +56,16 @@ class QueryBuilder extends Builder
         $key = $hasher->getHash();
         if ($cache->has($key)) {
 
-            return $cache->get($key);
+
+            $r =  $cache->get($key);
+
+            $c->collectHit($hasher->getHash(), $reflector->getSql(), $tagger->getTags(), $reflector->getParameters());
+
+            return $r;
+        }
+        else {
+
+            $c->collectMiss($hasher->getHash(), $reflector->getSql(), $tagger->getTags(), $reflector->getParameters());
         }
 
         // If not execute query and add to cache

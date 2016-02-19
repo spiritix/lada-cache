@@ -23,7 +23,8 @@
         "orchestra/testbench": "~3.0"
     },
     "suggest": {
-        "ext-phpiredis": "Allows faster serialization and deserialization of the Redis protocol"
+        "ext-phpiredis": "Allows faster serialization and deserialization of the Redis protocol",
+        "barryvdh/laravel-debugbar": "Allows easy debugging of the cache by using the collector provided with this package"
     },
     "autoload": {
         "psr-4": {
