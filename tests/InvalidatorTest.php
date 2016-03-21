@@ -24,4 +24,14 @@ class InvalidatorTest extends TestCase
 
         $this->assertFalse($this->cache->has('key'));
     }
+
+    public function testInvalidateMultiTags()
+    {
+        $this->cache->set('key1', ['tag1'], 'data');
+        $this->cache->set('key2', ['tag2'], 'data');
+
+        $this->invalidator->invalidate(['tag1', 'tag2']);
+
+        $this->assertFalse($this->cache->has('key2'));
+    }
 }
