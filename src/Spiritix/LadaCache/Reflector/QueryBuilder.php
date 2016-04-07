@@ -112,7 +112,7 @@ class QueryBuilder implements HashableReflectorInterface
 
             if ($where['type'] == 'Basic') {
 
-                if ($where['operator'] == '=' && ctype_digit($where['value'])) {
+                if ($where['operator'] == '=' && is_numeric($where['value'])) {
                     $rows[] = $where['value'];
                 }
             } elseif ($where['type'] == 'In') {
