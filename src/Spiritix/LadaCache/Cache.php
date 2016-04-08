@@ -68,10 +68,13 @@ class Cache
      * @param array  $tags
      * @param mixed  $data
      */
-    public function set($key, array $tags, $data)
+    public function set($key, array $tags, $data, $ttl=null)
     {
         $key = $this->redis->prefix($key);
         $this->redis->set($key, $this->encoder->encode($data));
+        if (!empty($ttl)) {
+            $this->redis->expire($key, $ttl);
+        }
 
         foreach ($tags as $tag) {
             $this->redis->sadd($this->redis->prefix($tag), [$key]);

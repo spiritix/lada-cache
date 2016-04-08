@@ -58,6 +58,20 @@ class Model extends EloquentModel
     }
 
     /**
+     * Set cache ttl
+     *
+     * @param $query
+     * @return mixed
+     */
+    public function scopeCacheExpire($query, $expire)
+    {
+        $queryBuilder = $query->getQuery();
+        $queryBuilder->lada_cache_ttl = $expire;
+
+        return $query;
+    }
+
+    /**
      * Get a new query builder instance for the connection.
      *
      * @return \Illuminate\Database\Query\Builder

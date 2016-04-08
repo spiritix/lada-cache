@@ -44,13 +44,14 @@ class Hasher
      *
      * @return string
      */
-    public function getHash()
+    public function getHash($cache_ttl=null)
     {
         // Never remove the database from the identifier
         // Most SQL queries do not include the target database
         $identifier = $this->reflector->getDatabase() .
                       $this->reflector->getSql() .
-                      serialize($this->reflector->getParameters());
+                      serialize($this->reflector->getParameters()) .
+                      (isset($cache_ttl) ? $cache_ttl : '');
 
         return md5($identifier);
     }
