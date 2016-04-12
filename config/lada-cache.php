@@ -73,4 +73,15 @@ return [
     */
     'exclude-tables' => [],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Cache expiration time (in seconds)
+    |--------------------------------------------------------------------------
+    |
+    | This sets expiration time for cached data.
+    | Value of 0 will cache forever.
+    |
+    */
+    'expire-time' => env('LADA_CACHE_EXPIRE_TIME', 86400),
+
 ];

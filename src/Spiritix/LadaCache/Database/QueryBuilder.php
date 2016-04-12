@@ -34,11 +34,6 @@ class QueryBuilder extends Builder
      */
     protected function runSelect()
     {
-        $cache_ttl = null;
-        if (isset($this->lada_cache_ttl)) {
-            $cache_ttl = $this->lada_cache_ttl;
-        }
-
         $reflector = new QueryBuilderReflector($this);
         $manager = new Manager($reflector);
 
@@ -54,7 +49,7 @@ class QueryBuilder extends Builder
         $tagger = new Tagger($reflector, false);
 
         // Check if a cached version is available
-        $key = $hasher->getHash($cache_ttl);
+        $key = $hasher->getHash();
         if ($cache->has($key)) {
 
             return $cache->get($key);
@@ -62,7 +57,7 @@ class QueryBuilder extends Builder
 
         // If not execute query and add to cache
         $result = parent::runSelect();
-        $cache->set($key, $tagger->getTags(), $result, $cache_ttl);
+        $cache->set($key, $tagger->getTags(), $result);
 
         return $result;
     }
