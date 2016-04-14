@@ -63,6 +63,10 @@ class LadaCacheServiceProvider extends ServiceProvider
         $this->registerSingletons();
         $this->registerConnections();
         $this->registerCommand();
+
+        if (class_exists('Barryvdh\\Debugbar\\LaravelDebugbar')) {
+            $this->registerDebugbarCollector();
+        }
     }
 
     /**
@@ -89,13 +93,6 @@ class LadaCacheServiceProvider extends ServiceProvider
         $this->app->singleton('lada.invalidator', function() use ($redis) {
             return new Invalidator($redis);
         });
-
-        $this->app->singleton('lada.collector', function() {
-            return new CacheCollector(LARAVEL_START);
-        });
-
-        $d = $this->app->make('debugbar');
-        $d->addCollector($this->app->make('lada.collector'));
     }
 
     /**
@@ -149,5 +146,18 @@ class LadaCacheServiceProvider extends ServiceProvider
             'command.lada-cache.enable',
             'command.lada-cache.disable',
         ]);
+    }
+
+    /**
+     * Register our custom debugbar collector.
+     */
+    private function registerDebugbarCollector()
+    {
+        $this->app->singleton('lada.collector', function() {
+            return new CacheCollector();
+        });
+
+        $debugBar = $this->app->make('debugbar');
+        $debugBar->addCollector($this->app->make('lada.collector'));
     }
 }

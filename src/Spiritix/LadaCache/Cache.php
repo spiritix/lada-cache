@@ -11,8 +11,6 @@
 
 namespace Spiritix\LadaCache;
 
-use Spiritix\LadaCache\Debug\CacheCollector;
-
 /**
  * The actual cache.
  *

@@ -24,77 +24,97 @@ use DebugBar\DataCollector\TimeDataCollector;
 class CacheCollector extends TimeDataCollector
 {
     /**
-     * The time when an action was started.
+     * Represents a cache miss.
+     */
+    const TYPE_MISS = 'miss';
+
+    /**
+     * Represents a cache hit.
+     */
+    const TYPE_HIT = 'hit';
+
+    /**
+     * The time when a cache request was started.
      *
      * @var null|float
      */
     private $startTime = null;
 
     /**
-     * Starts time measuring.
+     * Starts measuring a cache request.
+     *
+     * We can't provide the request information already at this point.
+     * The time required for building the hash and the tags (cache overhead) should be included in the measured time.
      */
-    public function startMeasure()
+    public function startMeasuring()
     {
         $this->startTime = microtime(true);
     }
 
-    public function registerHit($hash, $sql, $tags, $parameters)
+    /**
+     * Ends measuring a cache request.
+     *
+     * @param string    $type       Request type, either a miss or a hit
+     * @param string    $hash       The hash of the cache request
+     * @param array     $tags       The cache request tags
+     * @param string    $sql        The underlying SQL query string
+     * @param array     $parameters The SQL query parameters
+     */
+    public function endMeasuring($type, $hash, $tags, $sql, $parameters)
     {
-        $this->registerEvent('Hit', '')
-    }
+        $name = '[' .  ucfirst($type) . '] ' . $sql;
+        $endTime = microtime(true);
 
-    public function registerHit($hash, $sql, $tags, $parameters)
-    {
-        $name = '[Miss] ' . $sql;
-        $time = microtime(true);
         $params = [
-            'hash' => $hash,
-            'tags' => $tags,
+            'hash'       => $hash,
+            'tags'       => $tags,
             'parameters' => $parameters,
         ];
 
-        $this->addMeasure($name, $this->measure, $time, $params);
+        $this->addMeasure($name, $this->startTime, $endTime, $params);
     }
 
+    /**
+     * Adds the quantity of the cache requests to the collector data.
+     *
+     * @return array
+     */
     public function collect()
     {
         $data = parent::collect();
-        $data['lada_measures'] = count($data['measures']);
+        $data['lada-measures'] = count($data['measures']);
 
         return $data;
     }
 
+    /**
+     * Returns the name of the cache collector.
+     *
+     * @return string
+     */
     public function getName()
     {
         return 'lada';
     }
 
+    /**
+     * Returns the widget markup of the cache collector.
+     *
+     * @return array
+     */
     public function getWidgets()
     {
-        return array(
-            "lada" => array(
-                "icon" => "tasks",
-                "widget" => "PhpDebugBar.Widgets.TimelineWidget",
-                "map" => "lada",
-                "default" => "{}",
-            ),
-            'lada:badge' => array(
-                'map' => 'lada.lada_measures',
+        return [
+            'lada' => [
+                'icon' => 'tasks',
+                'widget' => 'PhpDebugBar.Widgets.TimelineWidget',
+                'map' => 'lada',
+                'default' => '{}',
+            ],
+            'lada:badge' => [
+                'map' => 'lada.lada-measures',
                 'default' => 0,
-            ),
-        );
-    }
-
-    private function registerEvent($event)
-    {
-        $name = '[Miss] ' . $sql;
-        $time = microtime(true);
-        $params = [
-            'hash' => $hash,
-            'tags' => $tags,
-            'parameters' => $parameters,
+            ],
         ];
-
-        $this->addMeasure($name, $this->measure, $time, $params);
     }
 }

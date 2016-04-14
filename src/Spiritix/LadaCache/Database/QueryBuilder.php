@@ -12,6 +12,8 @@
 namespace Spiritix\LadaCache\Database;
 
 use Illuminate\Database\Query\Builder;
+use ReflectionException;
+use Spiritix\LadaCache\Debug\CacheCollector;
 use Spiritix\LadaCache\Hasher;
 use Spiritix\LadaCache\Manager;
 use Spiritix\LadaCache\Reflector\QueryBuilder as QueryBuilderReflector;
@@ -34,9 +36,18 @@ class QueryBuilder extends Builder
      */
     protected function runSelect()
     {
+        $result = null;
 
-        $c = app()->make('lada.collector');
-        $c->startTime();
+        // Check if a debug bar collector is available
+        // If so, initialize it and start measuring
+        try {
+            /* @var CacheCollector $collector */
+            $collector = app()->make('lada.collector');
+            $collector->startMeasuring();
+        }
+        catch (ReflectionException $e) {
+            $collector = null;
+        }
 
         $reflector = new QueryBuilderReflector($this);
         $manager = new Manager($reflector);
@@ -52,25 +63,33 @@ class QueryBuilder extends Builder
         $hasher = new Hasher($reflector);
         $tagger = new Tagger($reflector, false);
 
-        // Check if a cached version is available
+        // Build hash for SQL query
         $key = $hasher->getHash();
+
+        // Check if a cached version is available
         if ($cache->has($key)) {
-
-
-            $r =  $cache->get($key);
-
-            $c->collectHit($hasher->getHash(), $reflector->getSql(), $tagger->getTags(), $reflector->getParameters());
-
-            return $r;
-        }
-        else {
-
-            $c->collectMiss($hasher->getHash(), $reflector->getSql(), $tagger->getTags(), $reflector->getParameters());
+            $result = $cache->get($key);
         }
 
-        // If not execute query and add to cache
-        $result = parent::runSelect();
-        $cache->set($key, $tagger->getTags(), $result);
+        // If a collector is available, end measuring
+        if ($collector !== null) {
+
+            $collector->endMeasuring(
+                ($result !== null) ? CacheCollector::TYPE_HIT : CacheCollector::TYPE_MISS,
+                $hasher->getHash(),
+                $tagger->getTags(),
+                $reflector->getSql(),
+                $reflector->getParameters()
+            );
+        }
+
+        // If no cached version is available, run the actual select
+        // Put the results of the query into the cache
+        if ($result === null) {
+
+            $result = parent::runSelect();
+            $cache->set($key, $tagger->getTags(), $result);
+        }
 
         return $result;
     }
