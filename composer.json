@@ -3,7 +3,7 @@
     "type": "library",
     "description": "A Redis based, automated and scalable database caching layer for Laravel 5.1+",
     "license": "MIT",
-    "keywords": ["php","laravel","cache","caching","redis","database","eloquent","laravel-5","laravel5","model"],
+    "keywords": ["php","laravel","cache","caching","redis","database","eloquent","model"],
     "authors": [
         {
             "name": "Matthias Isler",
@@ -24,7 +24,7 @@
     },
     "suggest": {
         "ext-phpiredis": "Allows faster serialization and deserialization of the Redis protocol",
-        "barryvdh/laravel-debugbar": "Allows easy debugging of the cache by using the collector provided with this package"
+        "barryvdh/laravel-debugbar": "Provides debug information about the cache"
     },
     "autoload": {
         "psr-4": {
