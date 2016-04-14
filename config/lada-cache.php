@@ -26,6 +26,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Expiration time
+    |--------------------------------------------------------------------------
+    |
+    | By default, if this value is set to null, cached items will never expire.
+    | If you are afraid of death data or if you care about disk space, it may
+    | be a good idea to set this value to something like 604800 (7 days).
+    |
+    */
+    'expiration-time' => null,
+
+    /*
+    |--------------------------------------------------------------------------
     | Cache granularity
     |--------------------------------------------------------------------------
     |
