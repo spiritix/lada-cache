@@ -70,7 +70,7 @@ class Invalidator
                 continue;
             }
 
-            $hashes += $this->redis->smembers($tag);
+            $hashes = array_merge($hashes, $this->redis->smembers($tag));
         }
 
         return array_unique($hashes);
