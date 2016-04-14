@@ -67,11 +67,26 @@ class Cache
      * @param string $key
      * @param array  $tags
      * @param mixed  $data
+     * @param int  $ttl
+     *
+     * @throws \Exception
      */
-    public function set($key, array $tags, $data)
+    public function set($key, array $tags, $data, $ttl = null)
     {
         $key = $this->redis->prefix($key);
         $this->redis->set($key, $this->encoder->encode($data));
+
+        if (!isset($ttl)) {
+            $ttl = config('lada-cache.expire-time');
+        }
+
+        if (is_numeric($ttl)) {
+            if ($ttl != 0) {
+                $this->redis->expire($key, (int) $ttl);
+            }
+        } else {
+            throw new \Exception('Invalid cache expiration time. Only numeric values are allowed.');
+        }
 
         foreach ($tags as $tag) {
             $this->redis->sadd($this->redis->prefix($tag), [$key]);
