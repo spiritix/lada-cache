@@ -11,9 +11,6 @@
 
 namespace Spiritix\LadaCache;
 
-use Spiritix\LadaCache\Reflector\HashableReflectorInterface;
-use Spiritix\LadaCache\Reflector\ReflectorInterface;
-
 /**
  * Hasher generates a hash for a query using a reflector.
  *
@@ -25,16 +22,16 @@ class Hasher
     /**
      * Reflector instance.
      *
-     * @var HashableReflectorInterface
+     * @var Reflector
      */
     private $reflector;
 
     /**
      * Initialize hasher.
      *
-     * @param ReflectorInterface $reflector Reflector instance
+     * @param Reflector $reflector Reflector instance
      */
-    public function __construct(HashableReflectorInterface $reflector)
+    public function __construct(Reflector $reflector)
     {
         $this->reflector = $reflector;
     }

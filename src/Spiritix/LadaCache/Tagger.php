@@ -11,8 +11,6 @@
 
 namespace Spiritix\LadaCache;
 
-use Spiritix\LadaCache\Reflector\ReflectorInterface;
-
 /**
  * Tagger creates a list of tags for a query using a reflector.
  *
@@ -39,7 +37,7 @@ class Tagger
     /**
      * Reflector instance.
      *
-     * @var ReflectorInterface
+     * @var Reflector
      */
     private $reflector;
 
@@ -60,10 +58,10 @@ class Tagger
     /**
      * Initialize tagger.
      *
-     * @param ReflectorInterface $reflector      Reflector instance
-     * @param bool               $considerTables If tables should be considered as tags
+     * @param Reflector $reflector      Reflector instance
+     * @param bool      $considerTables If tables should be considered as tags
      */
-    public function __construct(ReflectorInterface $reflector, $considerTables = true)
+    public function __construct(Reflector $reflector, $considerTables = true)
     {
         $this->reflector = $reflector;
         $this->considerTables = $considerTables;

@@ -84,7 +84,6 @@ class Invalidator
     private function deleteItems(array $items)
     {
         foreach ($items as $item) {
-
             $this->redis->del($item);
         }
     }

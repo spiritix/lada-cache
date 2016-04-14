@@ -16,7 +16,7 @@ use ReflectionException;
 use Spiritix\LadaCache\Debug\CacheCollector;
 use Spiritix\LadaCache\Hasher;
 use Spiritix\LadaCache\Manager;
-use Spiritix\LadaCache\Reflector\QueryBuilder as QueryBuilderReflector;
+use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Tagger;
 
 /**
@@ -29,8 +29,6 @@ class QueryBuilder extends Builder
 {
     /**
      * Run the query as a "select" statement against the connection.
-     *
-     * Check if a cached version is available and return it, otherwise add result to cache.
      *
      * @return array
      */
@@ -49,8 +47,8 @@ class QueryBuilder extends Builder
             $collector = null;
         }
 
-        $reflector = new QueryBuilderReflector($this);
-        $manager = new Manager($reflector);
+        $reflector = app()->make(Reflector::class, [$this]);
+        $manager = app()->make(Manager::class, [$reflector]);
 
         // Check if query should be cached
         if (!$manager->shouldCache()) {
@@ -60,8 +58,8 @@ class QueryBuilder extends Builder
         // Resolve the actual cache
         $cache = app()->make('lada.cache');
 
-        $hasher = new Hasher($reflector);
-        $tagger = new Tagger($reflector, false);
+        $hasher = app()->make(Hasher::class, [$reflector]);
+        $tagger = app()->make(Tagger::class, [$reflector, false]);
 
         // Build hash for SQL query
         $key = $hasher->getHash();
@@ -95,22 +93,82 @@ class QueryBuilder extends Builder
     }
 
     /**
+     * Insert a new record into the database.
+     *
+     * @param  array $values
+     *
+     * @return bool
+     */
+    public function insert(array $values)
+    {
+        $this->invalidateQuery();
+
+        return parent::insert($values);
+    }
+
+    /**
+     * Insert a new record and get the value of the primary key.
+     *
+     * @param  array  $values
+     * @param  string $sequence
+     *
+     * @return int
+     */
+    public function insertGetId(array $values, $sequence = null)
+    {
+        $this->invalidateQuery();
+
+        return parent::insertGetId($values, $sequence);
+    }
+
+    /**
+     * Update a record in the database.
+     *
+     * @param  array $values
+     *
+     * @return int
+     */
+    public function update(array $values)
+    {
+        $this->invalidateQuery();
+
+        return parent::update($values);
+    }
+
+    /**
      * Delete a record from the database.
      *
-     * Unfortunately Laravel does not fire the deleted event for models if one uses the ->detach() method.
-     * Therefore we have to hook into the query builder delete method here to prevent this issue.
-     *
-     * @param  mixed $id
+     * @param  null|int $id
      *
      * @return int
      */
     public function delete($id = null)
     {
-        $invalidator = app()->make('lada.invalidator');
-
-        $tagger = new Tagger(new QueryBuilderReflector($this));
-        $invalidator->invalidate($tagger->getTags());
+        $this->invalidateQuery();
 
         return parent::delete($id);
+    }
+
+    /**
+     * Run a truncate statement on the table.
+     */
+    public function truncate()
+    {
+        $this->invalidateQuery();
+
+        parent::truncate();
+    }
+
+    /**
+     * Invalidates items in the cache based on the current query.
+     */
+    private function invalidateQuery()
+    {
+        $invalidator = app()->make('lada.invalidator');
+
+        $reflector = app()->make(Reflector::class, [$this]);
+        $tagger = app()->make(Tagger::class, [$reflector]);
+
+        $invalidator->invalidate($tagger->getTags());
     }
 }

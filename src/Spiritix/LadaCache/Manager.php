@@ -11,8 +11,6 @@
 
 namespace Spiritix\LadaCache;
 
-use Spiritix\LadaCache\Reflector\ReflectorInterface;
-
 /**
  * Manager decides whether a query should be cached or not.
  *
@@ -24,7 +22,7 @@ class Manager
     /**
      * Reflector instance.
      *
-     * @var ReflectorInterface
+     * @var Reflector
      */
     private $reflector;
 
@@ -52,9 +50,9 @@ class Manager
     /**
      * Initialize manager.
      *
-     * @param ReflectorInterface $reflector
+     * @param Reflector $reflector
      */
-    public function __construct(ReflectorInterface $reflector)
+    public function __construct(Reflector $reflector)
     {
         $this->reflector = $reflector;
 
