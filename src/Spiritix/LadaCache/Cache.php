@@ -52,7 +52,7 @@ class Cache
         $this->redis = $redis;
         $this->encoder = $encoder;
 
-        $this->expirationTime = config('lada-cache.active');
+        $this->expirationTime = config('lada-cache.expiration-time');
     }
 
     /**
