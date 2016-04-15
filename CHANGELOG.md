@@ -1,8 +1,10 @@
 # CHANGELOG
 
 ## [Unreleased]
+
+## [1.2] - 2016-05-15
 ### Added
-- A changelog
+- The changelog
 - A collector for Laravel Debugbar 
 - It's now possible to set the expiration time in the configuration
 - Integration tests
