@@ -29,7 +29,10 @@ class Connection extends IlluminateConnection
     public function query()
     {
         return new QueryBuilder(
-            $this, $this->getQueryGrammar(), $this->getPostProcessor()
+            $this,
+            $this->getQueryGrammar(),
+            $this->getPostProcessor(),
+            app()->make('lada.handler')
         );
     }
 }

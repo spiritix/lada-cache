@@ -11,13 +11,11 @@
 
 namespace Spiritix\LadaCache\Database;
 
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Query\Builder;
-use ReflectionException;
-use Spiritix\LadaCache\Debug\CacheCollector;
-use Spiritix\LadaCache\Hasher;
-use Spiritix\LadaCache\Manager;
-use Spiritix\LadaCache\Reflector;
-use Spiritix\LadaCache\Tagger;
+use Illuminate\Database\Query\Grammars\Grammar;
+use Illuminate\Database\Query\Processors\Processor;
+use Spiritix\LadaCache\QueryHandler;
 
 /**
  * Overrides Laravel's query builder class.
@@ -28,68 +26,38 @@ use Spiritix\LadaCache\Tagger;
 class QueryBuilder extends Builder
 {
     /**
+     * Handler instance.
+     *
+     * @var QueryHandler
+     */
+    private $handler;
+
+    /**
+     * Create a new query builder instance.
+     *
+     * @param  ConnectionInterface $connection
+     * @param  Grammar             $grammar
+     * @param  Processor           $processor
+     * @param  QueryHandler        $handler
+     */
+    public function __construct(ConnectionInterface $connection, Grammar $grammar, Processor $processor,
+                                QueryHandler $handler)
+    {
+        parent::__construct($connection, $grammar, $processor);
+
+        $this->handler = $handler;
+    }
+
+    /**
      * Run the query as a "select" statement against the connection.
      *
      * @return array
      */
     protected function runSelect()
     {
-        $result = null;
-
-        // Check if a debug bar collector is available
-        // If so, initialize it and start measuring
-        try {
-            /* @var CacheCollector $collector */
-            $collector = app()->make('lada.collector');
-            $collector->startMeasuring();
-        }
-        catch (ReflectionException $e) {
-            $collector = null;
-        }
-
-        $reflector = app()->make(Reflector::class, [$this]);
-        $manager = app()->make(Manager::class, [$reflector]);
-
-        // Check if query should be cached
-        if (!$manager->shouldCache()) {
+        return $this->handler->setBuilder($this)->cacheQuery(function() {
             return parent::runSelect();
-        }
-
-        // Resolve the actual cache
-        $cache = app()->make('lada.cache');
-
-        $hasher = app()->make(Hasher::class, [$reflector]);
-        $tagger = app()->make(Tagger::class, [$reflector, false]);
-
-        // Build hash for SQL query
-        $key = $hasher->getHash();
-
-        // Check if a cached version is available
-        if ($cache->has($key)) {
-            $result = $cache->get($key);
-        }
-
-        // If a collector is available, end measuring
-        if ($collector !== null) {
-
-            $collector->endMeasuring(
-                ($result !== null) ? CacheCollector::TYPE_HIT : CacheCollector::TYPE_MISS,
-                $hasher->getHash(),
-                $tagger->getTags(),
-                $reflector->getSql(),
-                $reflector->getParameters()
-            );
-        }
-
-        // If no cached version is available, run the actual select
-        // Put the results of the query into the cache
-        if ($result === null) {
-
-            $result = parent::runSelect();
-            $cache->set($key, $tagger->getTags(), $result);
-        }
-
-        return $result;
+        });
     }
 
     /**
@@ -101,9 +69,12 @@ class QueryBuilder extends Builder
      */
     public function insert(array $values)
     {
-        $this->invalidateQuery();
+        $result = parent::insert($values);
 
-        return parent::insert($values);
+        $this->handler->setBuilder($this)
+            ->invalidateQuery('insert');
+
+        return $result;
     }
 
     /**
@@ -116,9 +87,12 @@ class QueryBuilder extends Builder
      */
     public function insertGetId(array $values, $sequence = null)
     {
-        $this->invalidateQuery();
+        $result = parent::insertGetId($values, $sequence);
 
-        return parent::insertGetId($values, $sequence);
+        $this->handler->setBuilder($this)
+            ->invalidateQuery('insertGetId');
+
+        return $result;
     }
 
     /**
@@ -130,9 +104,12 @@ class QueryBuilder extends Builder
      */
     public function update(array $values)
     {
-        $this->invalidateQuery();
+        $result = parent::update($values);
 
-        return parent::update($values);
+        $this->handler->setBuilder($this)
+            ->invalidateQuery('update');
+
+        return $result;
     }
 
     /**
@@ -144,9 +121,12 @@ class QueryBuilder extends Builder
      */
     public function delete($id = null)
     {
-        $this->invalidateQuery();
+        $result = parent::delete($id);
 
-        return parent::delete($id);
+        $this->handler->setBuilder($this)
+            ->invalidateQuery('delete');
+
+        return $result;
     }
 
     /**
@@ -154,21 +134,9 @@ class QueryBuilder extends Builder
      */
     public function truncate()
     {
-        $this->invalidateQuery();
-
         parent::truncate();
-    }
 
-    /**
-     * Invalidates items in the cache based on the current query.
-     */
-    private function invalidateQuery()
-    {
-        $invalidator = app()->make('lada.invalidator');
-
-        $reflector = app()->make(Reflector::class, [$this]);
-        $tagger = app()->make(Tagger::class, [$reflector]);
-
-        $invalidator->invalidate($tagger->getTags());
+        $this->handler->setBuilder($this)
+            ->invalidateQuery('truncate');
     }
 }

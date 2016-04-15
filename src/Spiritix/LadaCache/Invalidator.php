@@ -43,6 +43,8 @@ class Invalidator
      * Afterwards simply deletes all items and all tag sets.
      *
      * @param array $tags
+     *
+     * @return array The hashes that were invalidated
      */
     public function invalidate(array $tags)
     {
@@ -50,6 +52,8 @@ class Invalidator
 
         $this->deleteItems($hashes);
         $this->deleteItems($tags);
+
+        return $hashes;
     }
 
     /**

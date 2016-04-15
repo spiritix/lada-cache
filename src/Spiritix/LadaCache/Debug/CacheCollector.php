@@ -24,16 +24,6 @@ use DebugBar\DataCollector\TimeDataCollector;
 class CacheCollector extends TimeDataCollector
 {
     /**
-     * Represents a cache miss.
-     */
-    const TYPE_MISS = 'miss';
-
-    /**
-     * Represents a cache hit.
-     */
-    const TYPE_HIT = 'hit';
-
-    /**
      * The time when a cache request was started.
      *
      * @var null|float

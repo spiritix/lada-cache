@@ -12,9 +12,9 @@
 namespace Spiritix\LadaCache;
 
 use Illuminate\Support\ServiceProvider;
-use Spiritix\LadaCache\Console\FlushCommand;
-use Spiritix\LadaCache\Console\EnableCommand;
 use Spiritix\LadaCache\Console\DisableCommand;
+use Spiritix\LadaCache\Console\EnableCommand;
+use Spiritix\LadaCache\Console\FlushCommand;
 use Spiritix\LadaCache\Database\Connection\MysqlConnection;
 use Spiritix\LadaCache\Database\Connection\PostgresConnection;
 use Spiritix\LadaCache\Database\Connection\SqlLiteConnection;
@@ -85,13 +85,19 @@ class LadaCacheServiceProvider extends ServiceProvider
     private function registerSingletons()
     {
         $redis = new Redis(config('lada-cache.prefix'));
+        $cache = new Cache($redis, new Encoder());
+        $invalidator = new Invalidator($redis);
 
-        $this->app->singleton('lada.cache', function() use ($redis) {
-            return new Cache($redis, new Encoder());
+        $this->app->singleton('lada.cache', function() use ($cache) {
+            return $cache;
         });
 
-        $this->app->singleton('lada.invalidator', function() use ($redis) {
-            return new Invalidator($redis);
+        $this->app->singleton('lada.invalidator', function() use ($invalidator) {
+            return new $invalidator;
+        });
+
+        $this->app->singleton('lada.handler', function() use ($cache, $invalidator) {
+            return new QueryHandler($cache, $invalidator);
         });
     }
 

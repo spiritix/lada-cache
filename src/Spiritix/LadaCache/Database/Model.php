@@ -33,6 +33,6 @@ class Model extends EloquentModel
         $conn = $this->getConnection();
         $grammar = $conn->getQueryGrammar();
 
-        return new QueryBuilder($conn, $grammar, $conn->getPostProcessor());
+        return new QueryBuilder($conn, $grammar, $conn->getPostProcessor(), app()->make('lada.handler'));
     }
 }
