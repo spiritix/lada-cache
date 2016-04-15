@@ -53,6 +53,10 @@ class LadaCacheServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(
             __DIR__ . '/../../../config/' . self::CONFIG_FILE, str_replace('.php', '', self::CONFIG_FILE)
         );
+
+        if (class_exists('Barryvdh\\Debugbar\\LaravelDebugbar')) {
+            $this->registerDebugbarCollector();
+        }
     }
 
     /**
@@ -63,10 +67,6 @@ class LadaCacheServiceProvider extends ServiceProvider
         $this->registerSingletons();
         $this->registerConnections();
         $this->registerCommand();
-
-        if (class_exists('Barryvdh\\Debugbar\\LaravelDebugbar')) {
-            $this->registerDebugbarCollector();
-        }
     }
 
     /**

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.2.1] - 2016-05-15
+### Fixed
+- Fixed expiration time bug
+
 ## [1.2] - 2016-05-15
 ### Added
 - The changelog
