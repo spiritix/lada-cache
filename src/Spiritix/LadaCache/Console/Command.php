@@ -52,7 +52,7 @@ class Command extends IlluminateCommand
             return false;
         }
 
-        $this->call('config:cache');
+        $this->call('config:clear');
 
         return true;
     }
