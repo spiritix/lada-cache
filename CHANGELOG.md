@@ -4,6 +4,9 @@
 ### Fixed
 - Fixed bug with Travis CI (#19)
 
+### Changed
+- Improved unit tests
+
 ## [1.2.1] - 2016-05-15
 ### Fixed
 - Fixed expiration time bug
