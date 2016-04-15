@@ -22,11 +22,11 @@
 ### Added
 - It's now possible to cache only specific models or exclude some of them
 
-### Fixed
-- Fixed various major and minor bugs
-
 ### Changed
 - Refactored most of the classes and the structure of the library
+
+### Fixed
+- Fixed various major and minor bugs
 
 ## [1.0] - 2015-12-02
 ### Added
