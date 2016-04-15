@@ -56,7 +56,7 @@ class Reflector
     {
         return $this->queryBuilder
             ->getConnection()
-            ->getDatabaseName(); // Fuck this shit
+            ->getDatabaseName();
     }
 
     /**
