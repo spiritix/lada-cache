@@ -6,15 +6,15 @@ use Illuminate\Support\Facades\Schema;
 
 class CreateTables extends Migration
 {
-	public function up()
-	{
-		Schema::create('cars', function(Blueprint $table) {
-			$table->increments('id');
+    public function up()
+    {
+        Schema::create('cars', function(Blueprint $table) {
+            $table->increments('id');
             $table->integer('engine_id');
             $table->integer('driver_id');
-			$table->string('name');
+            $table->string('name');
             $table->timestamps();
-		});
+        });
 
         Schema::create('engines', function(Blueprint $table) {
             $table->increments('id');
@@ -40,5 +40,5 @@ class CreateTables extends Migration
             $table->integer('material_id');
             $table->timestamps();
         });
-	}
+    }
 }
