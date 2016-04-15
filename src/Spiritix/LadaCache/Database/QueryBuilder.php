@@ -49,6 +49,16 @@ class QueryBuilder extends Builder
     }
 
     /**
+     * Get a new instance of the query builder.
+     *
+     * @return \Spiritix\LadaCache\Database\QueryBuilder
+     */
+    public function newQuery()
+    {
+        return new static($this->connection, $this->grammar, $this->processor, $this->handler);
+    }
+
+    /**
      * Run the query as a "select" statement against the connection.
      *
      * @return array
