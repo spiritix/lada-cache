@@ -134,7 +134,7 @@ php artisan lada-cache:enable
 ## Known issues and limitations
 
 - Does not work with [raw SQL queries](http://laravel.com/docs/5.2/database#running-queries). This would require an SQL parser to be implemented which is quite hard and very inefficient. As long as you are only using raw queries for reading data, it just won't get cached. Serious issues will only occur if you use raw queries for writing data (which you shouldn't be doing anyway).
-- Invalidation on row level [does only work](https://github.com/spiritix/lada-cache/issues/16) if you use ``ìd`` as column name for your primary keys.
+- Invalidation on row level [does only work](https://github.com/spiritix/lada-cache/issues/16) if you use ``id`` as column name for your primary keys.
 - Cache must be truncated manually after migrations are executed.
 
 ## Contributing

@@ -2,8 +2,9 @@
 
 namespace Spiritix\LadaCache\Tests;
 
+use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Hasher;
-use Spiritix\LadaCache\Reflector\HashableReflectorInterface;
+use Spiritix\LadaCache\Reflector;
 
 class HasherTest extends TestCase
 {
@@ -59,7 +60,9 @@ class HasherTest extends TestCase
 
     private function getStub($without = '')
     {
-        $stub = $this->getMock(HashableReflectorInterface::class);
+        $stub = $this->getMockBuilder(Reflector::class)
+            ->disableOriginalConstructor()
+            ->getMock();
 
         if ($without !== 'database') {
             $stub->method('getDatabase')

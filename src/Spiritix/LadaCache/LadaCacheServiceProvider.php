@@ -93,7 +93,7 @@ class LadaCacheServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton('lada.invalidator', function() use ($invalidator) {
-            return new $invalidator;
+            return $invalidator;
         });
 
         $this->app->singleton('lada.handler', function() use ($cache, $invalidator) {

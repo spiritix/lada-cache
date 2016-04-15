@@ -2,7 +2,7 @@
 
 namespace Spiritix\LadaCache\Tests;
 
-use Spiritix\LadaCache\Reflector\ReflectorInterface;
+use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Tagger;
 
 class TaggerTest extends TestCase
@@ -13,7 +13,9 @@ class TaggerTest extends TestCase
     {
         parent::setUp();
 
-        $this->stub = $this->getMock(ReflectorInterface::class);
+        $this->stub = $this->getMockBuilder(Reflector::class)
+            ->disableOriginalConstructor()
+            ->getMock();
 
         $this->stub->method('getDatabase')
             ->will($this->returnValue('database'));

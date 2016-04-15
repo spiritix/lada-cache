@@ -3,7 +3,7 @@
 namespace Spiritix\LadaCache\Tests;
 
 use Spiritix\LadaCache\Manager;
-use Spiritix\LadaCache\Reflector\ReflectorInterface;
+use Spiritix\LadaCache\Reflector;
 
 class ManagerTest extends TestCase
 {
@@ -13,7 +13,9 @@ class ManagerTest extends TestCase
     {
         parent::setUp();
 
-        $this->stub = $this->getMock(ReflectorInterface::class);
+        $this->stub = $this->getMockBuilder(Reflector::class)
+            ->disableOriginalConstructor()
+            ->getMock();
 
         $this->stub->method('getTables')
             ->will($this->returnValue(['table1', 'table2']));
