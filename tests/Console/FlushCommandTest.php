@@ -9,13 +9,11 @@ class FlushCommandTest extends TestCase
 {
     public function testDisable()
     {
-        // TODO uncomment this as soon as issue #4 is solved
+        $cache = app()->make('lada.cache');
+        $cache->set('key', ['tag'], 'data');
 
-        //$cache = app()->make('lada.cache');
-        //$cache->set('key', ['tag'], 'data');
-        //
-        //$this->artisan('lada-cache:flush');
-        //
-        //$this->assertFalse($cache->has('key'));
+        $this->artisan('lada-cache:flush');
+
+        $this->assertFalse($cache->has('key'));
     }
 }
