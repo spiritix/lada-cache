@@ -51,7 +51,7 @@ class QueryBuilder extends Builder
     /**
      * Get a new instance of the query builder.
      *
-     * @return \Spiritix\LadaCache\Database\QueryBuilder
+     * @return QueryBuilder
      */
     public function newQuery()
     {
