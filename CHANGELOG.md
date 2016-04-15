@@ -1,13 +1,16 @@
 # CHANGELOG
 
 ## [Unreleased]
+
+## [1.2] - 2016-05-15
 ### Added
-- Added this changelog
-- A collector for Laravel Debugbar is now available
+- The changelog
+- A collector for Laravel Debugbar 
 - It's now possible to set the expiration time in the configuration
+- Integration tests
 
 ### Changed
-- Changed PHP version dependency from 5.6 to 5.5
+- PHP version dependency from 5.6 to 5.5
 - Refactored parts of the library, reflectors concept was revised, performance optimized
 
 ### Fixed
@@ -21,11 +24,11 @@
 ### Added
 - It's now possible to cache only specific models or exclude some of them
 
-### Fixed
-- Fixed various major and minor bugs
-
 ### Changed
 - Refactored most of the classes and the structure of the library
+
+### Fixed
+- Fixed various major and minor bugs
 
 ## [1.0] - 2015-12-02
 ### Added

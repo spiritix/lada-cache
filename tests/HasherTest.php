@@ -2,7 +2,6 @@
 
 namespace Spiritix\LadaCache\Tests;
 
-use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Hasher;
 use Spiritix\LadaCache\Reflector;
 
