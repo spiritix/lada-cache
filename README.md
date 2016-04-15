@@ -105,7 +105,7 @@ class Post extends Spiritix\LadaCache\Database\Model {
 }
 ```
 
-_Don't try to only have specific models extending the Lada Cache model, this will result in unexpected behavior.
+_Don't try to only have specific models extending the Lada Cache model, it will result in unexpected behavior.
 In the configuration you will find the possibility to include or exclude specific models._
 
 ## Configuration

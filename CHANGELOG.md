@@ -2,12 +2,13 @@
 
 ## [Unreleased]
 ### Added
-- Added this changelog
-- A collector for Laravel Debugbar is now available
+- A changelog
+- A collector for Laravel Debugbar 
 - It's now possible to set the expiration time in the configuration
+- Integration tests
 
 ### Changed
-- Changed PHP version dependency from 5.6 to 5.5
+- PHP version dependency from 5.6 to 5.5
 - Refactored parts of the library, reflectors concept was revised, performance optimized
 
 ### Fixed
