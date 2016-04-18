@@ -1,8 +1,11 @@
 # CHANGELOG
 
 ## [Unreleased]
+
+## [1.2.2] - 2016-05-18
 ### Fixed
 - Fixed bug with Travis CI (#19)
+- Fixed bug in query builder (#21)
 
 ### Changed
 - Improved unit tests
