@@ -73,17 +73,8 @@ In a typical web application the time consumed for database interaction is usual
 Lada Cache can be installed via [Composer](http://getcomposer.org) by requiring the
 `spiritix/lada-cache` package in your project's `composer.json`.
 
-```json
-{
-    "require": {
-        "spiritix/lada-cache": "@stable"
-    }
-}
-```
-
-Then run a composer update
 ```sh
-php composer.phar update
+php composer.phar require spiritix/lada-cache
 ```
 
 Now you must register the service provider when bootstrapping your Laravel application.
