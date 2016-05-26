@@ -96,7 +96,9 @@ class Cache
 
         foreach ($tags as $tag) {
             if ($this->phpredis) {
-                $this->redis->sAddArray($this->redis->prefix($tag), [$key]);
+                $arrMembers = [$key];
+                array_unshift($arrMembers, $this->redis->prefix($tag));
+                call_user_func_array([$this->redis, 'sadd'], $arrMembers);
             } else {
                 $this->redis->sadd($this->redis->prefix($tag), [$key]);
             }
