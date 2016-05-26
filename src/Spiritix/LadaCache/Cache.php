@@ -41,6 +41,13 @@ class Cache
     private $expirationTime;
 
     /**
+     * Phpredis support.
+     *
+     * @var bool
+     */
+    private $phpredis;
+
+    /**
      * Initialize cache.
      *
      * @param Redis   $redis
