@@ -53,6 +53,7 @@ class Cache
         $this->encoder = $encoder;
 
         $this->expirationTime = config('lada-cache.expiration-time');
+        $this->phpredis = config('lada-cache.phpredis');
     }
 
     /**
@@ -86,10 +87,8 @@ class Cache
             $this->redis->expire($key, $this->expirationTime);
         }
 
-        $phpredis = extension_loaded('redis');
-
         foreach ($tags as $tag) {
-            if ($phpredis) {
+            if ($this->phpredis) {
                 $this->redis->sAddArray($this->redis->prefix($tag), [$key]);
             } else {
                 $this->redis->sadd($this->redis->prefix($tag), [$key]);

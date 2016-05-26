@@ -85,4 +85,16 @@ return [
     */
     'exclude-tables' => [],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Phpredis support
+    |--------------------------------------------------------------------------
+    |
+    | By setting this value to true phpredis sAddArray() method will be used
+    | instead of sAdd(), since phpredis has an issue when passing array as value
+    | to sAdd() method.
+    |
+    */
+    'phpredis' => false,
+
 ];
