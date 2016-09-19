@@ -1,6 +1,8 @@
 # CHANGELOG
 
 ## [Unreleased]
+### Added
+- Added support for PhpRedis
 
 ## [1.3] - 2016-09-19
 ### Changed
