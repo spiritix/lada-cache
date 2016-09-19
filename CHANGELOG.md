@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.3] - 2016-09-19
+### Changed
+- Changed the encoder to make use of serialization instead of JSON since there were issues with associative arrays
+
+### Fixed
+- Fixed bug with installed but not enabled debug bar (#26)
+- Fixed bug with Redis 'exists' return value
+
 ## [1.2.2] - 2016-05-18
 ### Fixed
 - Fixed bug with Travis CI (#19)
