@@ -41,6 +41,13 @@ class Cache
     private $expirationTime;
 
     /**
+     * Phpredis support.
+     *
+     * @var bool
+     */
+    private $phpredis;
+
+    /**
      * Initialize cache.
      *
      * @param Redis   $redis
@@ -53,6 +60,7 @@ class Cache
         $this->encoder = $encoder;
 
         $this->expirationTime = config('lada-cache.expiration-time');
+        $this->phpredis = config('lada-cache.phpredis');
     }
 
     /**
@@ -87,7 +95,13 @@ class Cache
         }
 
         foreach ($tags as $tag) {
-            $this->redis->sadd($this->redis->prefix($tag), [$key]);
+            if ($this->phpredis) {
+                $arrMembers = [$key];
+                array_unshift($arrMembers, $this->redis->prefix($tag));
+                call_user_func_array([$this->redis, 'sadd'], $arrMembers);
+            } else {
+                $this->redis->sadd($this->redis->prefix($tag), [$key]);
+            }
         }
     }
 

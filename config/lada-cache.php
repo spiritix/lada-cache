@@ -85,4 +85,15 @@ return [
     */
     'exclude-tables' => [],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Phpredis support
+    |--------------------------------------------------------------------------
+    |
+    | If you're using phpredis extension instead of Predis then set this to true to
+    | resolve issue with sadd() method and array values.
+    |
+    */
+    'phpredis' => false,
+
 ];
