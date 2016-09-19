@@ -87,7 +87,7 @@ class Cache
         }
 
         foreach ($tags as $tag) {
-            $this->redis->sadd($this->redis->prefix($tag), [$key]);
+            $this->redis->sadd($this->redis->prefix($tag), $key);
         }
     }
 
