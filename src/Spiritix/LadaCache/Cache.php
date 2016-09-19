@@ -64,7 +64,7 @@ class Cache
      */
     public function has($key)
     {
-        return $this->redis->exists($this->redis->prefix($key));
+        return (bool) $this->redis->exists($this->redis->prefix($key));
     }
 
     /**
