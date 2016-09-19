@@ -40,6 +40,6 @@ class Encoder
      */
     public function decode($data)
     {
-        return json_decode($data, true);
+        return json_decode($data);
     }
 }
