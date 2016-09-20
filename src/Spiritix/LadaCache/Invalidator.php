@@ -50,6 +50,10 @@ class Invalidator
     {
         $hashes = $this->getHashes($tags);
 
+        foreach ($tags as $tag_index => $tag) {
+            $tags[$tag_index] = $this->redis->prefix($tag);
+        }
+
         $this->deleteItems($hashes);
         $this->deleteItems($tags);
 
