@@ -1,8 +1,16 @@
 # CHANGELOG
 
 ## [Unreleased]
+
+## [1.3.1] - 2016-09-20
 ### Added
 - Added support for PhpRedis
+
+### Changed
+- Refactored and improved service provider
+
+### Fixed
+- Fixed bug with tag invalidation
 
 ## [1.3] - 2016-09-19
 ### Changed
