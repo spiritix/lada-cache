@@ -20,9 +20,12 @@ class InvalidatorTest extends TestCase
     {
         $this->cache->set('key', ['tag1', 'tag4'], 'data');
 
-        $this->invalidator->invalidate(['tag1', 'tag3']);
+        $this->invalidator->invalidate(['tag1', 'tag4']);
 
         $this->assertFalse($this->cache->has('key'));
+
+        $this->assertFalse($this->cache->has('tag1'));
+        $this->assertFalse($this->cache->has('tag4'));
     }
 
     public function testInvalidateMultiTags()
@@ -32,6 +35,10 @@ class InvalidatorTest extends TestCase
 
         $this->invalidator->invalidate(['tag1', 'tag2']);
 
+        $this->assertFalse($this->cache->has('key1'));
         $this->assertFalse($this->cache->has('key2'));
+
+        $this->assertFalse($this->cache->has('tag1'));
+        $this->assertFalse($this->cache->has('tag2'));
     }
 }
