@@ -84,20 +84,20 @@ class LadaCacheServiceProvider extends ServiceProvider
      */
     private function registerSingletons()
     {
-        $redis = new Redis(config('lada-cache.prefix'));
-        $cache = new Cache($redis, new Encoder());
-        $invalidator = new Invalidator($redis);
-
-        $this->app->singleton('lada.cache', function() use ($cache) {
-            return $cache;
+        $this->app->singleton('lada.redis', function ($app) {
+            return new Redis(config('lada-cache.prefix'));
         });
 
-        $this->app->singleton('lada.invalidator', function() use ($invalidator) {
-            return $invalidator;
+        $this->app->singleton('lada.cache', function ($app) {
+            return new Cache($app->make('lada.redis'), new Encoder());
         });
 
-        $this->app->singleton('lada.handler', function() use ($cache, $invalidator) {
-            return new QueryHandler($cache, $invalidator);
+        $this->app->singleton('lada.invalidator', function ($app) {
+            return new Invalidator($app->make('lada.redis'));
+        });
+
+        $this->app->singleton('lada.handler', function ($app) {
+            return new QueryHandler($app->make('lada.cache'), $app->make('lada.invalidator'));
         });
     }
 
