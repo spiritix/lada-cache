@@ -20,7 +20,7 @@ A Redis based, automated and scalable database caching layer for Laravel 5.1+
 
 ## Why?
 
-Most RDBMS provide internal caching systems (for example Mysql Query Cache). Unfortunately these caching systems have some very serious limitations:
+Most RDBMS provide internal caching systems (for example Mysql Query Cache). Unfortunately, these caching systems have some very serious limitations:
 
 - They do not cache queries over multiple tables (especially joins)
 - The invalidation granularity is very low
@@ -36,13 +36,13 @@ However, there are several important reasons for this decision:
 
 - Storage must be in-memory (wouldn't make much sense otherwise)
 - Storage must be easily scalable (try to implement that with for example Memcached)
-- Storage must support tags. Redis provides the set data type which allows a very easy and fast implementation. One may argue that Memcached also support tags, but that's a widespread misapprehension. It is possible to implement tags in Memcached using [this approach](http://dev.venntro.com/2010/08/memcached-invalidation-for-sets-of-keys/), but this results in 1+[quantity of tags] requests for every read operation which is not very efficient.
+- Storage must support tags. Redis provides the set data type which allows a very easy and fast implementation. One may argue that Memcached also supports tags, but that's a widespread misapprehension. It is possible to implement tags in Memcached using [this approach](http://dev.venntro.com/2010/08/memcached-invalidation-for-sets-of-keys/), but this results in 1+[quantity of tags] requests for every read operation which is not very efficient.
 
 If you still want to use another storage system, please feel free to contribute.
 
 ## Performance
 
-Due to the fact that Redis is faster than for example MySQL, a performance gain of 30-50% is possible even for very simple and fast queries (<0.001s). However the cache starts getting very efficient with more complex queries (> 0.01s, 90% performance gain, > 0.1s, 99% performance gain). Please note that these benchmarks have been done for queries that don't return much data. If your query is very simple but returns 1GB of data, the cache won't make it faster at all.
+Due to the fact that Redis is faster than for example MySQL, a performance gain of 30-50% is possible even for very simple and fast queries (<0.001s). However, the cache starts getting very efficient with more complex queries (> 0.01s, 90% performance gain, > 0.1s, 99% performance gain). Please note that these benchmarks have been done for queries that don't return much data. If your query is very simple but returns 1GB of data, the cache won't make it faster at all.
 
 In a typical web application the time consumed for database interaction is usually only 5 - 20%, so expect a performance gain somewhere in this area. 
 
@@ -87,7 +87,7 @@ Find the `providers` key in your `config/app.php` and register the Lada Cache Se
     )
 ```
 
-Finally all your models must extend the `Spiritix\LadaCache\Database\Model` class.
+Finally, all your models must extend the `Spiritix\LadaCache\Database\Model` class.
 It's a good practice to create a base model class which extends the Lada Cache model and then gets extended by all your models.
 
 ```php
@@ -97,7 +97,7 @@ class Post extends Spiritix\LadaCache\Database\Model {
 ```
 
 _Don't try to only have specific models extending the Lada Cache model, it will result in unexpected behavior.
-In the configuration you will find the possibility to include or exclude specific models._
+In the configuration, you will find the possibility to include or exclude specific models._
 
 ## Configuration
 
@@ -115,7 +115,7 @@ You may truncate the cache by running the following command:
 php artisan lada-cache:flush
 ```
 
-If you want to temporary disable the cache (for example before running migrations), use these commands:
+If you want to temporarily disable the cache (for example before running migrations), use these commands:
 
 ```shell
 php artisan lada-cache:disable
