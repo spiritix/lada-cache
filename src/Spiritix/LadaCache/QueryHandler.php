@@ -45,6 +45,20 @@ class QueryHandler
     private $builder = null;
 
     /**
+     * Values to be saved on the model.
+     *
+     * @var array
+     */
+    private $values = [];
+
+    /**
+     * The sql operation being performed.
+     *
+     * @var string
+     */
+    private $sqlOperation = 'select';
+
+    /**
      * Collector instance.
      *
      * @var null|CacheCollector
@@ -73,6 +87,30 @@ class QueryHandler
     public function setBuilder(QueryBuilder $builder)
     {
         $this->builder = $builder;
+
+        return $this;
+    }
+
+    /**
+     * Get values that should be modifier on the model.
+     *
+     * @return array
+     */
+    public function getValues()
+    {
+        return $this->values;
+    }
+
+    /**
+     * Set values to be modifier on the model.
+     *
+     * @param array $values
+     *
+     * @return $this
+     */
+    public function setValues(array $values)
+    {
+        $this->values = $values;
 
         return $this;
     }
@@ -124,6 +162,9 @@ class QueryHandler
 
         $this->destructCollector($reflector, $tagger, $key, $action);
 
+        $this->resetValues();
+        $this->resetSqlOperation();
+
         return $result;
     }
 
@@ -138,6 +179,8 @@ class QueryHandler
 
         /* @var Reflector $reflector */
         $reflector = app()->make(Reflector::class, [$this->builder]);
+        $reflector->setSqlOperation($this->getSqlOperation())
+            ->setValues($this->getValues());
 
         /* @var Tagger $tagger */
         $tagger = app()->make(Tagger::class, [$reflector]);
@@ -146,6 +189,41 @@ class QueryHandler
 
         $action = 'Invalidation (' .  $statementType . ')';
         $this->destructCollector($reflector, $tagger, $hashes, $action);
+
+        $this->resetValues();
+        $this->resetSqlOperation();
+    }
+
+    /**
+     * Resets the sql operation being performed.
+     */
+    public function resetSqlOperation()
+    {
+        $this->sqlOperation = 'select';
+    }
+
+    /**
+     * Get the sql operation being performed.
+     *
+     * @return string
+     */
+    public function getSqlOperation(): string
+    {
+        return $this->sqlOperation;
+    }
+
+    /**
+     * Sets the sql operation.
+     *
+     * @param string $sqlOperation
+     *
+     * @return $this
+     */
+    public function setSqlOperation(string $sqlOperation)
+    {
+        $this->sqlOperation = $sqlOperation;
+
+        return $this;
     }
 
     /**
@@ -185,5 +263,17 @@ class QueryHandler
             $reflector->getSql(),
             $reflector->getParameters()
         );
+    }
+
+    /**
+     * Resets values.
+     *
+     * @return $this
+     */
+    private function resetValues()
+    {
+        $this->values = [];
+
+        return $this;
     }
 }
