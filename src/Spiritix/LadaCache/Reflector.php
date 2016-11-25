@@ -38,6 +38,20 @@ class Reflector
     protected $queryBuilder;
 
     /**
+     * Values to be saved on the model.
+     *
+     * @var array
+     */
+    private $values = [];
+
+    /**
+     * The sql operation being performed.
+     *
+     * @var string
+     */
+    private $sqlOperation = 'select';
+
+    /**
      * Initialize reflector.
      *
      * @param QueryBuilder $queryBuilder
@@ -131,7 +145,71 @@ class Reflector
      */
     public function getSql()
     {
-        return $this->queryBuilder->toSql();
+        $compileFunction = $this->getCompileFunction();
+
+        return $this->queryBuilder->getGrammar()->$compileFunction($this->queryBuilder, $this->values);
+    }
+
+    /**
+     * Get the mysql grammar compile function.
+     *
+     * @return string
+     */
+    private function getCompileFunction(): string
+    {
+        switch (strtolower($this->sqlOperation)) {
+            case 'insert':
+                return 'compileInsert';
+            break;
+
+            case 'insertgetid':
+                return 'compileInsertGetId';
+            break;
+
+            case 'update':
+                return 'compileUpdate';
+            break;
+
+            case 'delete':
+                return 'compileDelete';
+            break;
+
+            case 'truncate':
+                return 'compileTruncate';
+            break;
+
+            default:
+                return 'compileSelect';
+            break;
+        }
+    }
+
+    /**
+     * Set values to be modifier on the model.
+     *
+     * @param array $values
+     *
+     * @return $this
+     */
+    public function setValues(array $values)
+    {
+        $this->values = $values;
+
+        return $this;
+    }
+
+    /**
+     * Sets the sql operation.
+     *
+     * @param string $sqlOperation
+     *
+     * @return $this
+     */
+    public function setSqlOperation(string $sqlOperation)
+    {
+        $this->sqlOperation = $sqlOperation;
+
+        return $this;
     }
 
     /**
