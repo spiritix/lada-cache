@@ -95,6 +95,10 @@ class Tagger
             $tags = array_merge($tags, $this->prefix($rows, $this->prefix(self::PREFIX_ROW, $table)));
         }
 
+        if ($this->considerRows === true && !empty($rows)) {
+            return $this->prefix($tags, $database);
+        }
+
         // Add tables to tags if requested
         if ($this->considerTables) {
             $tags = array_merge($tables, $tags);
