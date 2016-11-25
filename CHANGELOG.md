@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.3.2] - 2016-11-25
+### Fixed
+- Fixed a bug in relation to the Debug Bar, write queries were not displayed properly
+- Fixed bug in invalidator (#30)
+
 ## [1.3.1] - 2016-09-20
 ### Added
 - Added support for PhpRedis
