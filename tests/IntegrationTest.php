@@ -126,16 +126,21 @@ class IntegrationTest extends TestCase
 
     public function testTruncate()
     {
-        $this->factory->create(Car::class);
+        $this->factory->times(5)->create(Car::class);
 
-        $builder = Car::where(1, '=', 1);
-        $builder->get();
+        $tableBuilder = Car::where(1, '=', 1);
+        $tableBuilder->get();
 
-        $this->assertTrue($this->hasQuery($builder->getQuery()));
+        $rowBuilder = Car::where('id', '=', 1);
+        $rowBuilder->get();
+
+        $this->assertTrue($this->hasQuery($tableBuilder->getQuery()));
+        $this->assertTrue($this->hasQuery($rowBuilder->getQuery()));
 
         Car::truncate();
 
-        $this->assertFalse($this->hasQuery($builder->getQuery()));
+        $this->assertFalse($this->hasQuery($tableBuilder->getQuery()));
+        $this->assertFalse($this->hasQuery($rowBuilder->getQuery()));
     }
 
     private function hasQuery(QueryBuilder $builder)
