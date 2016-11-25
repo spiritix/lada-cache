@@ -95,7 +95,7 @@ class Tagger
             $tags = array_merge($tags, $this->prefix($rows, $this->prefix(self::PREFIX_ROW, $table)));
         }
 
-        if ($this->considerRows === true && !(empty($rows))) {
+        if ($this->considerRows === true && !empty($rows)) {
             return $this->prefix($tags, $database);
         }
 
