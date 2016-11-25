@@ -147,7 +147,13 @@ class Reflector
     {
         $compileFunction = $this->getCompileFunction();
 
-        return $this->queryBuilder->getGrammar()->$compileFunction($this->queryBuilder, $this->values);
+        $grammar = $this->queryBuilder->getGrammar();
+
+        return call_user_func_array([$grammar, $compileFunction], [
+            'builder'  => $this->queryBuilder,
+            'values'   => $this->values,
+            'sequence' => '',
+        ]);
     }
 
     /**
