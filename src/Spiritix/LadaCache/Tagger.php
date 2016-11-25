@@ -82,21 +82,17 @@ class Tagger
         $tables = $this->prefix($this->reflector->getTables(), self::PREFIX_TABLE);
         $database = $this->prefix($this->reflector->getDatabase(), self::PREFIX_DATABASE);
 
-        // Check if affected rows are available or if granularity is set to not consider rows
-        // In this case just use the previously prepared tables as tags
+        // If no rows are available or rows should not be considered
+        // Let's just return the database and table tags
         $rows = $this->reflector->getRows();
         if (empty($rows) || $this->considerRows === false) {
 
             return $this->prefix($tables, $database);
         }
 
-        // Now loop trough tables and create a tag for each row
+        // Else loop trough tables and create a tag for each row
         foreach ($tables as $table) {
             $tags = array_merge($tags, $this->prefix($rows, $this->prefix(self::PREFIX_ROW, $table)));
-        }
-
-        if ($this->considerRows === true && !empty($rows)) {
-            return $this->prefix($tags, $database);
         }
 
         // Add tables to tags if requested

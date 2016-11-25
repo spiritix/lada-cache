@@ -11,13 +11,13 @@ use Spiritix\LadaCache\Tests\Database\Models\Material;
 
 $factory(Car::class, [
     'name' => $faker->word,
-    'engine_id' => '1',
-    'driver_id' => '1',
+    'engine_id' => $faker->randomNumber(8),
+    'driver_id' => $faker->randomNumber(8),
 ]);
 
 $factory(Engine::class, [
     'name' => $faker->word,
-    'car_id' => '1',
+    'car_id' => $faker->randomNumber(8),
 ]);
 
 $factory(Driver::class, [
@@ -29,6 +29,6 @@ $factory(Material::class, [
 ]);
 
 $factory(CarMaterial::class, [
-    'car_id' => '1',
-    'material_id' => '1',
+    'car_id' => $faker->randomNumber(8),
+    'material_id' => $faker->randomNumber(8),
 ]);

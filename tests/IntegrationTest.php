@@ -6,6 +6,7 @@ use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Hasher;
 use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Tests\Database\Models\Car;
+use Spiritix\LadaCache\Tests\Database\Models\Engine;
 
 class IntegrationTest extends TestCase
 {
@@ -20,12 +21,16 @@ class IntegrationTest extends TestCase
 
     public function testInsert()
     {
-        $this->factory->create(Car::class);
+        $this->factory->times(5)->create(Car::class);
 
-        $builder = Car::where(1, '=', 1);
-        $builder->get();
+        $tableBuilder = Car::where(1, '=', 1);
+        $tableBuilder->get();
 
-        $this->assertTrue($this->hasQuery($builder->getQuery()));
+        $rowBuilder = Car::where('id', '=', 1);
+        $rowBuilder->get();
+
+        $this->assertTrue($this->hasQuery($tableBuilder->getQuery()));
+        $this->assertTrue($this->hasQuery($rowBuilder->getQuery()));
 
         $car = new Car();
         $car->name = 'Car';
@@ -33,37 +38,90 @@ class IntegrationTest extends TestCase
         $car->driver_id = 1;
         $car->save();
 
-        $this->assertFalse($this->hasQuery($builder->getQuery()));
+        $this->assertFalse($this->hasQuery($tableBuilder->getQuery()));
+        $this->assertTrue($this->hasQuery($rowBuilder->getQuery()));
     }
 
     public function testUpdate()
     {
-        $this->factory->create(Car::class);
+        $this->factory->times(5)->create(Car::class);
 
-        $builder = Car::where(1, '=', 1);
-        $builder->get();
+        $tableBuilder = Car::where(1, '=', 1);
+        $tableBuilder->get();
 
-        $this->assertTrue($this->hasQuery($builder->getQuery()));
+        $rowBuilder1 = Car::where('id', '=', 1);
+        $rowBuilder1->get();
+
+        $rowBuilder2 = Car::where('id', '=', 2);
+        $rowBuilder2->get();
+
+        $this->assertTrue($this->hasQuery($tableBuilder->getQuery()));
+        $this->assertTrue($this->hasQuery($rowBuilder1->getQuery()));
+        $this->assertTrue($this->hasQuery($rowBuilder2->getQuery()));
 
         $car = Car::find(1);
         $car->name = 'New';
         $car->save();
 
-        $this->assertFalse($this->hasQuery($builder->getQuery()));
+        $this->assertFalse($this->hasQuery($tableBuilder->getQuery()));
+        $this->assertFalse($this->hasQuery($rowBuilder1->getQuery()));
+        $this->assertTrue($this->hasQuery($rowBuilder2->getQuery()));
     }
 
     public function testDelete()
     {
-        $this->factory->create(Car::class);
+        $this->factory->times(5)->create(Car::class);
 
-        $builder = Car::where(1, '=', 1);
-        $builder->get();
+        $tableBuilder = Car::where(1, '=', 1);
+        $tableBuilder->get();
 
-        $this->assertTrue($this->hasQuery($builder->getQuery()));
+        $rowBuilder1 = Car::where('id', '=', 1);
+        $rowBuilder1->get();
+
+        $rowBuilder2 = Car::where('id', '=', 2);
+        $rowBuilder2->get();
+
+        $this->assertTrue($this->hasQuery($tableBuilder->getQuery()));
+        $this->assertTrue($this->hasQuery($rowBuilder1->getQuery()));
+        $this->assertTrue($this->hasQuery($rowBuilder2->getQuery()));
 
         Car::find(1)->delete();
 
-        $this->assertFalse($this->hasQuery($builder->getQuery()));
+        $this->assertFalse($this->hasQuery($tableBuilder->getQuery()));
+        $this->assertFalse($this->hasQuery($rowBuilder1->getQuery()));
+        $this->assertTrue($this->hasQuery($rowBuilder2->getQuery()));
+    }
+
+    public function testOneToOneRelation()
+    {
+        //$this->factory->times(5)
+        //    ->create(Car::class)
+        //    ->each(function($car) {
+        //        $car->engine()->save($this->factory->create(Engine::class));
+        //    });
+        //
+        //$tableBuilder = Car::with(['engine' => function($query) {
+        //    $query->where('name', '!=', 'xxx');
+        //}])->where(1, '=', 1);
+        //$tableBuilder->get();
+        //
+        //dd($tableBuilder->getQuery()->toSql());die();
+        //
+        //$rowBuilder1 = Car::where('id', '=', 1);
+        //$rowBuilder1->get();
+        //
+        //$rowBuilder2 = Car::where('id', '=', 2);
+        //$rowBuilder2->get();
+    }
+
+    public function testOneToManyRelation()
+    {
+
+    }
+
+    public function testManyToManyRelation()
+    {
+
     }
 
     public function testTruncate()

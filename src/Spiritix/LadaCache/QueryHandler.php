@@ -183,7 +183,7 @@ class QueryHandler
             ->setValues($this->getValues());
 
         /* @var Tagger $tagger */
-        $tagger = app()->make(Tagger::class, [$reflector]);
+        $tagger = app()->make(Tagger::class, [$reflector, true]);
 
         $hashes = $this->invalidator->invalidate($tagger->getTags());
 
