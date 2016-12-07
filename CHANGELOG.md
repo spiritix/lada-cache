@@ -2,10 +2,13 @@
 
 ## [Unreleased]
 
-## [1.3.2] - 2016-11-25
+## [1.4] - 2016-12-07
 ### Fixed
 - Fixed a bug in relation to the Debug Bar, write queries were not displayed properly
 - Fixed bug in invalidator (#30)
+
+### Changed
+- Refactored and improved caching strategy
 
 ## [1.3.1] - 2016-09-20
 ### Added

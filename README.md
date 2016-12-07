@@ -15,7 +15,7 @@ A Redis based, automated and scalable database caching layer for Laravel 5.1+
 - Intelligent cache invalidation with high granularity
 - Works with existing code, no changes required after setup
 - Possibility to cache only specific models or exclude some models
-- Makes use of [Laravel Redis](http://laravel.com/docs/5.2/redis) (supports [clustering](https://laravel.com/docs/5.2/redis#introduction))
+- Makes use of [Laravel Redis](http://laravel.com/docs/5.3/redis) (supports [clustering](https://laravel.com/docs/5.3/redis#introduction))
 - PHP7 and HHVM ready
 
 ## Why?
@@ -31,7 +31,7 @@ This library offers a solution for all of these problems.
 
 ## Why only Redis?
 
-As you may have discovered while looking at the source code, this library is built directly on top of [Laravel Redis](http://laravel.com/docs/5.2/redis) and not [Laravel Cache](http://laravel.com/docs/5.2/cache) which would make more sense from a general point of view.
+As you may have discovered while looking at the source code, this library is built directly on top of [Laravel Redis](http://laravel.com/docs/5.3/redis) and not [Laravel Cache](http://laravel.com/docs/5.3/cache) which would make more sense from a general point of view.
 However, there are several important reasons for this decision:
 
 - Storage must be in-memory (wouldn't make much sense otherwise)
@@ -124,7 +124,7 @@ php artisan lada-cache:enable
 
 ## Known issues and limitations
 
-- Does not work with [raw SQL queries](http://laravel.com/docs/5.2/database#running-queries). This would require an SQL parser to be implemented which is quite hard and very inefficient. As long as you are only using raw queries for reading data, it just won't get cached. Serious issues will only occur if you use raw queries for writing data (which you shouldn't be doing anyway).
+- Does not work with [raw SQL queries](http://laravel.com/docs/5.3/database#running-queries). This would require an SQL parser to be implemented which is quite hard and very inefficient. As long as you are only using raw queries for reading data, it just won't get cached. Serious issues will only occur if you use raw queries for writing data (which you shouldn't be doing anyway).
 - Invalidation on row level [does only work](https://github.com/spiritix/lada-cache/issues/16) if you use ``id`` as column name for your primary keys.
 - Cache must be truncated manually after migrations are executed.
 

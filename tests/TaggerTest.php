@@ -1,11 +1,4 @@
 <?php
-/**
- * This file is part of Event Commander.
- *
- * @copyright  Copyright (c) 2015 and Onwards, Smartbridge GmbH <info@smartbridge.ch>. All rights reserved.
- * @license    Proprietary/Closed Source
- * @see        http://www.eventcommander.com
- */
 
 namespace Spiritix\LadaCache\Tests;
 
@@ -14,12 +7,6 @@ use Spiritix\LadaCache\Tagger;
 use Spiritix\LadaCache\Tests\Database\Models\Car;
 use Spiritix\LadaCache\Tests\Database\Models\Engine;
 
-/**
- * Testing the new tag generation scheme scheme.
- *
- * @package Spiritix\LadaCache\Tests
- * @author  Marian Hodorogea <marian.hodorogea@smartbridge.ch>
- */
 class TaggerTest extends TestCase
 {
     private $cache;
@@ -68,7 +55,7 @@ class TaggerTest extends TestCase
      * SELECT * FROM cars WHERE name LIKE ‘%XX%’
      * Generates tags like: table_unspecific_cars
      */
-    public function testSelectWithUnspeficicWhere()
+    public function testSelectWithUnspecificWhere()
     {
         $this->factory->times(5)->create(Car::class);
 

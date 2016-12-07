@@ -2,7 +2,6 @@
 
 namespace Spiritix\LadaCache\Tests\Console;
 
-use Illuminate\Support\Facades\Artisan;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class FlushCommandTest extends TestCase

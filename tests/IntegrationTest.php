@@ -5,9 +5,7 @@ namespace Spiritix\LadaCache\Tests;
 use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Hasher;
 use Spiritix\LadaCache\Reflector;
-use Spiritix\LadaCache\Tagger;
 use Spiritix\LadaCache\Tests\Database\Models\Car;
-use Spiritix\LadaCache\Tests\Database\Models\Engine;
 
 class IntegrationTest extends TestCase
 {
@@ -94,38 +92,6 @@ class IntegrationTest extends TestCase
         $this->assertTrue($this->hasQuery($rowBuilder2->getQuery()));
     }
 
-    public function testOneToOneRelation()
-    {
-        //$this->factory->times(5)
-        //    ->create(Car::class)
-        //    ->each(function($car) {
-        //        $car->engine()->save($this->factory->create(Engine::class));
-        //    });
-        //
-        //$tableBuilder = Car::with(['engine' => function($query) {
-        //    $query->where('name', '!=', 'xxx');
-        //}])->where(1, '=', 1);
-        //$tableBuilder->get();
-        //
-        //dd($tableBuilder->getQuery()->toSql());die();
-        //
-        //$rowBuilder1 = Car::where('id', '=', 1);
-        //$rowBuilder1->get();
-        //
-        //$rowBuilder2 = Car::where('id', '=', 2);
-        //$rowBuilder2->get();
-    }
-
-    public function testOneToManyRelation()
-    {
-
-    }
-
-    public function testManyToManyRelation()
-    {
-
-    }
-
     public function testTruncate()
     {
         $this->factory->times(5)->create(Car::class);
@@ -145,13 +111,14 @@ class IntegrationTest extends TestCase
         $this->assertFalse($this->hasQuery($rowBuilder->getQuery()));
     }
 
-    private function hasQuery(QueryBuilder $builder, string $sqlOperation = 'select', array $values = [])
+    private function hasQuery(QueryBuilder $builder)
     {
-
         /* @var Reflector $reflector */
         $reflector = app()->make(Reflector::class, [$builder])
-            ->setSqlOperation($sqlOperation)
-            ->setValues($values);
+            ->setSqlOperation('select')
+            ->setValues([]);
+
+        /* @var Hasher $hasher */
         $hasher = app()->make(Hasher::class, [$reflector]);
 
         return $this->cache->has($hasher->getHash());

@@ -23,7 +23,7 @@ use Illuminate\Database\Schema\Grammars\SqlServerGrammar as SchemaGrammar;
 /**
  * Overrides Laravel's SQL Server connection class.
  *
- * @todo Fix the code smell copied from Laravel.
+ * Contains code smell copy-pasted from Laravel :(
  *
  * @package Spiritix\LadaCache\Database\Connection
  * @author  Matthias Isler <mi@matthias-isler.ch>
