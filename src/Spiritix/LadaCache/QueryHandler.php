@@ -45,20 +45,6 @@ class QueryHandler
     private $builder = null;
 
     /**
-     * Values to be saved on the model.
-     *
-     * @var array
-     */
-    private $values = [];
-
-    /**
-     * The sql operation being performed.
-     *
-     * @var string
-     */
-    private $sqlOperation = 'select';
-
-    /**
      * Collector instance.
      *
      * @var null|CacheCollector
@@ -92,30 +78,6 @@ class QueryHandler
     }
 
     /**
-     * Get values that should be modifier on the model.
-     *
-     * @return array
-     */
-    public function getValues()
-    {
-        return $this->values;
-    }
-
-    /**
-     * Set values to be modifier on the model.
-     *
-     * @param array $values
-     *
-     * @return $this
-     */
-    public function setValues(array $values)
-    {
-        $this->values = $values;
-
-        return $this;
-    }
-
-    /**
      * Caches a query and returns its result.
      *
      * @param callable $queryClosure A closure which executes the query and returns the result
@@ -127,9 +89,7 @@ class QueryHandler
         $this->constructCollector();
 
         /* @var Reflector $reflector */
-        $reflector = app()->make(Reflector::class, [$this->builder])
-            ->setSqlOperation($this->sqlOperation)
-            ->setValues($this->values);
+        $reflector = app()->make(Reflector::class, [$this->builder]);
 
         /* @var Manager $manager */
         $manager = app()->make(Manager::class, [$reflector]);
@@ -153,20 +113,13 @@ class QueryHandler
             $result = $this->cache->get($key);
         }
 
-        $action = ($result === null) ? 'Miss' : 'Hit';
-
         // If not, execute the query closure and cache the result
         if ($result === null) {
-            $result = $queryClosure();
-
-            $tags = array_flatten($tagger->getTags());
-            $this->cache->set($key, $tags, $result);
+            $this->cache->set($key, $tagger->getTags(), $queryClosure());
         }
 
+        $action = ($result === null) ? 'Miss' : 'Hit';
         $this->destructCollector($reflector, $tagger, $key, $action);
-
-        $this->resetValues();
-        $this->resetSqlOperation();
 
         return $result;
     }
@@ -175,15 +128,14 @@ class QueryHandler
      * Invalidates a query.
      *
      * @param string $statementType The type of the statement that caused the invalidation
+     * @param array $values         The values to be modified
      */
-    public function invalidateQuery($statementType)
+    public function invalidateQuery($statementType, $values = [])
     {
         $this->constructCollector();
 
         /* @var Reflector $reflector */
-        $reflector = app()->make(Reflector::class, [$this->builder]);
-        $reflector->setSqlOperation($this->getSqlOperation())
-            ->setValues($this->getValues());
+        $reflector = app()->make(Reflector::class, [$this->builder, $statementType, $values]);
 
         /* @var Tagger $tagger */
         $tagger = app()->make(Tagger::class, [$reflector]);
@@ -192,41 +144,6 @@ class QueryHandler
 
         $action = 'Invalidation (' .  $statementType . ')';
         $this->destructCollector($reflector, $tagger, $hashes, $action);
-
-        $this->resetValues();
-        $this->resetSqlOperation();
-    }
-
-    /**
-     * Resets the sql operation being performed.
-     */
-    public function resetSqlOperation()
-    {
-        $this->sqlOperation = 'select';
-    }
-
-    /**
-     * Get the sql operation being performed.
-     *
-     * @return string
-     */
-    public function getSqlOperation(): string
-    {
-        return $this->sqlOperation;
-    }
-
-    /**
-     * Sets the sql operation.
-     *
-     * @param string $sqlOperation
-     *
-     * @return $this
-     */
-    public function setSqlOperation(string $sqlOperation)
-    {
-        $this->sqlOperation = $sqlOperation;
-
-        return $this;
     }
 
     /**
@@ -266,17 +183,5 @@ class QueryHandler
             $reflector->getSql(),
             $reflector->getParameters()
         );
-    }
-
-    /**
-     * Resets values.
-     *
-     * @return $this
-     */
-    private function resetValues()
-    {
-        $this->values = [];
-
-        return $this;
     }
 }

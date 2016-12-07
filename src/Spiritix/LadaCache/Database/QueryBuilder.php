@@ -83,9 +83,7 @@ class QueryBuilder extends Builder
         $result = parent::insert($values);
 
         $this->handler->setBuilder($this)
-            ->setValues($values)
-            ->setSqlOperation('insert')
-            ->invalidateQuery('insert');
+            ->invalidateQuery(Reflector::QUERY_TYPE_INSERT, $values);
 
         return $result;
     }
@@ -103,9 +101,7 @@ class QueryBuilder extends Builder
         $result = parent::insertGetId($values, $sequence);
 
         $this->handler->setBuilder($this)
-            ->setValues($values)
-            ->setSqlOperation('insertGetId')
-            ->invalidateQuery('insertGetId');
+            ->invalidateQuery(Reflector::QUERY_TYPE_INSERT, $values);
 
         return $result;
     }
@@ -122,9 +118,7 @@ class QueryBuilder extends Builder
         $result = parent::update($values);
 
         $this->handler->setBuilder($this)
-            ->setValues($values)
-            ->setSqlOperation('update')
-            ->invalidateQuery('update');
+            ->invalidateQuery(Reflector::QUERY_TYPE_UPDATE, $values);
 
         return $result;
     }
@@ -141,9 +135,7 @@ class QueryBuilder extends Builder
         $result = parent::delete($id);
 
         $this->handler->setBuilder($this)
-            ->setValues([Reflector::PRIMARY_KEY_COLUMN => $id])
-            ->setSqlOperation('delete')
-            ->invalidateQuery('delete');
+            ->invalidateQuery(Reflector::QUERY_TYPE_DELETE, [Reflector::PRIMARY_KEY_COLUMN => $id]);
 
         return $result;
     }
@@ -156,8 +148,6 @@ class QueryBuilder extends Builder
         parent::truncate();
 
         $this->handler->setBuilder($this)
-            ->setValues([])
-            ->setSqlOperation('truncate')
-            ->invalidateQuery('truncate');
+            ->invalidateQuery(Reflector::QUERY_TYPE_TRUNCATE);
     }
 }

@@ -46,6 +46,7 @@ class Reflector
      * Query of type "TRUNCATE".
      */
     const QUERY_TYPE_TRUNCATE = 'truncate';
+
     /**
      * Since the query builder doesn't know about the related model, we have no way to figure out the name of the
      * primary key column. If someone is not using this value as primary key column it won't break anything, it just
@@ -63,31 +64,35 @@ class Reflector
     protected $queryBuilder;
 
     /**
-     * Values to be saved on the model.
+     * The SQL operation being performed.
+     *
+     * @var string
+     */
+    private $sqlOperation;
+
+    /**
+     * The values to be saved.
      *
      * @var array
      */
     private $values = [];
 
     /**
-     * The sql operation being performed.
-     *
-     * @var string
-     */
-    private $sqlOperation = self::QUERY_TYPE_SELECT;
-
-    /**
      * Initialize reflector.
      *
      * @param QueryBuilder $queryBuilder
+     * @param string       $sqlOperation The SQL operation to be performed
+     * @param array        $values       The values to be saved
      */
-    public function __construct(QueryBuilder $queryBuilder)
+    public function __construct(QueryBuilder $queryBuilder, $sqlOperation = self::QUERY_TYPE_SELECT, $values = [])
     {
         $this->queryBuilder = $queryBuilder;
+        $this->sqlOperation = $sqlOperation;
+        $this->values = $values;
     }
 
     /**
-     * {@inheritdoc}
+     * Returns the database name.
      *
      * @return string
      */
@@ -99,7 +104,7 @@ class Reflector
     }
 
     /**
-     * {@inheritdoc}
+     * Returns all affected tables, including joined ones.
      *
      * @return array
      */
@@ -121,15 +126,14 @@ class Reflector
     }
 
     /**
-     * {@inheritdoc}
+     * Returns all affected rows as a multidimensional array, split up by table.
      *
      * @return array
      */
     public function getRows()
     {
         $rows = [];
-
-        $wheres = $this->queryBuilder->wheres ? : [];
+        $wheres = $this->queryBuilder->wheres ?: [];
 
         foreach ($wheres as $where) {
 
@@ -145,22 +149,23 @@ class Reflector
 
             list($table, $column) = $this->splitTableAndColumn($where['column']);
 
-            if (!isset($rows[$table])) {
-                $rows[$table] = [];
-            }
-
             // Make sure that the where clause applies for the primary key column
             if ($column !== self::PRIMARY_KEY_COLUMN) {
                 continue;
             }
 
-            if ($where['type'] === 'Basic') {
+            // Initialize a set for the current table
+            if (!isset($rows[$table])) {
+                $rows[$table] = [];
+            }
 
+            // Add the rows to the current table set
+            if ($where['type'] === 'Basic') {
                 if ($where['operator'] === '=' && is_numeric($where['value'])) {
                     $rows[$table][] = $where['value'];
                 }
             }
-            elseif ($where['type'] === 'In') {
+            else if ($where['type'] === 'In') {
                 $rows[$table] += $where['values'];
             }
         }
@@ -169,14 +174,47 @@ class Reflector
     }
 
     /**
-     * {@inheritdoc}
+     * Returns the type of the query.
      *
      * @return string
+     */
+    public function getType()
+    {
+        $sql = $this->getSql();
+
+        // Some DBMS like SQLite issue two delete queries instead of a truncate one
+        // This and other edge cases must be considered here
+        if (is_array($sql)) {
+            $sql = implode(';', array_keys($sql));
+        }
+
+        $type = strtok(strtolower(trim($sql)), ' ');
+
+        $allowedTypes = [
+            self::QUERY_TYPE_SELECT,
+            self::QUERY_TYPE_INSERT,
+            self::QUERY_TYPE_UPDATE,
+            self::QUERY_TYPE_DELETE,
+            self::QUERY_TYPE_TRUNCATE,
+        ];
+
+        if (!in_array($type, $allowedTypes)) {
+            throw new RuntimeException('Invalid query type');
+        }
+
+        return $type;
+    }
+
+    /**
+     * Returns the compiled SQL string.
+     *
+     * In some edge cases, particularly SQLite, this may also be an array :(
+     *
+     * @return string|array
      */
     public function getSql()
     {
         $compileFunction = $this->getCompileFunction();
-
         $grammar = $this->queryBuilder->getGrammar();
 
         return call_user_func_array([$grammar, $compileFunction], [
@@ -187,111 +225,7 @@ class Reflector
     }
 
     /**
-     * Set values to be modifier on the model.
-     *
-     * @param array $values
-     *
-     * @return $this
-     */
-    public function setValues(array $values)
-    {
-        $this->values = $values;
-
-        return $this;
-    }
-
-    /**
-     * Sets the sql operation.
-     *
-     * @param string $sqlOperation
-     *
-     * @return $this
-     */
-    public function setSqlOperation($sqlOperation)
-    {
-        $this->sqlOperation = $sqlOperation;
-
-        return $this;
-    }
-
-    /**
-     * Determine the type of query in the builder.
-     *
-     * @param string $queryType One of: select, insert, update, delete, truncate
-     *
-     * @return bool
-     */
-    public function isQueryOfType($queryType)
-    {
-        $allowedQueryTypes = [
-            self::QUERY_TYPE_SELECT,
-            self::QUERY_TYPE_INSERT,
-            self::QUERY_TYPE_UPDATE,
-            self::QUERY_TYPE_DELETE,
-            self::QUERY_TYPE_TRUNCATE,
-        ];
-
-        if (!in_array(strtolower($queryType), $allowedQueryTypes)) {
-            throw new RuntimeException('Not intended to be used like this.');
-        }
-
-        $sql = $this->getSql();
-
-        /**
-         * Edge case for sqlite not supporting the truncate query, instead issues 2 delete queries,
-         * one on the table sqlite_sequence.
-         */
-        if (is_array($sql)) {
-            $sql = implode(';', array_keys($sql));
-        }
-
-        $sqlString = strtolower(trim($sql));
-
-        return starts_with($sqlString, $queryType);
-    }
-
-    /**
-     * Determine if the builder holds a "SELECT" query.
-     *
-     * @return bool
-     */
-    public function isSelectQuery()
-    {
-        return $this->isQueryOfType(self::QUERY_TYPE_SELECT);
-    }
-
-    /**
-     * Determine if the builder holds a "INSERT" query.
-     *
-     * @return bool
-     */
-    public function isInsertQuery()
-    {
-        return $this->isQueryOfType(self::QUERY_TYPE_INSERT);
-    }
-
-    /**
-     * Determine if the builder holds a "UPDATE" query.
-     *
-     * @return bool
-     */
-    public function isUpdateQuery()
-    {
-        return $this->isQueryOfType(self::QUERY_TYPE_UPDATE);
-    }
-
-    /**
-     * Determine if the builder holds a "TRUNCATE" query.
-     *
-     * @return bool
-     */
-    public function isTruncateQuery()
-    {
-        return $this->isQueryOfType(self::QUERY_TYPE_TRUNCATE);
-    }
-
-    /**
-     * {@inheritdoc}
+     * Returns the query parameters.
      *
      * @return array
      */
@@ -301,33 +235,13 @@ class Reflector
     }
 
     /**
-     * Determine if the builder is specific to the provided table.
-     *
-     * A table is specific if we know the primary keys that it "touches".
-     *
-     * @param string $table
-     *
-     * @return bool
-     */
-    public function isSpecific($table)
-    {
-        $result = [];
-        $rows = $this->getRows();
-
-        if (isset($rows[$table])) {
-            $result = $rows[$table];
-        }
-
-        return !empty($result);
-    }
-    /**
      * Splits an SQL column identifier into table and column.
      *
      * @param string $sqlString SQL column identifier
      *
      * @return array [table|null, column]
      */
-    protected function splitTableAndColumn($sqlString)
+    private function splitTableAndColumn($sqlString)
     {
         // Most column identifiers don't contain a database or table name
         // In this case just return what we've got
@@ -353,7 +267,7 @@ class Reflector
     }
 
     /**
-     * Get the mysql laravel grammar compile function.
+     * Get the Eloquent grammar compile function.
      *
      * @return string
      */

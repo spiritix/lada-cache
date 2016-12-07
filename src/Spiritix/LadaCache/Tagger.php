@@ -25,11 +25,6 @@ class Tagger
     const PREFIX_DATABASE = 'tags:database:';
 
     /**
-     * Table tag prefix.
-     */
-    const PREFIX_TABLE = ':table:';
-
-    /**
      * Table specific tag prefix.
      */
     const PREFIX_TABLE_SPECIFIC = ':table_specific:';
@@ -61,12 +56,11 @@ class Tagger
     /**
      * Initialize tagger.
      *
-     * @param Reflector $reflector      Reflector instance
+     * @param Reflector $reflector Reflector instance
      */
     public function __construct(Reflector $reflector)
     {
         $this->reflector = $reflector;
-
         $this->considerRows = (bool) config('lada-cache.consider-rows');
     }
 
@@ -82,45 +76,67 @@ class Tagger
         // Get affected database and tables, add prefixes
         $database = $this->prefix($this->reflector->getDatabase(), self::PREFIX_DATABASE);
 
-        // If no rows are available or rows should not be considered
-        // Let's just return the database and table tags
-        $rows = $this->reflector->getRows();
+        // Get affected tables, don't add prefixes yes
         $tables = $this->reflector->getTables();
 
-        // Generating table tags
-        $prefixedTables = [];
-
-        foreach ($tables as $table) {
-            $isSpecific = $this->reflector->isSpecific($table);
-
-            if ($this->reflector->isSelectQuery() && $isSpecific) {
-                $prefixedTables[] = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
-            }
-            else if (
-                $this->reflector->isTruncateQuery() ||
-                (!$this->reflector->isSelectQuery() && !$this->reflector->isInsertQuery() && !$isSpecific)
-            ) {
-                $prefixedTables[] = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
-                $prefixedTables[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
-            }
-            else {
-                $prefixedTables[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
-            }
-        }
-
+        // If rows should not be considered, we don't have to differ between specific and unspecific queries
+        // We can simply prefix all tables with the database and return them
         if ($this->considerRows === false) {
             return $this->prefix($tables, $database);
         }
 
-        // Else loop trough tables and create a tag for each row
+        // Get affected rows as multidimensional array per table
+        $rows = $this->reflector->getRows();
+
+        // Create the table tags with corresponding prefix
+        // Depending on whether the queries are specific or not
+        $tags[] = $this->getTableTags($tables, $rows);
+
+        // Then we loop trough all these tags and add a tag for each row
+        // Consisting of the prefixed table and the row with prefix
         foreach ($tables as $table) {
-            $prefixedTable = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
-            $tags = array_merge($tags, $this->prefix($rows[$table] ?? [], $this->prefix(self::PREFIX_ROW, $prefixedTable)));
+            $tags = array_merge($tags, $this->prefix($rows[$table], $this->prefix(self::PREFIX_ROW, $table)));
         }
 
-        $tags = array_merge($prefixedTables, $tags);
-
         return $this->prefix($tags, $database);
+    }
+
+    /**
+     * Returns the prefixed table tags for a set of tables and rows.
+     *
+     * @param array $tables The tables to be tagged
+     * @param array $rows   A multidimensional array containing the rows per table
+     *
+     * @return array
+     */
+    private function getTableTags($tables, $rows)
+    {
+        $tags = [];
+        $type = $this->reflector->getType();
+
+        foreach ($tables as $table) {
+            $isSpecific = (isset($rows[$table]) && !empty($rows[$table]));
+
+            // These types of queries require a specific tag
+            if (($type === Reflector::QUERY_TYPE_SELECT && $isSpecific) ||
+                ($type === Reflector::QUERY_TYPE_UPDATE && !$isSpecific) ||
+                ($type === Reflector::QUERY_TYPE_DELETE && !$isSpecific) ||
+                ($type === Reflector::QUERY_TYPE_TRUNCATE)) {
+
+                $tags[] = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
+            }
+
+            // While these ones require an unspecific one
+            if (($type === Reflector::QUERY_TYPE_SELECT && !$isSpecific) ||
+                ($type === Reflector::QUERY_TYPE_UPDATE) ||
+                ($type === Reflector::QUERY_TYPE_DELETE) ||
+                ($type === Reflector::QUERY_TYPE_INSERT)) {
+
+                $tags[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
+            }
+        }
+
+        return $tags;
     }
 
     /**

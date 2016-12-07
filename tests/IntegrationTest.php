@@ -114,9 +114,7 @@ class IntegrationTest extends TestCase
     private function hasQuery(QueryBuilder $builder)
     {
         /* @var Reflector $reflector */
-        $reflector = app()->make(Reflector::class, [$builder])
-            ->setSqlOperation('select')
-            ->setValues([]);
+        $reflector = app()->make(Reflector::class, [$builder]);
 
         /* @var Hasher $hasher */
         $hasher = app()->make(Hasher::class, [$reflector]);
