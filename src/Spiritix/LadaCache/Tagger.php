@@ -71,8 +71,6 @@ class Tagger
      */
     public function getTags()
     {
-        $tags = [];
-
         // Get affected database and tables, add prefixes
         $database = $this->prefix($this->reflector->getDatabase(), self::PREFIX_DATABASE);
 
@@ -90,12 +88,20 @@ class Tagger
 
         // Create the table tags with corresponding prefix
         // Depending on whether the queries are specific or not
-        $tags[] = $this->getTableTags($tables, $rows);
+        $tags = $this->getTableTags($tables, $rows);
 
         // Then we loop trough all these tags and add a tag for each row
         // Consisting of the prefixed table and the row with prefix
         foreach ($tables as $table) {
-            $tags = array_merge($tags, $this->prefix($rows[$table], $this->prefix(self::PREFIX_ROW, $table)));
+
+            if (!isset($rows[$table])) {
+                continue;
+            }
+
+            $tablePrefix = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
+            $rowPrefix = $this->prefix(self::PREFIX_ROW, $tablePrefix);
+
+            $tags = array_merge($tags, $this->prefix($rows[$table], $rowPrefix));
         }
 
         return $this->prefix($tags, $database);

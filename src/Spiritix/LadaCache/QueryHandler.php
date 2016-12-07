@@ -115,7 +115,9 @@ class QueryHandler
 
         // If not, execute the query closure and cache the result
         if ($result === null) {
-            $this->cache->set($key, $tagger->getTags(), $queryClosure());
+            $result = $queryClosure();
+
+            $this->cache->set($key, $tagger->getTags(), $result);
         }
 
         $action = ($result === null) ? 'Miss' : 'Hit';

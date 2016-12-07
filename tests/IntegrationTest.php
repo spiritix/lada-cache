@@ -59,7 +59,7 @@ class IntegrationTest extends TestCase
         $this->assertTrue($this->hasQuery($rowBuilder1->getQuery()));
         $this->assertTrue($this->hasQuery($rowBuilder2->getQuery()));
 
-        $car = Car::find(1);
+        $car = Car::findOrFail(1);
         $car->name = 'New';
         $car->save();
 
