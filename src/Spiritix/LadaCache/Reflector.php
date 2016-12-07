@@ -145,7 +145,9 @@ class Reflector
 
             list($table, $column) = $this->splitTableAndColumn($where['column']);
 
-            $rows[$table] = $rows[$table] ?? [];
+            if (!isset($rows[$table])) {
+                $rows[$table] = [];
+            }
 
             // Make sure that the where clause applies for the primary key column
             if ($column !== self::PRIMARY_KEY_COLUMN) {
@@ -205,7 +207,7 @@ class Reflector
      *
      * @return $this
      */
-    public function setSqlOperation(string $sqlOperation)
+    public function setSqlOperation($sqlOperation)
     {
         $this->sqlOperation = $sqlOperation;
 
@@ -219,7 +221,7 @@ class Reflector
      *
      * @return bool
      */
-    public function isQueryOfType(string $queryType): bool
+    public function isQueryOfType($queryType)
     {
         $allowedQueryTypes = [
             self::QUERY_TYPE_SELECT,
@@ -253,7 +255,7 @@ class Reflector
      *
      * @return bool
      */
-    public function isSelectQuery(): bool
+    public function isSelectQuery()
     {
         return $this->isQueryOfType(self::QUERY_TYPE_SELECT);
     }
@@ -263,7 +265,7 @@ class Reflector
      *
      * @return bool
      */
-    public function isInsertQuery(): bool
+    public function isInsertQuery()
     {
         return $this->isQueryOfType(self::QUERY_TYPE_INSERT);
     }
@@ -273,7 +275,7 @@ class Reflector
      *
      * @return bool
      */
-    public function isUpdateQuery(): bool
+    public function isUpdateQuery()
     {
         return $this->isQueryOfType(self::QUERY_TYPE_UPDATE);
     }
@@ -283,7 +285,7 @@ class Reflector
      *
      * @return bool
      */
-    public function isTruncateQuery(): bool
+    public function isTruncateQuery()
     {
         return $this->isQueryOfType(self::QUERY_TYPE_TRUNCATE);
     }
@@ -307,11 +309,16 @@ class Reflector
      *
      * @return bool
      */
-    public function isSpecific(string $table): bool
+    public function isSpecific($table)
     {
+        $result = [];
         $rows = $this->getRows();
 
-        return !empty($rows[$table] ?? []);
+        if (isset($rows[$table])) {
+            $result = $rows[$table];
+        }
+
+        return !empty($result);
     }
     /**
      * Splits an SQL column identifier into table and column.
@@ -350,7 +357,7 @@ class Reflector
      *
      * @return string
      */
-    private function getCompileFunction(): string
+    private function getCompileFunction()
     {
         switch (strtolower($this->sqlOperation)) {
             case self::QUERY_TYPE_INSERT:
