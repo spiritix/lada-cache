@@ -127,7 +127,9 @@ class QueryHandler
         $this->constructCollector();
 
         /* @var Reflector $reflector */
-        $reflector = app()->make(Reflector::class, [$this->builder]);
+        $reflector = app()->make(Reflector::class, [$this->builder])
+            ->setSqlOperation($this->sqlOperation)
+            ->setValues($this->values);
 
         /* @var Manager $manager */
         $manager = app()->make(Manager::class, [$reflector]);
@@ -141,7 +143,7 @@ class QueryHandler
         $hasher = app()->make(Hasher::class, [$reflector]);
 
         /* @var Tagger $tagger */
-        $tagger = app()->make(Tagger::class, [$reflector, false]);
+        $tagger = app()->make(Tagger::class, [$reflector]);
 
         $result = null;
         $key = $hasher->getHash();
@@ -157,7 +159,9 @@ class QueryHandler
         if ($result === null) {
             $result = $queryClosure();
 
-            $this->cache->set($key, $tagger->getTags(), $result);
+            $tags = array_flatten($tagger->getTags());
+
+            $this->cache->set($key, $tags, $result);
         }
 
         $this->destructCollector($reflector, $tagger, $key, $action);
@@ -183,7 +187,7 @@ class QueryHandler
             ->setValues($this->getValues());
 
         /* @var Tagger $tagger */
-        $tagger = app()->make(Tagger::class, [$reflector, true]);
+        $tagger = app()->make(Tagger::class, [$reflector]);
 
         $hashes = $this->invalidator->invalidate($tagger->getTags());
 
