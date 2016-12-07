@@ -30,6 +30,16 @@ class Tagger
     const PREFIX_TABLE = ':table:';
 
     /**
+     * Table specific tag prefix.
+     */
+    const PREFIX_TABLE_SPECIFIC = ':table_specific:';
+
+    /**
+     * Table unspecific tag prefix.
+     */
+    const PREFIX_TABLE_UNSPECIFIC = ':table_unspecific:';
+
+    /**
      * Row tag prefix.
      */
     const PREFIX_ROW = ':row:';
@@ -42,13 +52,6 @@ class Tagger
     private $reflector;
 
     /**
-     * Defines if tables should be considered as tags.
-     *
-     * @var bool
-     */
-    private $considerTables = true;
-
-    /**
      * Defines if rows should be considered as tags.
      *
      * @var bool
@@ -59,12 +62,10 @@ class Tagger
      * Initialize tagger.
      *
      * @param Reflector $reflector      Reflector instance
-     * @param bool      $considerTables If tables should be considered as tags
      */
-    public function __construct(Reflector $reflector, $considerTables = true)
+    public function __construct(Reflector $reflector)
     {
         $this->reflector = $reflector;
-        $this->considerTables = $considerTables;
 
         $this->considerRows = (bool) config('lada-cache.consider-rows');
     }
@@ -79,26 +80,45 @@ class Tagger
         $tags = [];
 
         // Get affected database and tables, add prefixes
-        $tables = $this->prefix($this->reflector->getTables(), self::PREFIX_TABLE);
         $database = $this->prefix($this->reflector->getDatabase(), self::PREFIX_DATABASE);
 
         // If no rows are available or rows should not be considered
         // Let's just return the database and table tags
         $rows = $this->reflector->getRows();
-        if (empty($rows) || $this->considerRows === false) {
+        $tables = $this->reflector->getTables();
 
+        // Generating table tags
+        $prefixedTables = [];
+
+        foreach ($tables as $table) {
+            $isSpecific = $this->reflector->isSpecific($table);
+
+            if ($this->reflector->isSelectQuery() && $isSpecific) {
+                $prefixedTables[] = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
+            }
+            else if (
+                $this->reflector->isTruncateQuery() ||
+                (!$this->reflector->isSelectQuery() && !$this->reflector->isInsertQuery() && !$isSpecific)
+            ) {
+                $prefixedTables[] = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
+                $prefixedTables[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
+            }
+            else {
+                $prefixedTables[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
+            }
+        }
+
+        if ($this->considerRows === false) {
             return $this->prefix($tables, $database);
         }
 
         // Else loop trough tables and create a tag for each row
         foreach ($tables as $table) {
-            $tags = array_merge($tags, $this->prefix($rows, $this->prefix(self::PREFIX_ROW, $table)));
+            $prefixedTable = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
+            $tags = array_merge($tags, $this->prefix($rows[$table] ?? [], $this->prefix(self::PREFIX_ROW, $prefixedTable)));
         }
 
-        // Add tables to tags if requested
-        if ($this->considerTables) {
-            $tags = array_merge($tables, $tags);
-        }
+        $tags = array_merge($prefixedTables, $tags);
 
         return $this->prefix($tags, $database);
     }
@@ -114,7 +134,7 @@ class Tagger
     protected function prefix($value, $prefix)
     {
         if (is_array($value)) {
-            return array_map(function($item) use($prefix) {
+            return array_map(function ($item) use ($prefix) {
                 return $this->prefix($item, $prefix);
             }, $value);
         }

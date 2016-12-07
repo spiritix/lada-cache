@@ -11,6 +11,7 @@
 
 namespace Spiritix\LadaCache;
 
+use RuntimeException;
 use Spiritix\LadaCache\Database\QueryBuilder;
 
 /**
@@ -21,6 +22,30 @@ use Spiritix\LadaCache\Database\QueryBuilder;
  */
 class Reflector
 {
+    /**
+     * Query of type "SELECT".
+     */
+    const QUERY_TYPE_SELECT = 'select';
+
+    /**
+     * Query of type "INSERT".
+     */
+    const QUERY_TYPE_INSERT = 'insert';
+
+    /**
+     * Query of type "UPDATE".
+     */
+    const QUERY_TYPE_UPDATE = 'update';
+
+    /**
+     * Query of type "DELETE".
+     */
+    const QUERY_TYPE_DELETE = 'delete';
+
+    /**
+     * Query of type "TRUNCATE".
+     */
+    const QUERY_TYPE_TRUNCATE = 'truncate';
     /**
      * Since the query builder doesn't know about the related model, we have no way to figure out the name of the
      * primary key column. If someone is not using this value as primary key column it won't break anything, it just
@@ -49,7 +74,7 @@ class Reflector
      *
      * @var string
      */
-    private $sqlOperation = 'select';
+    private $sqlOperation = self::QUERY_TYPE_SELECT;
 
     /**
      * Initialize reflector.
@@ -84,7 +109,7 @@ class Reflector
         $tables = [$this->queryBuilder->from];
 
         // Add possible join tables
-        $joins = $this->queryBuilder->joins ?: [];
+        $joins = $this->queryBuilder->joins ? : [];
         foreach ($joins as $join) {
 
             if (!in_array($join->table, $tables)) {
@@ -104,7 +129,8 @@ class Reflector
     {
         $rows = [];
 
-        $wheres = $this->queryBuilder->wheres ?: [];
+        $wheres = $this->queryBuilder->wheres ? : [];
+
         foreach ($wheres as $where) {
 
             // Skip unsupported clauses
@@ -112,12 +138,14 @@ class Reflector
                 continue;
             }
 
+            // If it doesn't contain the table name assume it's the "FROM" table
+            if (strpos($where['column'], '.') === false) {
+                $where['column'] = implode('.', [$this->queryBuilder->from, $where['column']]);
+            }
+
             list($table, $column) = $this->splitTableAndColumn($where['column']);
 
-            // Make sure that the where clause applies for the main table
-            if ($table !== null && $table !== $this->queryBuilder->from) {
-                continue;
-            }
+            $rows[$table] = $rows[$table] ?? [];
 
             // Make sure that the where clause applies for the primary key column
             if ($column !== self::PRIMARY_KEY_COLUMN) {
@@ -127,11 +155,11 @@ class Reflector
             if ($where['type'] === 'Basic') {
 
                 if ($where['operator'] === '=' && is_numeric($where['value'])) {
-                    $rows[] = $where['value'];
+                    $rows[$table][] = $where['value'];
                 }
             }
             elseif ($where['type'] === 'In') {
-                $rows += $where['values'];
+                $rows[$table] += $where['values'];
             }
         }
 
@@ -154,40 +182,6 @@ class Reflector
             'values'   => $this->values,
             'sequence' => '',
         ]);
-    }
-
-    /**
-     * Get the mysql grammar compile function.
-     *
-     * @return string
-     */
-    private function getCompileFunction(): string
-    {
-        switch (strtolower($this->sqlOperation)) {
-            case 'insert':
-                return 'compileInsert';
-            break;
-
-            case 'insertgetid':
-                return 'compileInsertGetId';
-            break;
-
-            case 'update':
-                return 'compileUpdate';
-            break;
-
-            case 'delete':
-                return 'compileDelete';
-            break;
-
-            case 'truncate':
-                return 'compileTruncate';
-            break;
-
-            default:
-                return 'compileSelect';
-            break;
-        }
     }
 
     /**
@@ -219,6 +213,82 @@ class Reflector
     }
 
     /**
+     * Determine the type of query in the builder.
+     *
+     * @param string $queryType One of: select, insert, update, delete, truncate
+     *
+     * @return bool
+     */
+    public function isQueryOfType(string $queryType): bool
+    {
+        $allowedQueryTypes = [
+            self::QUERY_TYPE_SELECT,
+            self::QUERY_TYPE_INSERT,
+            self::QUERY_TYPE_UPDATE,
+            self::QUERY_TYPE_DELETE,
+            self::QUERY_TYPE_TRUNCATE,
+        ];
+
+        if (!in_array(strtolower($queryType), $allowedQueryTypes)) {
+            throw new RuntimeException('Not intended to be used like this.');
+        }
+
+        $sql = $this->getSql();
+
+        /**
+         * Edge case for sqlite not supporting the truncate query, instead issues 2 delete queries,
+         * one on the table sqlite_sequence.
+         */
+        if (is_array($sql)) {
+            $sql = implode(';', array_keys($sql));
+        }
+
+        $sqlString = strtolower(trim($sql));
+
+        return starts_with($sqlString, $queryType);
+    }
+
+    /**
+     * Determine if the builder holds a "SELECT" query.
+     *
+     * @return bool
+     */
+    public function isSelectQuery(): bool
+    {
+        return $this->isQueryOfType(self::QUERY_TYPE_SELECT);
+    }
+
+    /**
+     * Determine if the builder holds a "INSERT" query.
+     *
+     * @return bool
+     */
+    public function isInsertQuery(): bool
+    {
+        return $this->isQueryOfType(self::QUERY_TYPE_INSERT);
+    }
+
+    /**
+     * Determine if the builder holds a "UPDATE" query.
+     *
+     * @return bool
+     */
+    public function isUpdateQuery(): bool
+    {
+        return $this->isQueryOfType(self::QUERY_TYPE_UPDATE);
+    }
+
+    /**
+     * Determine if the builder holds a "TRUNCATE" query.
+     *
+     * @return bool
+     */
+    public function isTruncateQuery(): bool
+    {
+        return $this->isQueryOfType(self::QUERY_TYPE_TRUNCATE);
+    }
+
+    /**
      * {@inheritdoc}
      *
      * @return array
@@ -228,6 +298,21 @@ class Reflector
         return $this->queryBuilder->getBindings();
     }
 
+    /**
+     * Determine if the builder is specific to the provided table.
+     *
+     * A table is specific if we know the primary keys that it "touches".
+     *
+     * @param string $table
+     *
+     * @return bool
+     */
+    public function isSpecific(string $table): bool
+    {
+        $rows = $this->getRows();
+
+        return !empty($rows[$table] ?? []);
+    }
     /**
      * Splits an SQL column identifier into table and column.
      *
@@ -258,5 +343,39 @@ class Reflector
         $column = end($parts);
 
         return [$table, $column];
+    }
+
+    /**
+     * Get the mysql laravel grammar compile function.
+     *
+     * @return string
+     */
+    private function getCompileFunction(): string
+    {
+        switch (strtolower($this->sqlOperation)) {
+            case self::QUERY_TYPE_INSERT:
+                return 'compileInsert';
+                break;
+
+            case 'insertgetid':
+                return 'compileInsertGetId';
+                break;
+
+            case self::QUERY_TYPE_UPDATE:
+                return 'compileUpdate';
+                break;
+
+            case self::QUERY_TYPE_DELETE:
+                return 'compileDelete';
+                break;
+
+            case self::QUERY_TYPE_TRUNCATE:
+                return 'compileTruncate';
+                break;
+
+            default:
+                return 'compileSelect';
+                break;
+        }
     }
 }

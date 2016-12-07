@@ -5,6 +5,7 @@ namespace Spiritix\LadaCache\Tests;
 use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Hasher;
 use Spiritix\LadaCache\Reflector;
+use Spiritix\LadaCache\Tagger;
 use Spiritix\LadaCache\Tests\Database\Models\Car;
 use Spiritix\LadaCache\Tests\Database\Models\Engine;
 
@@ -17,6 +18,7 @@ class IntegrationTest extends TestCase
         parent::setUp();
 
         $this->cache = app()->make('lada.cache');
+        $this->cache->flush();
     }
 
     public function testInsert()
@@ -143,9 +145,13 @@ class IntegrationTest extends TestCase
         $this->assertFalse($this->hasQuery($rowBuilder->getQuery()));
     }
 
-    private function hasQuery(QueryBuilder $builder)
+    private function hasQuery(QueryBuilder $builder, string $sqlOperation = 'select', array $values = [])
     {
-        $reflector = app()->make(Reflector::class, [$builder]);
+
+        /* @var Reflector $reflector */
+        $reflector = app()->make(Reflector::class, [$builder])
+            ->setSqlOperation($sqlOperation)
+            ->setValues($values);
         $hasher = app()->make(Hasher::class, [$reflector]);
 
         return $this->cache->has($hasher->getHash());
