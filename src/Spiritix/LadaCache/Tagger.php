@@ -52,13 +52,6 @@ class Tagger
     private $reflector;
 
     /**
-     * Defines if tables should be considered as tags.
-     *
-     * @var bool
-     */
-    private $considerTables = true;
-
-    /**
      * Defines if rows should be considered as tags.
      *
      * @var bool
@@ -69,12 +62,10 @@ class Tagger
      * Initialize tagger.
      *
      * @param Reflector $reflector      Reflector instance
-     * @param bool      $considerTables If tables should be considered as tags
      */
-    public function __construct(Reflector $reflector, $considerTables = true)
+    public function __construct(Reflector $reflector)
     {
         $this->reflector = $reflector;
-        $this->considerTables = $considerTables;
 
         $this->considerRows = (bool) config('lada-cache.consider-rows');
     }
@@ -98,18 +89,21 @@ class Tagger
 
         // Generating table tags
         $prefixedTables = [];
+
         foreach ($tables as $table) {
             $isSpecific = $this->reflector->isSpecific($table);
 
             if ($this->reflector->isSelectQuery() && $isSpecific) {
                 $prefixedTables[] = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
-            } else if (
+            }
+            else if (
                 $this->reflector->isTruncateQuery() ||
                 (!$this->reflector->isSelectQuery() && !$this->reflector->isInsertQuery() && !$isSpecific)
             ) {
                 $prefixedTables[] = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
                 $prefixedTables[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
-            } else {
+            }
+            else {
                 $prefixedTables[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
             }
         }
@@ -121,14 +115,10 @@ class Tagger
         // Else loop trough tables and create a tag for each row
         foreach ($tables as $table) {
             $prefixedTable = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
-
             $tags = array_merge($tags, $this->prefix($rows[$table] ?? [], $this->prefix(self::PREFIX_ROW, $prefixedTable)));
         }
 
-        // Add tables to tags if requested
-        if ($this->considerTables) {
-            $tags = array_merge($prefixedTables, $tags);
-        }
+        $tags = array_merge($prefixedTables, $tags);
 
         return $this->prefix($tags, $database);
     }

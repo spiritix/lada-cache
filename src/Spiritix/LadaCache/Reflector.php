@@ -11,6 +11,7 @@
 
 namespace Spiritix\LadaCache;
 
+use RuntimeException;
 use Spiritix\LadaCache\Database\QueryBuilder;
 
 /**
@@ -21,6 +22,30 @@ use Spiritix\LadaCache\Database\QueryBuilder;
  */
 class Reflector
 {
+    /**
+     * Query of type "SELECT".
+     */
+    const QUERY_TYPE_SELECT = 'select';
+
+    /**
+     * Query of type "INSERT".
+     */
+    const QUERY_TYPE_INSERT = 'insert';
+
+    /**
+     * Query of type "UPDATE".
+     */
+    const QUERY_TYPE_UPDATE = 'update';
+
+    /**
+     * Query of type "DELETE".
+     */
+    const QUERY_TYPE_DELETE = 'delete';
+
+    /**
+     * Query of type "TRUNCATE".
+     */
+    const QUERY_TYPE_TRUNCATE = 'truncate';
     /**
      * Since the query builder doesn't know about the related model, we have no way to figure out the name of the
      * primary key column. If someone is not using this value as primary key column it won't break anything, it just
@@ -49,7 +74,7 @@ class Reflector
      *
      * @var string
      */
-    private $sqlOperation = 'select';
+    private $sqlOperation = self::QUERY_TYPE_SELECT;
 
     /**
      * Initialize reflector.
@@ -190,29 +215,30 @@ class Reflector
     /**
      * Determine the type of query in the builder.
      *
-     * @param string $queryType One of: select, update
+     * @param string $queryType One of: select, insert, update, delete, truncate
      *
      * @return bool
      */
     public function isQueryOfType(string $queryType): bool
     {
         $allowedQueryTypes = [
-            'select',
-            'insert',
-            'update',
-            'delete',
-            'truncate',
+            self::QUERY_TYPE_SELECT,
+            self::QUERY_TYPE_INSERT,
+            self::QUERY_TYPE_UPDATE,
+            self::QUERY_TYPE_DELETE,
+            self::QUERY_TYPE_TRUNCATE,
         ];
 
-        $queryType = strtolower($queryType);
-
-        if (!in_array($queryType, $allowedQueryTypes)) {
-            throw new \RuntimeException('Not intended to be used like this.');
+        if (!in_array(strtolower($queryType), $allowedQueryTypes)) {
+            throw new RuntimeException('Not intended to be used like this.');
         }
 
         $sql = $this->getSql();
 
-        // Edge case for sqlite not supporting the truncate query, instead issues 2 delete queries, one on the table sqlite_sequence
+        /**
+         * Edge case for sqlite not supporting the truncate query, instead issues 2 delete queries,
+         * one on the table sqlite_sequence.
+         */
         if (is_array($sql)) {
             $sql = implode(';', array_keys($sql));
         }
@@ -229,7 +255,7 @@ class Reflector
      */
     public function isSelectQuery(): bool
     {
-        return $this->isQueryOfType('select');
+        return $this->isQueryOfType(self::QUERY_TYPE_SELECT);
     }
 
     /**
@@ -239,7 +265,7 @@ class Reflector
      */
     public function isInsertQuery(): bool
     {
-        return $this->isQueryOfType('insert');
+        return $this->isQueryOfType(self::QUERY_TYPE_INSERT);
     }
 
     /**
@@ -249,7 +275,7 @@ class Reflector
      */
     public function isUpdateQuery(): bool
     {
-        return $this->isQueryOfType('update');
+        return $this->isQueryOfType(self::QUERY_TYPE_UPDATE);
     }
 
     /**
@@ -259,7 +285,7 @@ class Reflector
      */
     public function isTruncateQuery(): bool
     {
-        return $this->isQueryOfType('truncate');
+        return $this->isQueryOfType(self::QUERY_TYPE_TRUNCATE);
     }
 
     /**
@@ -320,14 +346,14 @@ class Reflector
     }
 
     /**
-     * Get the mysql grammar compile function.
+     * Get the mysql laravel grammar compile function.
      *
      * @return string
      */
     private function getCompileFunction(): string
     {
         switch (strtolower($this->sqlOperation)) {
-            case 'insert':
+            case self::QUERY_TYPE_INSERT:
                 return 'compileInsert';
                 break;
 
@@ -335,15 +361,15 @@ class Reflector
                 return 'compileInsertGetId';
                 break;
 
-            case 'update':
+            case self::QUERY_TYPE_UPDATE:
                 return 'compileUpdate';
                 break;
 
-            case 'delete':
+            case self::QUERY_TYPE_DELETE:
                 return 'compileDelete';
                 break;
 
-            case 'truncate':
+            case self::QUERY_TYPE_TRUNCATE:
                 return 'compileTruncate';
                 break;
 

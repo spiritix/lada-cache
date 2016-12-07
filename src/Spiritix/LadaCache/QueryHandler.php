@@ -160,7 +160,6 @@ class QueryHandler
             $result = $queryClosure();
 
             $tags = array_flatten($tagger->getTags());
-
             $this->cache->set($key, $tags, $result);
         }
 

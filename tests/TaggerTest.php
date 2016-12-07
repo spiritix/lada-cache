@@ -38,7 +38,7 @@ class TaggerTest extends TestCase
      * SELECT * FROM cars
      * Generates tags like: table_unspecific_cars
      */
-    public function testSql1()
+    public function testSelectWithoutCondition()
     {
         $this->factory->times(5)->create(Car::class);
 
@@ -68,7 +68,7 @@ class TaggerTest extends TestCase
      * SELECT * FROM cars WHERE name LIKE ‘%XX%’
      * Generates tags like: table_unspecific_cars
      */
-    public function testSql2()
+    public function testSelectWithUnspeficicWhere()
     {
         $this->factory->times(5)->create(Car::class);
 
@@ -80,8 +80,9 @@ class TaggerTest extends TestCase
 
         $generatedTags = $this->getGeneratedTags($sqlBuilder, 'select');
 
-        $tagsExpectedToBeFound = [];
-        $tagsExpectedToBeFound[] = $this->getUnspecificTableTag($car->getTable());
+        $tagsExpectedToBeFound = [
+            $this->getUnspecificTableTag($car->getTable()),
+        ];
 
         $this->assertCacheHasTags($tagsExpectedToBeFound);
 
@@ -98,7 +99,7 @@ class TaggerTest extends TestCase
      * SELECT * FROM cars WHERE name IN(1,4,5)
      * Generates tags like: table_specific_cars, cars_row_1, cars_row_4, cars_row_5
      */
-    public function testSql3()
+    public function testSelectWithInCondition()
     {
         $this->factory->times(5)->create(Car::class);
 
@@ -111,8 +112,10 @@ class TaggerTest extends TestCase
 
         $generatedTags = $this->getGeneratedTags($sqlBuilder, 'select');
 
-        $tagsExpectedToBeFound = [];
-        $tagsExpectedToBeFound[] = $this->getSpecificTableTag($car->getTable());
+        $tagsExpectedToBeFound = [
+            $this->getSpecificTableTag($car->getTable()),
+        ];
+
         foreach ($rowsSelected as $rowId) {
             $tagsExpectedToBeFound[] = $this->getRowTag($car->getTable(), $rowId);
         }
@@ -132,7 +135,7 @@ class TaggerTest extends TestCase
      * SELECT * FROM cars JOIN engines ON e.id = c.engine_id WHERE e.name LIKE ‘%XX%’
      * Generates tags like: table_unspecific_cars, table_unspecific_engines
      */
-    public function testSql4()
+    public function testSelectWithInConditionAndSpecificIdContidionVariant1()
     {
         $this->factory->times(5)->create(Car::class)
             ->each(function ($car) {
@@ -159,9 +162,10 @@ class TaggerTest extends TestCase
 
         $generatedTags = $this->getGeneratedTags($sqlBuilder, 'select');
 
-        $tagsExpectedToBeFound = [];
-        $tagsExpectedToBeFound[] = $this->getUnspecificTableTag($car->getTable());
-        $tagsExpectedToBeFound[] = $this->getUnspecificTableTag($engine->getTable());
+        $tagsExpectedToBeFound = [
+            $this->getUnspecificTableTag($car->getTable()),
+            $this->getUnspecificTableTag($engine->getTable()),
+        ];
 
         $this->assertCacheHasTags($tagsExpectedToBeFound);
 
@@ -178,7 +182,7 @@ class TaggerTest extends TestCase
      * SELECT * FROM cars JOIN engines ON e.id = c.engine_id WHERE e.id IN(2,4)
      * Generates tags like: table_unspecific_cars, table_specific_engines, engines_row_2, engines_row_4
      */
-    public function testSql5()
+    public function testSelectWithInConditionAndSpecificIdContidionVariant2()
     {
         $this->factory->times(5)->create(Car::class)
             ->each(function ($car) {
@@ -207,9 +211,11 @@ class TaggerTest extends TestCase
 
         $generatedTags = $this->getGeneratedTags($sqlBuilder, 'select');
 
-        $tagsExpectedToBeFound = [];
-        $tagsExpectedToBeFound[] = $this->getUnspecificTableTag($car->getTable());
-        $tagsExpectedToBeFound[] = $this->getSpecificTableTag($engine->getTable());
+        $tagsExpectedToBeFound = [
+            $this->getUnspecificTableTag($car->getTable()),
+            $this->getSpecificTableTag($engine->getTable()),
+        ];
+
         foreach ($rowsSelected as $rowId) {
             $tagsExpectedToBeFound[] = $this->getRowTag($engine->getTable(), $rowId);
         }
@@ -229,7 +235,7 @@ class TaggerTest extends TestCase
      * SELECT * FROM cars JOIN engines ON e.id = c.engine_id WHERE c.id = 1 OR e.id IN(2,4)
      * Generates tags like:  table_specific_cars, table_specific_engines, cars_row_1,  engines_row_2, engines_row_4
      */
-    public function testSql6()
+    public function testSelectWithJoinAndInConditionAndSpecificIdContidion()
     {
         $this->factory->times(5)->create(Car::class)
             ->each(function ($car) {
@@ -260,10 +266,12 @@ class TaggerTest extends TestCase
 
         $generatedTags = $this->getGeneratedTags($sqlBuilder, 'select');
 
-        $tagsExpectedToBeFound = [];
-        $tagsExpectedToBeFound[] = $this->getSpecificTableTag($car->getTable());
-        $tagsExpectedToBeFound[] = $this->getRowTag($car->getTable(), $carId);
-        $tagsExpectedToBeFound[] = $this->getSpecificTableTag($engine->getTable());
+        $tagsExpectedToBeFound = [
+            $this->getSpecificTableTag($car->getTable()),
+            $this->getRowTag($car->getTable(), $carId),
+            $this->getSpecificTableTag($engine->getTable()),
+        ];
+
         foreach ($enginesSelected as $rowId) {
             $tagsExpectedToBeFound[] = $this->getRowTag($engine->getTable(), $rowId);
         }
@@ -283,7 +291,7 @@ class TaggerTest extends TestCase
      * INSERT INTO cars …….
      * Invalidates tags like:  table_unspecific_cars
      */
-    public function testSql7()
+    public function testInsertWithoutCondition()
     {
         $this->factory->times(5)->create(Car::class)
             ->each(function ($car) {
@@ -299,8 +307,9 @@ class TaggerTest extends TestCase
         $sqlBuilder = $car->where(1, '=', 1);
         $sqlBuilder->get();
 
-        $tagsExpectedToBeFound = [];
-        $tagsExpectedToBeFound[] = $this->getUnspecificTableTag($car->getTable());
+        $tagsExpectedToBeFound = [
+            $this->getUnspecificTableTag($car->getTable()),
+        ];
 
         $this->assertCacheHasTags($tagsExpectedToBeFound);
 
@@ -333,7 +342,7 @@ class TaggerTest extends TestCase
      * UPDATE cars SET name = ‘XX’
      * Invalidates tags like:  table_unspecific_cars, table_specific_cars
      */
-    public function testSql8()
+    public function testUpdateWithUnspecificCondition()
     {
         $this->factory->times(5)->create(Car::class);
 
@@ -348,9 +357,10 @@ class TaggerTest extends TestCase
         $sqlBuilder = $car->where('id', '=', 1);
         $sqlBuilder->get();
 
-        $tagsExpectedToBeFound = [];
-        $tagsExpectedToBeFound[] = $this->getUnspecificTableTag($car->getTable());
-        $tagsExpectedToBeFound[] = $this->getSpecificTableTag($car->getTable());
+        $tagsExpectedToBeFound = [
+            $this->getUnspecificTableTag($car->getTable()),
+            $this->getSpecificTableTag($car->getTable()),
+        ];
 
         $this->assertCacheHasTags($tagsExpectedToBeFound);
 
@@ -378,7 +388,7 @@ class TaggerTest extends TestCase
      * UPDATE cars SET name = ‘XX’ WHERE id = 1
      * Invalidates tags like:  table_unspecific_cars, cars_row_1
      */
-    public function testSql9()
+    public function testUpdateWithSpecificIdCondition()
     {
         $this->factory->times(5)->create(Car::class);
 
@@ -394,9 +404,10 @@ class TaggerTest extends TestCase
         $sqlBuilder = $car->where('id', '=', $rowId);
         $sqlBuilder->get();
 
-        $tagsExpectedToBeFound = [];
-        $tagsExpectedToBeFound[] = $this->getUnspecificTableTag($car->getTable());
-        $tagsExpectedToBeFound[] = $this->getRowTag($car->getTable(), $rowId);
+        $tagsExpectedToBeFound = [
+            $this->getUnspecificTableTag($car->getTable()),
+            $this->getRowTag($car->getTable(), $rowId),
+        ];
 
         $this->assertCacheHasTags($tagsExpectedToBeFound);
 
@@ -424,7 +435,7 @@ class TaggerTest extends TestCase
      * UPDATE cars SET name = ‘XX’ WHERE id IN(1,4)
      * Invalidates tags like: table_unspecific_cars, cars_row_1, cars_row_4
      */
-    public function testSql10()
+    public function testUpdateWithSpecificInCondition()
     {
         $this->factory->times(5)->create(Car::class);
 
@@ -445,10 +456,11 @@ class TaggerTest extends TestCase
         $sqlBuilder = $car->where('id', '=', $secondRow);
         $sqlBuilder->get();
 
-        $tagsExpectedToBeFound = [];
-        $tagsExpectedToBeFound[] = $this->getUnspecificTableTag($car->getTable());
-        $tagsExpectedToBeFound[] = $this->getRowTag($car->getTable(), $firstRow);
-        $tagsExpectedToBeFound[] = $this->getRowTag($car->getTable(), $secondRow);
+        $tagsExpectedToBeFound = [
+            $this->getUnspecificTableTag($car->getTable()),
+            $this->getRowTag($car->getTable(), $firstRow),
+            $this->getRowTag($car->getTable(), $secondRow),
+        ];
 
         $this->assertCacheHasTags($tagsExpectedToBeFound);
 
@@ -476,7 +488,7 @@ class TaggerTest extends TestCase
      * DELETE FROM cars WHERE name LIKE ‘XX’
      * Invalidates tags like: table_unspecific_cars, table_specific_cars
      */
-    public function testSql11()
+    public function testDeleteWithUnspecificCondition()
     {
         $this->factory->times(5)->create(Car::class);
 
@@ -492,9 +504,10 @@ class TaggerTest extends TestCase
         $sqlBuilder = $car->where('id', '=', $rowId);
         $sqlBuilder->get();
 
-        $tagsExpectedToBeFound = [];
-        $tagsExpectedToBeFound[] = $this->getUnspecificTableTag($car->getTable());
-        $tagsExpectedToBeFound[] = $this->getSpecificTableTag($car->getTable());
+        $tagsExpectedToBeFound = [
+            $this->getUnspecificTableTag($car->getTable()),
+            $this->getSpecificTableTag($car->getTable()),
+        ];
 
         $this->assertCacheHasTags($tagsExpectedToBeFound);
 
@@ -519,7 +532,7 @@ class TaggerTest extends TestCase
      * DELETE FROM cars WHERE id = 1
      * Invalidates tags like: table_unspecific_cars, cars_row_1
      */
-    public function testSql12()
+    public function testDeleteWithSpecificIdCondition()
     {
         $this->factory->times(5)->create(Car::class);
 
@@ -535,9 +548,10 @@ class TaggerTest extends TestCase
         $sqlBuilder = $car->where('id', '=', $rowId);
         $sqlBuilder->get();
 
-        $tagsExpectedToBeFound = [];
-        $tagsExpectedToBeFound[] = $this->getUnspecificTableTag($car->getTable());
-        $tagsExpectedToBeFound[] = $this->getRowTag($car->getTable(), $rowId);
+        $tagsExpectedToBeFound = [
+            $this->getUnspecificTableTag($car->getTable()),
+            $this->getRowTag($car->getTable(), $rowId),
+        ];
 
         $this->assertCacheHasTags($tagsExpectedToBeFound);
 
@@ -562,7 +576,7 @@ class TaggerTest extends TestCase
      * DELETE FROM cars WHERE id IN(1,4)
      * Invalidates tags like: table_unspecific_cars, cars_row_1, cars_row_4
      */
-    public function testSql13()
+    public function testDeleteWithSpecificInIdCondition()
     {
         $this->factory->times(5)->create(Car::class);
 
@@ -583,10 +597,11 @@ class TaggerTest extends TestCase
         $sqlBuilder = $car->where('id', '=', $secondRow);
         $sqlBuilder->get();
 
-        $tagsExpectedToBeFound = [];
-        $tagsExpectedToBeFound[] = $this->getUnspecificTableTag($car->getTable());
-        $tagsExpectedToBeFound[] = $this->getRowTag($car->getTable(), $firstRow);
-        $tagsExpectedToBeFound[] = $this->getRowTag($car->getTable(), $secondRow);
+        $tagsExpectedToBeFound = [
+            $this->getUnspecificTableTag($car->getTable()),
+            $this->getRowTag($car->getTable(), $firstRow),
+            $this->getRowTag($car->getTable(), $secondRow),
+        ];
 
         $this->assertCacheHasTags($tagsExpectedToBeFound);
 
@@ -611,7 +626,7 @@ class TaggerTest extends TestCase
      * TRUNCATE TABLE cars
      * Invalidates tags like: table_specific_cars, table_unspecific_cars
      */
-    public function testSql14()
+    public function testTruncate()
     {
         $this->factory->times(5)->create(Car::class);
 
@@ -626,9 +641,10 @@ class TaggerTest extends TestCase
         $sqlBuilder = $car->where('id', '=', 1);
         $sqlBuilder->get();
 
-        $tagsExpectedToBeFound = [];
-        $tagsExpectedToBeFound[] = $this->getUnspecificTableTag($car->getTable());
-        $tagsExpectedToBeFound[] = $this->getSpecificTableTag($car->getTable());
+        $tagsExpectedToBeFound = [
+            $this->getUnspecificTableTag($car->getTable()),
+            $this->getSpecificTableTag($car->getTable()),
+        ];
 
         $this->assertCacheHasTags($tagsExpectedToBeFound);
 
