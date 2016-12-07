@@ -682,22 +682,22 @@ class TaggerTest extends TestCase
         }
     }
 
-    private function getUnspecificTableTag(string $table): string
+    private function getUnspecificTableTag($table)
     {
         return Tagger::PREFIX_DATABASE . ':memory:' . Tagger::PREFIX_TABLE_UNSPECIFIC . $table;
     }
 
-    private function getSpecificTableTag(string $table): string
+    private function getSpecificTableTag($table)
     {
         return Tagger::PREFIX_DATABASE . ':memory:' . Tagger::PREFIX_TABLE_SPECIFIC . $table;
     }
 
-    private function getRowTag(string $table, int $rowId)
+    private function getRowTag($table, $rowId)
     {
         return Tagger::PREFIX_DATABASE . ':memory:' . Tagger::PREFIX_TABLE_SPECIFIC . $table . Tagger::PREFIX_ROW . $rowId;
     }
 
-    private function getGeneratedTags($tableBuilder, string $sqlOperation, array $values = []): array
+    private function getGeneratedTags($tableBuilder, $sqlOperation, $values = [])
     {
         /** @var Reflector $reflector */
         $reflector = app(Reflector::class, [$tableBuilder->getQuery()])

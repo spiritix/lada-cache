@@ -145,7 +145,7 @@ class IntegrationTest extends TestCase
         $this->assertFalse($this->hasQuery($rowBuilder->getQuery()));
     }
 
-    private function hasQuery(QueryBuilder $builder, string $sqlOperation = 'select', array $values = [])
+    private function hasQuery(QueryBuilder $builder, $sqlOperation = 'select', array $values = [])
     {
 
         /* @var Reflector $reflector */
