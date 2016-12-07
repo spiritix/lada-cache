@@ -46,19 +46,6 @@ Due to the fact that Redis is faster than for example MySQL, a performance gain 
 
 In a typical web application the time consumed for database interaction is usually only 5 - 20%, so expect a performance gain somewhere in this area. 
 
-## Should I use it
-
-#### No
-- The percentage of time spent for database interaction in your overall page loading time is smaller than ~10%
-- Your queries are typically of a low complexity
-- Your queries are typically returning a big amount of data
-
-#### Yes
-- More than ~10% of page loading time spent in database
-- Your queries are typically of a medium to high complexity
-- Your queries are typically returning a low to medium amount of data
-- You want to reduce the load on your database server(s)
-
 ## Requirements
 
 - PHP 5.5+
