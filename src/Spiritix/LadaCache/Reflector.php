@@ -189,6 +189,7 @@ class Reflector
         }
 
         $type = strtok(strtolower(trim($sql)), ' ');
+        $type = preg_replace ('/[^a-z]/i', '', $type);
 
         $allowedTypes = [
             self::QUERY_TYPE_SELECT,
