@@ -52,6 +52,10 @@ class CacheCollector extends TimeDataCollector
      */
     public function endMeasuring($type, $hash, $tags, $sql, $parameters)
     {
+        if (is_array($sql)) {
+            $sql = implode(';', array_keys($sql));
+        }
+        
         $name = '[' .  ucfirst($type) . '] ' . $sql;
         $endTime = microtime(true);
 
