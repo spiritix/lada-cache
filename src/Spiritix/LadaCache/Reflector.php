@@ -182,12 +182,6 @@ class Reflector
     {
         $sql = $this->getSql();
 
-        // Some DBMS like SQLite issue two delete queries instead of a truncate one
-        // This and other edge cases must be considered here
-        if (is_array($sql)) {
-            $sql = implode(';', array_keys($sql));
-        }
-
         $type = strtok(strtolower(trim($sql)), ' ');
         $type = preg_replace ('/[^a-z]/i', '', $type);
 
@@ -209,20 +203,26 @@ class Reflector
     /**
      * Returns the compiled SQL string.
      *
-     * In some edge cases, particularly SQLite, this may also be an array :(
-     *
-     * @return string|array
+     * @return string
      */
     public function getSql()
     {
         $compileFunction = $this->getCompileFunction();
         $grammar = $this->queryBuilder->getGrammar();
 
-        return call_user_func_array([$grammar, $compileFunction], [
+        $sql = call_user_func_array([$grammar, $compileFunction], [
             'builder'  => $this->queryBuilder,
             'values'   => $this->values,
             'sequence' => '',
         ]);
+
+        // For some DBMS like SQLite Laravel issues two queries as an array instead of one string
+        // This is seriously not ok, but anyway...
+        if (is_array($sql)) {
+            $sql = implode('; ', array_keys($sql));
+        }
+
+        return $sql;
     }
 
     /**
