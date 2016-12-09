@@ -2,13 +2,21 @@
 
 ## [Unreleased]
 
+## [1.4.1] - 2016-12-07
+### Fixed
+- Fixed bug regarding union select queries
+
 ## [1.4] - 2016-12-07
 ### Fixed
 - Fixed a bug in relation to the Debug Bar, write queries were not displayed properly
 - Fixed bug in invalidator (#30)
 
 ### Changed
-- Refactored and improved caching strategy
+- Improved caching strategy
+- Refactored parts of the library
+
+### Added
+- Added a lot of new tests
 
 ## [1.3.1] - 2016-09-20
 ### Added

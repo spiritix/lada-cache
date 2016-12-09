@@ -16,7 +16,7 @@ A Redis based, automated and scalable database caching layer for Laravel 5.1+
 - Works with existing code, no changes required after setup
 - Possibility to cache only specific models or exclude some models
 - Makes use of [Laravel Redis](http://laravel.com/docs/5.3/redis) (supports [clustering](https://laravel.com/docs/5.3/redis#introduction))
-- PHP7 and HHVM ready
+- Supports PHP7
 
 ## Why?
 
