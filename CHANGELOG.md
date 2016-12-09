@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.4.2] - 2016-12-09
+### Fixed
+- Fixed bug in debug bar collector
+
+### Changed
+- Optimized reflector for some edge cases
+
 ## [1.4.1] - 2016-12-07
 ### Fixed
 - Fixed bug regarding union select queries

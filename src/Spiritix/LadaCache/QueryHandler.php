@@ -113,6 +113,8 @@ class QueryHandler
             $result = $this->cache->get($key);
         }
 
+        $action = ($result === null) ? 'Miss' : 'Hit';
+
         // If not, execute the query closure and cache the result
         if ($result === null) {
             $result = $queryClosure();
@@ -120,7 +122,6 @@ class QueryHandler
             $this->cache->set($key, $tagger->getTags(), $result);
         }
 
-        $action = ($result === null) ? 'Miss' : 'Hit';
         $this->destructCollector($reflector, $tagger, $key, $action);
 
         return $result;
