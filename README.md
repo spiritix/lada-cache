@@ -20,7 +20,7 @@ A Redis based, automated and scalable database caching layer for Laravel 5.1+
 
 ## Performance
 
-Tthe performance gain achieved by using Lada Cache varies between 5% and 95%. This heavily depends on the quantity and complexity of your queries. The more queries per request your application fires and the more complex they are, the bigger the performance gain will be. Another important factor to consider is the amount of data returned by your queries, if a query returns 500MB of data, Lada Cache won't make it faster at all. Based on experience, the performance gain in a typical Laravel web application is around 10-30%.
+The performance gain achieved by using Lada Cache varies between 5% and 95%. This heavily depends on the quantity and complexity of your queries. The more queries per request your application fires and the more complex they are, the bigger the performance gain will be. Another important factor to consider is the amount of data returned by your queries, if a query returns 500MB of data, Lada Cache won't make it faster at all. Based on experience, the performance gain in a typical Laravel web application is around 10-30%.
 
 Other than the performance gain, an essential reason to use Lada Cache is the reduced load on the database servers. Depending on your infrastructure, this may result in reasonable lower cost and introduce new possibilities to scale your application.
 
