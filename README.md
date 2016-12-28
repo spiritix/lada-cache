@@ -18,6 +18,12 @@ A Redis based, automated and scalable database caching layer for Laravel 5.1+
 - Makes use of [Laravel Redis](http://laravel.com/docs/5.3/redis) (supports [clustering](https://laravel.com/docs/5.3/redis#introduction))
 - Supports PHP7
 
+## Performance
+
+Tthe performance gain achieved by using Lada Cache varies between 5% and 95%. This heavily depends on the quantity and complexity of your queries. The more queries per request your application fires and the more complex they are, the bigger the performance gain will be. Another important factor to consider is the amount of data returned by your queries, if a query returns 500MB of data, Lada Cache won't make it faster at all. Based on experience, the performance gain in a typical Laravel web application is around 10-30%.
+
+Other than the performance gain, an essential reason to use Lada Cache is the reduced load on the database servers. Depending on your infrastructure, this may result in reasonable lower cost and introduce new possibilities to scale your application.
+
 ## Why?
 
 Most RDBMS provide internal caching systems (for example Mysql Query Cache). Unfortunately, these caching systems have some very serious limitations:
@@ -32,19 +38,13 @@ This library offers a solution for all of these problems.
 ## Why only Redis?
 
 As you may have discovered while looking at the source code, this library is built directly on top of [Laravel Redis](http://laravel.com/docs/5.3/redis) and not [Laravel Cache](http://laravel.com/docs/5.3/cache) which would make more sense from a general point of view.
-However, there are several important reasons for this decision:
+However, there are several important reasons behind this decision:
 
 - Storage must be in-memory (wouldn't make much sense otherwise)
-- Storage must be easily scalable (try to implement that with for example Memcached)
-- Storage must support tags. Redis provides the set data type which allows a very easy and fast implementation. One may argue that Memcached also supports tags, but that's a widespread misapprehension. It is possible to implement tags in Memcached using [this approach](http://dev.venntro.com/2010/08/memcached-invalidation-for-sets-of-keys/), but this results in 1+[quantity of tags] requests for every read operation which is not very efficient.
+- Storage must be easily scalable (have fun with Memcached)
+- Storage must support tags (Laravel Cache does support tags, but the implementation is very bad and results in a massive overhead)
 
-If you still want to use another storage system, please feel free to contribute.
-
-## Performance
-
-Due to the fact that Redis is faster than for example MySQL, a performance gain of 30-50% is possible even for very simple and fast queries (<0.001s). However, the cache starts getting very efficient with more complex queries (> 0.01s, 90% performance gain, > 0.1s, 99% performance gain). Please note that these benchmarks have been done for queries that don't return much data. If your query is very simple but returns 1GB of data, the cache won't make it faster at all.
-
-In a typical web application the time consumed for database interaction is usually only 5 - 20%, so expect a performance gain somewhere in this area. 
+If you still want to use another storage backend, please feel free to contribute.
 
 ## Requirements
 
@@ -113,7 +113,7 @@ php artisan lada-cache:enable
 
 - Does not work with [raw SQL queries](http://laravel.com/docs/5.3/database#running-queries). This would require an SQL parser to be implemented which is quite hard and very inefficient. As long as you are only using raw queries for reading data, it just won't get cached. Serious issues will only occur if you use raw queries for writing data (which you shouldn't be doing anyway).
 - Invalidation on row level [does only work](https://github.com/spiritix/lada-cache/issues/16) if you use ``id`` as column name for your primary keys.
-- Cache must be truncated manually after migrations are executed.
+- The cache must be truncated manually after migrations are executed.
 
 ## Contributing
 
