@@ -35,7 +35,7 @@ class Redis
      */
     public function __construct($prefix)
     {
-        $this->prefix = (string) $prefix;
+        $this->prefix = config('lada-cache.prefix');
     }
 
     /**

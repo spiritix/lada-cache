@@ -85,7 +85,7 @@ class LadaCacheServiceProvider extends ServiceProvider
     private function registerSingletons()
     {
         $this->app->singleton('lada.redis', function($app) {
-            return new Redis(config('lada-cache.prefix'));
+            return new Redis();
         });
 
         $this->app->singleton('lada.cache', function($app) {
