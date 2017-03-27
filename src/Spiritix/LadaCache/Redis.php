@@ -31,11 +31,10 @@ class Redis
     /**
      * Initialize Redis handler.
      *
-     * @param string $prefix
      */
-    public function __construct($prefix)
+    public function __construct()
     {
-        $this->prefix = (string) $prefix;
+        $this->prefix = config('lada-cache.prefix');
     }
 
     /**
