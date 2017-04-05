@@ -114,10 +114,10 @@ class IntegrationTest extends TestCase
     private function hasQuery(QueryBuilder $builder)
     {
         /* @var Reflector $reflector */
-        $reflector = app()->make(Reflector::class, [$builder]);
+        $reflector = new Reflector($builder);
 
         /* @var Hasher $hasher */
-        $hasher = app()->make(Hasher::class, [$reflector]);
+        $hasher = new Hasher($reflector);
 
         return $this->cache->has($hasher->getHash());
     }
