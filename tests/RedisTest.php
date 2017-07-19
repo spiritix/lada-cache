@@ -12,7 +12,8 @@ class RedisTest extends TestCase
     {
         parent::setUp();
 
-        $this->redis = new Redis('prefix:');
+        $this->redis = new Redis();
+        $this->redis->prefix = 'prefix:';
     }
 
     public function testPrefix()
