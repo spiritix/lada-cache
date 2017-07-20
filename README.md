@@ -1,6 +1,6 @@
 # Lada Cache
 
-A Redis based, automated and scalable database caching layer for Laravel 5.1+
+A Redis based, fully automated and scalable database cache layer for Laravel 5.1+
 
 [![Build Status](https://travis-ci.org/spiritix/lada-cache.svg?branch=master)](https://travis-ci.org/spiritix/lada-cache)
 [![Code Climate](https://codeclimate.com/github/spiritix/lada-cache/badges/gpa.svg)](https://codeclimate.com/github/spiritix/lada-cache)
@@ -18,31 +18,36 @@ A Redis based, automated and scalable database caching layer for Laravel 5.1+
 - Makes use of [Laravel Redis](http://laravel.com/docs/5.4/redis) (supports [clustering](https://laravel.com/docs/5.4/redis#introduction))
 - Supports PHP7
 
-## Performance
-
-The performance gain achieved by using Lada Cache varies between 5% and 95%. This heavily depends on the quantity and complexity of your queries. The more queries per request your application fires and the more complex they are, the bigger the performance gain will be. Another important factor to consider is the amount of data returned by your queries, if a query returns 500MB of data, Lada Cache won't make it faster at all. Based on experience, the performance gain in a typical Laravel web application is around 10-30%.
-
-Other than the performance gain, an essential reason to use Lada Cache is the reduced load on the database servers. Depending on your infrastructure, this may result in reasonable lower cost and introduce new possibilities to scale your application.
-
 ## Why?
 
-Most RDBMS provide internal caching systems (for example Mysql Query Cache). Unfortunately, these caching systems have some very serious limitations:
+A lot of web applications make heavy use of the database. Especially using an ORM like Eloquent, queries repeat often and are not always very efficient. One of the most common solutions for this problem is caching the database queries.
 
-- They do not cache queries over multiple tables (especially joins)
-- The invalidation granularity is very low
+Most RDBMS provide internal cache layers (for example [Mysql Query Cache](https://dev.mysql.com/doc/refman/5.7/en/query-cache.html)).  Unfortunately, these caching systems have some very serious limitations:
+
+- They do not cache queries over multiple tables (e.g. if the queries are using joins)
+- The invalidation granularity is very low (if a single row changes, the entire table gets removed from the cache)
 - They are not distributed, if you have multiple database servers the cache will be created on all of them
 - They are not scalable
 
-This library offers a solution for all of these problems.
+Laravel, on the other hand, provides the possibility to cache particular queries manually. The problem is that it doesn't invalidate the cached queries automatically, you'll need to let them expire after a certain time or invalidate them manually on all places where the affected data might be changed.
+
+This library provides a solution for all of the mentioned problems. 
+Install, scale up and lean back.
+
+## Performance
+
+The performance gain achieved by using Lada Cache varies between 5% and 95%. It heavily depends on the quantity and complexity of your queries. The more (redundant) queries per request your application fires and the more complex they are, the bigger the performance gain will be. Another important factor to consider is the amount of data returned by your queries, if a query returns 500MB of data, Lada Cache won't make it faster at all. Based on experience, the performance gain in a typical Laravel web application is around 10-30%.
+
+Other than the performance gain, an essential reason to use Lada Cache is the reduced the load on the database servers. Depending on your infrastructure, this may result in reasonable lower cost and introduce new possibilities to scale up your application.
 
 ## Why only Redis?
 
-As you may have discovered while looking at the source code, this library is built directly on top of [Laravel Redis](http://laravel.com/docs/5.4/redis) and not [Laravel Cache](http://laravel.com/docs/5.4/cache) which would make more sense from a general point of view.
+As you may have discovered while looking at the source code, this library is built directly on top of [Laravel Redis](http://laravel.com/docs/5.4/redis) instead of [Laravel Cache](http://laravel.com/docs/5.4/cache), which would make more sense from a general point of view.
 However, there are several important reasons behind this decision:
 
 - Storage must be in-memory (wouldn't make much sense otherwise)
-- Storage must be easily scalable (have fun with Memcached)
-- Storage must support tags (Laravel Cache does support tags, but the implementation is very bad and results in a massive overhead)
+- Storage must be easily scalable 
+- Storage must support tags (Laravel Cache does support tags, but the implementation is very bad and slow)
 
 If you still want to use another storage backend, please feel free to contribute.
 
