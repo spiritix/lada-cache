@@ -15,7 +15,7 @@ A Redis based, automated and scalable database caching layer for Laravel 5.1+
 - Intelligent cache invalidation with high granularity
 - Works with existing code, no changes required after setup
 - Possibility to cache only specific models or exclude some models
-- Makes use of [Laravel Redis](http://laravel.com/docs/5.3/redis) (supports [clustering](https://laravel.com/docs/5.3/redis#introduction))
+- Makes use of [Laravel Redis](http://laravel.com/docs/5.4/redis) (supports [clustering](https://laravel.com/docs/5.4/redis#introduction))
 - Supports PHP7
 
 ## Performance
@@ -37,7 +37,7 @@ This library offers a solution for all of these problems.
 
 ## Why only Redis?
 
-As you may have discovered while looking at the source code, this library is built directly on top of [Laravel Redis](http://laravel.com/docs/5.3/redis) and not [Laravel Cache](http://laravel.com/docs/5.3/cache) which would make more sense from a general point of view.
+As you may have discovered while looking at the source code, this library is built directly on top of [Laravel Redis](http://laravel.com/docs/5.4/redis) and not [Laravel Cache](http://laravel.com/docs/5.4/cache) which would make more sense from a general point of view.
 However, there are several important reasons behind this decision:
 
 - Storage must be in-memory (wouldn't make much sense otherwise)
@@ -48,7 +48,7 @@ If you still want to use another storage backend, please feel free to contribute
 
 ## Requirements
 
-- PHP 5.5+
+- PHP 5.6+
 - Redis 2+
 - Laravel 5.1+
 - [Predis](https://github.com/nrk/predis) 
@@ -74,16 +74,19 @@ Find the `providers` key in your `config/app.php` and register the Lada Cache Se
     )
 ```
 
-Finally, all your models must extend the `Spiritix\LadaCache\Database\Model` class.
-It's a good practice to create a base model class which extends the Lada Cache model and then gets extended by all your models.
+Finally, all your models must include the `Spiritix\LadaCache\Database\LadaCacheTrait` trait.
+It's a good practice to create a base model class which includes the trait and then gets extended by all your models.
 
 ```php
-class Post extends Spiritix\LadaCache\Database\Model {
-    //
+class Car extends \Illuminate\Database\Eloquent\Model {
+
+    use \Spiritix\LadaCache\Database\LadaCacheTrait;
+    
+    // ...
 }
 ```
 
-_Don't try to only have specific models extending the Lada Cache model, it will result in unexpected behavior.
+_Don't try to only have specific models including the Lada Cache trait, it will result in unexpected behavior.
 In the configuration, you will find the possibility to include or exclude specific models._
 
 ## Configuration
@@ -111,7 +114,7 @@ php artisan lada-cache:enable
 
 ## Known issues and limitations
 
-- Does not work with [raw SQL queries](http://laravel.com/docs/5.3/database#running-queries). This would require an SQL parser to be implemented which is quite hard and very inefficient. As long as you are only using raw queries for reading data, it just won't get cached. Serious issues will only occur if you use raw queries for writing data (which you shouldn't be doing anyway).
+- Does not work with [raw SQL queries](http://laravel.com/docs/5.4/database#running-queries). This would require an SQL parser to be implemented which is quite hard and very inefficient. As long as you are only using raw queries for reading data, it just won't get cached. Serious issues will only occur if you use raw queries for writing data (which you shouldn't be doing anyway).
 - Invalidation on row level [does only work](https://github.com/spiritix/lada-cache/issues/16) if you use ``id`` as column name for your primary keys.
 - The cache must be truncated manually after migrations are executed.
 

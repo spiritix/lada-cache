@@ -2,6 +2,7 @@
 
 namespace Spiritix\LadaCache\Tests;
 
+use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\DB;
 use Laracasts\TestDummy\Factory;
 use Spiritix\LadaCache\LadaCacheServiceProvider;
@@ -11,14 +12,30 @@ class TestCase extends \Orchestra\Testbench\TestCase
 {
     protected $factory;
 
+    private $useArtisan;
+
+    public function __construct($name = null, array $data = [], $dataName = '')
+    {
+        parent::__construct($name, $data, $dataName);
+
+        $this->useArtisan = version_compare('5.4', Application::VERSION, '>');
+    }
+
     public function setUp()
     {
         parent::setUp();
 
-        $this->loadMigrationsFrom([
+        $migrationParams = [
             '--database' => 'testing',
-            '--realpath' => realpath(__DIR__.'/../database/migrations'),
-        ]);
+            '--realpath' => realpath(__DIR__ . '/../database/migrations'),
+        ];
+
+        if ($this->useArtisan) {
+            $this->artisan('migrate', $migrationParams);
+        }
+        else {
+            $this->loadMigrationsFrom($migrationParams);
+        }
 
         $this->factory = new Factory(__DIR__ . '/../database/factories');
 
@@ -34,10 +51,15 @@ class TestCase extends \Orchestra\Testbench\TestCase
 
     protected function getPackageProviders($app)
     {
-        return [
-            LadaCacheServiceProvider::class,
-            ConsoleServiceProvider::class
+        $providers = [
+            LadaCacheServiceProvider::class
         ];
+
+        if (!$this->useArtisan) {
+            $providers[] = ConsoleServiceProvider::class;
+        }
+
+        return $providers;
     }
 
     protected function getEnvironmentSetUp($app)

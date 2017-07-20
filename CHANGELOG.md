@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [2.0] - 2017-07-20
+### Changed
+- Now using a trait instead of a base model class
+
+### Added
+- Added support for Laravel 5.4
+
 ## [1.4.2] - 2016-12-09
 ### Fixed
 - Fixed bug in debug bar collector
