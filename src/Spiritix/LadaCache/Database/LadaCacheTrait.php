@@ -8,20 +8,19 @@
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
+
 namespace Spiritix\LadaCache\Database;
 
-use Illuminate\Database\Eloquent\Model as EloquentModel;
-
 /**
- * Overrides Laravel's model class.
+ * Trait for overriding Laravel's query builder in models.
  *
+ * This trait must be added to all models in a project, otherwise it might result in unexpected behavior.
  * If Laravel would not have hardcoded the query builder class, this file would not be required anymore.
- * It would also not be required to have all models extending this class.
  *
  * @package Spiritix\LadaCache\Database
  * @author  Matthias Isler <mi@matthias-isler.ch>
  */
-class Model extends EloquentModel
+trait LadaCacheTrait
 {
     /**
      * Get a new query builder instance for the connection.
