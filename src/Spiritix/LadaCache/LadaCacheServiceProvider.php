@@ -85,7 +85,7 @@ class LadaCacheServiceProvider extends ServiceProvider
     private function registerSingletons()
     {
         $this->app->singleton('lada.redis', function($app) {
-            return new Redis(config('lada-cache.prefix'));
+            return new Redis();
         });
 
         $this->app->singleton('lada.cache', function($app) {
@@ -135,15 +135,15 @@ class LadaCacheServiceProvider extends ServiceProvider
      */
     private function registerCommand()
     {
-        $this->app['command.lada-cache.flush'] = $this->app->share(function() {
+        $this->app->singleton('command.lada-cache.flush', function() {
             return new FlushCommand();
         });
 
-        $this->app['command.lada-cache.enable'] = $this->app->share(function() {
+        $this->app->singleton('command.lada-cache.enable', function() {
             return new EnableCommand();
         });
 
-        $this->app['command.lada-cache.disable'] = $this->app->share(function() {
+        $this->app->singleton('command.lada-cache.disable', function() {
             return new DisableCommand();
         });
 

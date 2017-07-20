@@ -21,7 +21,8 @@
         "phpunit/phpunit": "~5.0",
         "codeclimate/php-test-reporter": "dev-master",
         "orchestra/testbench": "~3.0",
-        "laracasts/TestDummy": "~2.3"
+        "laracasts/TestDummy": "~2.3",
+        "orchestra/database": "~3.1"
     },
     "suggest": {
         "ext-phpiredis": "Allows faster serialization and deserialization of the Redis protocol",

@@ -89,10 +89,10 @@ class QueryHandler
         $this->constructCollector();
 
         /* @var Reflector $reflector */
-        $reflector = app()->make(Reflector::class, [$this->builder]);
+        $reflector = new Reflector($this->builder);
 
         /* @var Manager $manager */
-        $manager = app()->make(Manager::class, [$reflector]);
+        $manager = new Manager($reflector);
 
         // If cache is disabled, abort already here to save time
         if (!$manager->shouldCache()) {
@@ -100,10 +100,10 @@ class QueryHandler
         }
 
         /* @var Hasher $hasher */
-        $hasher = app()->make(Hasher::class, [$reflector]);
+        $hasher = new Hasher($reflector);
 
         /* @var Tagger $tagger */
-        $tagger = app()->make(Tagger::class, [$reflector]);
+        $tagger = new Tagger($reflector);
 
         $result = null;
         $key = $hasher->getHash();
@@ -138,10 +138,10 @@ class QueryHandler
         $this->constructCollector();
 
         /* @var Reflector $reflector */
-        $reflector = app()->make(Reflector::class, [$this->builder, $statementType, $values]);
+        $reflector = new Reflector($this->builder, $statementType, $values);
 
         /* @var Tagger $tagger */
-        $tagger = app()->make(Tagger::class, [$reflector]);
+        $tagger = new Tagger($reflector);
 
         $hashes = $this->invalidator->invalidate($tagger->getTags());
 

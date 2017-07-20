@@ -611,10 +611,10 @@ class TaggerTest extends TestCase
     private function getTags($tableBuilder, $sqlOperation = Reflector::QUERY_TYPE_SELECT, $values = [])
     {
         /** @var Reflector $reflector */
-        $reflector = app(Reflector::class, [$tableBuilder->getQuery(), $sqlOperation, $values]);
+        $reflector = new Reflector($tableBuilder->getQuery(), $sqlOperation, $values);
 
         /** @var Tagger $tagger */
-        $tagger = app(Tagger::class, [$reflector]);
+        $tagger = new Tagger($reflector);
 
         return $tagger->getTags();
     }
