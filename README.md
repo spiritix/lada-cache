@@ -1,4 +1,4 @@
-# Lada Cache <img src="https://cdn4.iconfinder.com/data/icons/vaz2101/512/face_1-512.png" style="40px;vertical-align:bottom;">
+# Lada Cache <img src="https://cdn4.iconfinder.com/data/icons/vaz2101/512/face_1-512.png" height="40">
 
 A Redis based, fully automated and scalable database cache layer for Laravel 5.1+
 
