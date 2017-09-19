@@ -647,8 +647,6 @@ class TaggerTest extends TestCase
         /** @var Reflector $reflector */
         $reflector = new Reflector($tableBuilder->getQuery(), $sqlOperation, $values);
 
-        print_r($reflector->getTables());
-
         /** @var Tagger $tagger */
         $tagger = new Tagger($reflector);
 
