@@ -25,7 +25,7 @@ trait LadaCacheTrait
     /**
      * Get a new query builder instance for the connection.
      *
-     * @return \Illuminate\Database\Query\Builder
+     * @return QueryBuilder
      */
     protected function newBaseQueryBuilder()
     {
@@ -38,5 +38,17 @@ trait LadaCacheTrait
             $conn->getPostProcessor(),
             app()->make('lada.handler')
         );
+    }
+
+    /**
+     * Create a new Eloquent query builder for the model.
+     *
+     * @param  \Illuminate\Database\Query\Builder $query
+     *
+     * @return EloquentBuilder
+     */
+    public function newEloquentBuilder($query)
+    {
+        return new EloquentBuilder($query);
     }
 }

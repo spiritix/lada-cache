@@ -34,6 +34,13 @@ class QueryBuilder extends Builder
     private $handler;
 
     /**
+     * Contains all sub-selects, if any.
+     *
+     * @var array
+     */
+    public $subSelects = [];
+
+    /**
      * Create a new query builder instance.
      *
      * @param  ConnectionInterface $connection
@@ -69,6 +76,18 @@ class QueryBuilder extends Builder
         return $this->handler->setBuilder($this)->cacheQuery(function() {
             return parent::runSelect();
         });
+    }
+
+    /**
+     * Add a subselect expression to the query.
+     *
+     * @inheritdoc
+     */
+    public function selectSub($query, $as)
+    {
+        $this->subSelects[] = $query;
+
+        return parent::selectSub($query, $as);
     }
 
     /**

@@ -235,6 +235,40 @@ class TaggerTest extends TestCase
     /**
      * Testing that
      *
+     * SELECT cars.*, (SELECT COUNT(*) FROM engines WHERE cars.id = engines.car_id) AS engine_count FROM cars
+     * Generates tags like:  table_unspecific_cars, table_unspecific_engines
+     */
+    public function testSelectWithCount()
+    {
+        $this->factory->times(5)->create(Car::class)
+            ->each(function ($car) {
+                $engine = app(Engine::class);
+                $engine->name = 'XX';
+                $car->engine()->save($engine);
+            });
+
+        /** @var Car $car */
+        $car = app(Car::class);
+        /** @var Engine $engine */
+        $engine = app(Engine::class);
+
+        $sqlBuilder = $car->select('cars.id')->withCount('engine');
+        $sqlBuilder->get();
+
+        $expectedTags = [
+            $this->getUnspecificTableTag($car->getTable()),
+            $this->getUnspecificTableTag($engine->getTable()),
+        ];
+
+        $generatedTags = $this->getTags($sqlBuilder);
+
+        $this->assertCacheHasTags($expectedTags);
+       // $this->assertCountEquals($expectedTags, $generatedTags);
+    }
+
+    /**
+     * Testing that
+     *
      * INSERT INTO cars …….
      * Invalidates tags like:  table_unspecific_cars
      */
@@ -612,6 +646,8 @@ class TaggerTest extends TestCase
     {
         /** @var Reflector $reflector */
         $reflector = new Reflector($tableBuilder->getQuery(), $sqlOperation, $values);
+
+        print_r($reflector->getTables());
 
         /** @var Tagger $tagger */
         $tagger = new Tagger($reflector);
