@@ -11,12 +11,16 @@ class TaggerTest extends TestCase
 {
     private $cache;
 
+    private $redis;
+
     public function setUp()
     {
         parent::setUp();
 
         $this->cache = app()->make('lada.cache');
         $this->cache->flush();
+
+        $this->redis = app()->make('lada.redis');
     }
 
     /**
@@ -260,10 +264,10 @@ class TaggerTest extends TestCase
             $this->getUnspecificTableTag($engine->getTable()),
         ];
 
-        $generatedTags = $this->getTags($sqlBuilder);
+        $generatedTags = $this->redis->keys($this->redis->prefix('') . 'tags:*');
 
         $this->assertCacheHasTags($expectedTags);
-       // $this->assertCountEquals($expectedTags, $generatedTags);
+        $this->assertCountEquals($expectedTags, $generatedTags);
     }
 
     /**

@@ -39,19 +39,4 @@ trait LadaCacheTrait
             app()->make('lada.handler')
         );
     }
-
-    /**
-     * Create a new Eloquent query builder for the model.
-     *
-     * @param  \Illuminate\Database\Query\Builder $query
-     *
-     * @return EloquentBuilder
-     */
-    public function newEloquentBuilder($query)
-    {
-        return new EloquentBuilder(
-            $query,
-            app()->make('lada.handler')
-        );
-    }
 }
