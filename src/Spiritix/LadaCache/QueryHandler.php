@@ -52,6 +52,13 @@ class QueryHandler
     private $collector = null;
 
     /**
+     * Collection of subquery tags.
+     *
+     * @var array
+     */
+    private $subQueryTags = [];
+
+    /**
      * Initialize the query handler.
      *
      * @param Cache          $cache
@@ -78,6 +85,32 @@ class QueryHandler
     }
 
     /**
+     * Collects the tags of a subquery for later handling of the main query.
+     */
+    public function collectSubQueryTags()
+    {
+        /* @var Reflector $reflector */
+        $reflector = new Reflector($this->builder);
+
+        /* @var Manager $manager */
+        $manager = new Manager($reflector);
+
+        // Skip if caching is disabled for current query
+        if (!$manager->shouldCache()) {
+            return;
+        }
+
+        /* @var Tagger $tagger */
+        $tagger = new Tagger($reflector);
+
+        // Add tags to collection
+        $this->subQueryTags = array_unique(array_merge(
+            $this->subQueryTags,
+            $tagger->getTags()
+        ));
+    }
+
+    /**
      * Caches a query and returns its result.
      *
      * @param callable $queryClosure A closure which executes the query and returns the result
@@ -87,6 +120,11 @@ class QueryHandler
     public function cacheQuery($queryClosure)
     {
         $this->constructCollector();
+
+        // Make sure to reset the sub query tags already here
+        // Otherwise we'll get into trouble if caching is disabled for main query but not for subquery
+        $subQueryTags = $this->subQueryTags;
+        $this->subQueryTags = [];
 
         /* @var Reflector $reflector */
         $reflector = new Reflector($this->builder);
@@ -107,6 +145,7 @@ class QueryHandler
 
         $result = null;
         $key = $hasher->getHash();
+        $tags = array_unique(array_merge($tagger->getTags(), $subQueryTags));
 
         // Check if a cached version is available
         if ($this->cache->has($key)) {
@@ -118,11 +157,10 @@ class QueryHandler
         // If not, execute the query closure and cache the result
         if ($result === null) {
             $result = $queryClosure();
-
-            $this->cache->set($key, $tagger->getTags(), $result);
+            $this->cache->set($key, $tags, $result);
         }
 
-        $this->destructCollector($reflector, $tagger, $key, $action);
+        $this->destructCollector($reflector, $tags, $key, $action);
 
         return $result;
     }
@@ -142,11 +180,12 @@ class QueryHandler
 
         /* @var Tagger $tagger */
         $tagger = new Tagger($reflector);
+        $tags = $tagger->getTags();
 
-        $hashes = $this->invalidator->invalidate($tagger->getTags());
+        $hashes = $this->invalidator->invalidate($tags);
 
         $action = 'Invalidation (' .  $statementType . ')';
-        $this->destructCollector($reflector, $tagger, $hashes, $action);
+        $this->destructCollector($reflector, $tags, $hashes, $action);
     }
 
     /**
@@ -169,11 +208,11 @@ class QueryHandler
      * Destructs the collector.
      *
      * @param Reflector    $reflector The reflector instance
-     * @param Tagger       $tagger    The tagger instance
+     * @param array        $tags      The tags for the executed query
      * @param string|array $hashes    The hash(es) for the executed query
      * @param string       $action    The action that happened
      */
-    private function destructCollector(Reflector $reflector, $tagger, $hashes, $action)
+    private function destructCollector(Reflector $reflector, $tags, $hashes, $action)
     {
         if ($this->collector === null) {
             return;
@@ -182,7 +221,7 @@ class QueryHandler
         $this->collector->endMeasuring(
             $action,
             is_array($hashes) ? $hashes : [$hashes],
-            $tagger->getTags(),
+            $tags,
             $reflector->getSql(),
             $reflector->getParameters()
         );

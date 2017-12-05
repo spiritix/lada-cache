@@ -72,6 +72,22 @@ class QueryBuilder extends Builder
     }
 
     /**
+     * Add a subselect expression to the query.
+     *
+     * @param  \Closure|static|string $query
+     * @param  string  $as
+     *
+     * @return \Illuminate\Database\Query\Builder
+     */
+    public function selectSub($query, $as)
+    {
+        $this->handler->setBuilder($query)
+            ->collectSubQueryTags();
+
+        return parent::selectSub($query, $as);
+    }
+
+    /**
      * Insert a new record into the database.
      *
      * @param  array $values

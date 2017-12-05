@@ -49,6 +49,9 @@ trait LadaCacheTrait
      */
     public function newEloquentBuilder($query)
     {
-        return new EloquentBuilder($query);
+        return new EloquentBuilder(
+            $query,
+            app()->make('lada.handler')
+        );
     }
 }
