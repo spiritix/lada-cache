@@ -9,6 +9,20 @@ A Redis based, fully automated and scalable database cache layer for Laravel 5.1
 [![Latest Unstable Version](https://poser.pugx.org/spiritix/lada-cache/v/unstable.svg)](https://packagist.org/packages/spiritix/lada-cache)
 [![License](https://poser.pugx.org/spiritix/lada-cache/license.svg)](https://packagist.org/packages/spiritix/lada-cache)
 
+## Table of Contents
+
+- [Features](#features)
+- [Performance](#performance)
+- [Why?](#why)
+- [Why only Redis?](#why-only-redis)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Console commands](#console-commands)
+- [Known issues and limitations](#known-issues-and-limitations)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Features
 
 - Automatically caches all database queries
@@ -17,6 +31,12 @@ A Redis based, fully automated and scalable database cache layer for Laravel 5.1
 - Possibility to cache only specific models or exclude some models
 - Makes use of [Laravel Redis](http://laravel.com/docs/5.4/redis) (supports [clustering](https://laravel.com/docs/5.4/redis#introduction))
 - Supports PHP7
+
+## Performance
+
+The performance gain achieved by using Lada Cache varies between 5% and 95%. It heavily depends on the quantity and complexity of your queries. The more (redundant) queries per request your application fires and the more complex they are, the bigger the performance gain will be. Another important factor to consider is the amount of data returned by your queries, if a query returns 500MB of data, Lada Cache won't make it faster at all. Based on experience, the performance gain in a typical Laravel web application is around 10-30%.
+
+Other than the performance gain, an essential reason to use Lada Cache is the reduced the load on the database servers. Depending on your infrastructure, this may result in reasonable lower cost and introduce new possibilities to scale up your application.
 
 ## Why?
 
@@ -33,12 +53,6 @@ Laravel, on the other hand, provides the possibility to cache particular queries
 
 This library provides a solution for all of the mentioned problems. 
 Install, scale up and lean back.
-
-## Performance
-
-The performance gain achieved by using Lada Cache varies between 5% and 95%. It heavily depends on the quantity and complexity of your queries. The more (redundant) queries per request your application fires and the more complex they are, the bigger the performance gain will be. Another important factor to consider is the amount of data returned by your queries, if a query returns 500MB of data, Lada Cache won't make it faster at all. Based on experience, the performance gain in a typical Laravel web application is around 10-30%.
-
-Other than the performance gain, an essential reason to use Lada Cache is the reduced the load on the database servers. Depending on your infrastructure, this may result in reasonable lower cost and introduce new possibilities to scale up your application.
 
 ## Why only Redis?
 
