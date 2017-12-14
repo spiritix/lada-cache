@@ -113,7 +113,7 @@ In the configuration, you will find the possibility to include or exclude specif
 Use the following command to publish the ``lada-cache.php``config file to your configuration folder:
 
 ```shell
-php artisan vendor:publish
+php artisan vendor:publish --provider="Spiritix\LadaCache\LadaCacheServiceProvider" --tag=config
 ```
 
 ## Console commands
