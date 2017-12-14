@@ -78,9 +78,10 @@ If you still want to use another storage backend, please feel free to contribute
 
 Lada Cache can be installed via [Composer](http://getcomposer.org) by requiring the
 `spiritix/lada-cache` package in your project's `composer.json`.
+Or simply run this command:
 
 ```sh
-php composer.phar require spiritix/lada-cache
+composer require spiritix/lada-cache
 ```
 
 Now you must register the service provider when bootstrapping your Laravel application.
