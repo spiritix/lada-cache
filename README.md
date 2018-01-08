@@ -23,6 +23,8 @@ A Redis based, fully automated and scalable database cache layer for Laravel 5.1
 - [Contributing](#contributing)
 - [License](#license)
 
+For further information on how this library works and how to debug it please have a look at the [Wiki](https://github.com/spiritix/lada-cache/wiki).
+
 ## Features
 
 - Automatically caches all database queries
