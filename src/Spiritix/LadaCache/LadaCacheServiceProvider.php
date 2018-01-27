@@ -48,7 +48,7 @@ class LadaCacheServiceProvider extends ServiceProvider
     {
         $this->publishes([
             __DIR__ . '/../../../config/' . self::CONFIG_FILE => config_path(self::CONFIG_FILE),
-        ]);
+        ], 'config');
 
         $this->mergeConfigFrom(
             __DIR__ . '/../../../config/' . self::CONFIG_FILE, str_replace('.php', '', self::CONFIG_FILE)
