@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [2.0.1] - 2018-01-29
+### Fixed
+- Fixed bug in publishing config
+
+### Added
+- Added a basic Wiki
+
 ## [2.0] - 2017-07-20
 ### Changed
 - Now using a trait instead of a base model class
