@@ -2,12 +2,22 @@
 
 ## [Unreleased]
 
-## [2.0.1] - 2018-01-29
+## [2.1.1] - 2018-01-29
 ### Fixed
 - Fixed bug in publishing config
 
 ### Added
 - Added a basic Wiki
+
+## [2.1] - 2017-12-05
+### Fixed
+- Fixed bug with subqueries (#46)
+
+### Changed
+- Updated README
+
+### Added
+- Added support for Laravel 5.5
 
 ## [2.0] - 2017-07-20
 ### Changed
