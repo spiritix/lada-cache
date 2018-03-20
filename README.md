@@ -140,6 +140,7 @@ php artisan lada-cache:enable
 - Doesn't work with [multiple connections](https://laravel.com/docs/5.5/database#using-multiple-database-connections) if done like ``DB::connection('foo')``. Instead, specify the ``protected $connection = 'foo';`` property in the relevant models.
 - Invalidation on row level [does only work](https://github.com/spiritix/lada-cache/issues/16) if you use ``id`` as column name for your primary keys.
 - The cache must be truncated manually after migrations are executed.
+- Pessimistic locking (sharedLock, lockForUpdate) requires usage of [raw sql queries](https://github.com/spiritix/lada-cache/issues/49).
 
 ## Contributing
 
