@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [2.1.2] - 2018-05-14
+### Fixed
+- Fixed race condition which possibly led to outdated query results being returned after keys expire
+
 ## [2.1.1] - 2018-01-29
 ### Fixed
 - Fixed bug in publishing config
