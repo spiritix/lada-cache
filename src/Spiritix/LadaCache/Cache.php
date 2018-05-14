@@ -105,6 +105,11 @@ class Cache
     {
         $encoded = $this->redis->get($this->redis->prefix($key));
 
+        // Prevent decoding if redis returns null (key does not exist).
+        if ($encoded === null) {
+            return null;
+        }
+
         return $this->encoder->decode($encoded);
     }
 
