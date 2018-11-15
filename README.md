@@ -1,6 +1,6 @@
 # Lada Cache <img src="https://cdn4.iconfinder.com/data/icons/vaz2101/512/face_1-512.png" height="40">
 
-A Redis based, fully automated and scalable database cache layer for Laravel 5.1+
+A Redis based, fully automated and scalable database cache layer for Laravel
 
 [![Build Status](https://travis-ci.org/spiritix/lada-cache.svg?branch=master)](https://travis-ci.org/spiritix/lada-cache)
 [![Code Climate](https://codeclimate.com/github/spiritix/lada-cache/badges/gpa.svg)](https://codeclimate.com/github/spiritix/lada-cache)
@@ -12,6 +12,7 @@ A Redis based, fully automated and scalable database cache layer for Laravel 5.1
 ## Table of Contents
 
 - [Features](#features)
+- [Version Compatibility](#version-compatibility)
 - [Performance](#performance)
 - [Why?](#why)
 - [Why only Redis?](#why-only-redis)
@@ -31,8 +32,14 @@ For further information on how this library works and how to debug it please hav
 - Intelligent cache invalidation with high granularity
 - Works with existing code, no changes required after setup
 - Possibility to cache only specific models or exclude some models
-- Makes use of [Laravel Redis](http://laravel.com/docs/5.4/redis) (supports [clustering](https://laravel.com/docs/5.4/redis#introduction))
-- Supports PHP7
+- Makes use of [Laravel Redis](http://laravel.com/docs/5.7/redis) (supports [clustering](https://laravel.com/docs/5.7/redis#introduction))
+
+## Version Compatibility
+
+ Laravel  | PHP       | Lada Cache
+:---------|:----------|:----------
+ 5.1-5.6  | 5.6.4+    | 2.x
+ 5.7      | 7.1+      | 3.x
 
 ## Performance
 
@@ -58,7 +65,7 @@ Install, scale up and lean back.
 
 ## Why only Redis?
 
-As you may have discovered while looking at the source code, this library is built directly on top of [Laravel Redis](http://laravel.com/docs/5.4/redis) instead of [Laravel Cache](http://laravel.com/docs/5.4/cache), which would make more sense from a general point of view.
+As you may have discovered while looking at the source code, this library is built directly on top of [Laravel Redis](http://laravel.com/docs/5.7/redis) instead of [Laravel Cache](http://laravel.com/docs/5.7/cache), which would make more sense from a general point of view.
 However, there are several important reasons behind this decision:
 
 - Storage must be in-memory (wouldn't make much sense otherwise)
@@ -69,9 +76,9 @@ If you still want to use another storage backend, please feel free to contribute
 
 ## Requirements
 
-- PHP 5.6+
+- PHP 7.1+
 - Redis 2+
-- Laravel 5.1+
+- Laravel 5.7+
 - [Predis](https://github.com/nrk/predis) 
 - [Phpiredis](https://github.com/nrk/phpiredis) increases cache performance (optional)
 - [Laravel Debugbar](https://github.com/barryvdh/laravel-debugbar) provides debug information (optional)
@@ -136,8 +143,8 @@ php artisan lada-cache:enable
 
 ## Known issues and limitations
 
-- Doesn't work with [raw SQL queries](http://laravel.com/docs/5.4/database#running-queries). This would require an SQL parser to be implemented which is quite hard and very inefficient. As long as you are only using raw queries for reading data, it just won't get cached. Serious issues will only occur if you use raw queries for writing data (which you shouldn't be doing anyway).
-- Doesn't work with [multiple connections](https://laravel.com/docs/5.5/database#using-multiple-database-connections) if done like ``DB::connection('foo')``. Instead, specify the ``protected $connection = 'foo';`` property in the relevant models.
+- Doesn't work with [raw SQL queries](http://laravel.com/docs/5.7/database#running-queries). This would require an SQL parser to be implemented which is quite hard and very inefficient. As long as you are only using raw queries for reading data, it just won't get cached. Serious issues will only occur if you use raw queries for writing data (which you shouldn't be doing anyway).
+- Doesn't work with [multiple connections](https://laravel.com/docs/5.7/database#using-multiple-database-connections) if done like ``DB::connection('foo')``. Instead, specify the ``protected $connection = 'foo';`` property in the relevant models.
 - Invalidation on row level [does only work](https://github.com/spiritix/lada-cache/issues/16) if you use ``id`` as column name for your primary keys.
 - The cache must be truncated manually after migrations are executed.
 - Pessimistic locking (sharedLock, lockForUpdate) requires usage of [raw sql queries](https://github.com/spiritix/lada-cache/issues/49).
