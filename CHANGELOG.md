@@ -2,13 +2,17 @@
 
 ## [Unreleased]
 
-## [3.0] - 2018-05-14
+## [3.0] - 2018-11-15
 ### Fixed
-- Fixed race condition which possibly led to outdated query results being returned after keys expire
+- Fixed bug caused by 'leftJoinSub' in Laravel 5.7
 
 ### Changed
 - Updated minimum requirements to PHP 7.1+
 - Updated minimum requirements to Laravel 5.7+
+
+## [2.1.2] - 2018-05-14
+### Fixed
+- Fixed race condition which possibly led to outdated query results being returned after keys expire
 
 ## [2.1.1] - 2018-01-29
 ### Fixed
