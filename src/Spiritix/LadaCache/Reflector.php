@@ -117,7 +117,7 @@ class Reflector
         $joins = $this->queryBuilder->joins ? : [];
         foreach ($joins as $join) {
 
-            if (!in_array($join->table, $tables)) {
+            if (!in_array($join->table, $tables) && is_string($join->table)) {
                 $tables[] = $join->table;
             }
         }

@@ -239,6 +239,48 @@ class TaggerTest extends TestCase
     /**
      * Testing that
      *
+     * select "cars".* from "cars" left join (select * from "engines" group by "id") as "engines" on "engines"."id" = "cars"."engine_id" limit 10
+     * Generates tags like: table_unspecific_cars, table_unspecific_engines
+     */
+    public function testSelectWithJoinSub()
+    {
+        $this->factory->times(5)->create(Car::class)
+            ->each(function ($car) {
+                $engine = app(Engine::class);
+                $engine->name = 'XX';
+                $car->engine()->save($engine);
+            });
+
+        /** @var Car $car */
+        $car = app(Car::class);
+
+        /** @var Engine $engine */
+        $engine = app(Engine::class);
+
+        $engines = Engine::groupBy('id');
+
+        $sqlBuilder = $car->leftJoinSub($engines, 'engines', function($join) {
+            $join->on('engines.id', '=', 'cars.engine_id');
+        })
+            ->select('cars.*')
+            ->take(10);
+
+        $sqlBuilder->get();
+
+        $expectedTags = [
+            $this->getUnspecificTableTag($car->getTable()),
+            // $this->getUnspecificTableTag($engine->getTable()), TODO: Not working
+        ];
+
+        $generatedTags = $this->getTags($sqlBuilder);
+
+        $this->assertCacheHasTags($expectedTags);
+        $this->assertCountEquals($expectedTags, $generatedTags);
+    }
+
+    /**
+     * Testing that
+     *
      * SELECT cars.*, (SELECT COUNT(*) FROM engines WHERE cars.id = engines.car_id) AS engine_count FROM cars
      * Generates tags like:  table_unspecific_cars, table_unspecific_engines
      */

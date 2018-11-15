@@ -74,7 +74,7 @@ class Tagger
         // Get affected database and tables, add prefixes
         $database = $this->prefix($this->reflector->getDatabase(), self::PREFIX_DATABASE);
 
-        // Get affected tables, don't add prefixes yes
+        // Get affected tables, don't add prefixes yet
         $tables = $this->reflector->getTables();
 
         // If rows should not be considered, we don't have to differ between specific and unspecific queries
