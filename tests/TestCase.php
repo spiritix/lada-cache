@@ -6,7 +6,6 @@ use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\DB;
 use Laracasts\TestDummy\Factory;
 use Spiritix\LadaCache\LadaCacheServiceProvider;
-use Orchestra\Database\ConsoleServiceProvider;
 
 class TestCase extends \Orchestra\Testbench\TestCase
 {
@@ -51,15 +50,9 @@ class TestCase extends \Orchestra\Testbench\TestCase
 
     protected function getPackageProviders($app)
     {
-        $providers = [
+        return [
             LadaCacheServiceProvider::class
         ];
-
-        if (!$this->useArtisan) {
-            $providers[] = ConsoleServiceProvider::class;
-        }
-
-        return $providers;
     }
 
     protected function getEnvironmentSetUp($app)
