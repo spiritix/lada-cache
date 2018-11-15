@@ -40,5 +40,5 @@
             "Spiritix\\LadaCache\\Tests\\Database\\": "database/"
         }
     },
-    "minimum-stability": "stable"
+    "minimum-stability": "dev"
 }
