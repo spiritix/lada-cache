@@ -48,15 +48,6 @@ class Reflector
     const QUERY_TYPE_TRUNCATE = 'truncate';
 
     /**
-     * Since the query builder doesn't know about the related model, we have no way to figure out the name of the
-     * primary key column. If someone is not using this value as primary key column it won't break anything, it just
-     * wont consider the row ID's when creating the cache tags.
-     *
-     * @todo Get the primary key column from the model.
-     */
-    const PRIMARY_KEY_COLUMN = 'id';
-
-    /**
      * Query builder instance.
      *
      * @var QueryBuilder
@@ -88,7 +79,7 @@ class Reflector
     {
         $this->queryBuilder = $queryBuilder;
         $this->sqlOperation = $sqlOperation;
-        $this->values = $values;
+        $this->values       = $values;
     }
 
     /**
@@ -114,7 +105,7 @@ class Reflector
         $tables = [$this->queryBuilder->from];
 
         // Add possible join tables
-        $joins = $this->queryBuilder->joins ? : [];
+        $joins = $this->queryBuilder->joins ?: [];
         foreach ($joins as $join) {
 
             if (!in_array($join->table, $tables) && is_string($join->table)) {
@@ -132,7 +123,7 @@ class Reflector
      */
     public function getRows()
     {
-        $rows = [];
+        $rows   = [];
         $wheres = $this->queryBuilder->wheres ?: [];
 
         foreach ($wheres as $where) {
@@ -150,7 +141,7 @@ class Reflector
             list($table, $column) = $this->splitTableAndColumn($where['column']);
 
             // Make sure that the where clause applies for the primary key column
-            if ($column !== self::PRIMARY_KEY_COLUMN) {
+            if ($column !== $this->queryBuilder->getModelPrimaryKey()) {
                 continue;
             }
 
@@ -164,8 +155,7 @@ class Reflector
                 if ($where['operator'] === '=' && is_numeric($where['value'])) {
                     $rows[$table][] = $where['value'];
                 }
-            }
-            else if ($where['type'] === 'In') {
+            } else if ($where['type'] === 'In') {
                 $rows[$table] += $where['values'];
             }
         }
@@ -183,7 +173,7 @@ class Reflector
         $sql = $this->getSql();
 
         $type = strtok(strtolower(trim($sql)), ' ');
-        $type = preg_replace ('/[^a-z]/i', '', $type);
+        $type = preg_replace('/[^a-z]/i', '', $type);
 
         $allowedTypes = [
             self::QUERY_TYPE_SELECT,
@@ -208,7 +198,7 @@ class Reflector
     public function getSql()
     {
         $compileFunction = $this->getCompileFunction();
-        $grammar = $this->queryBuilder->getGrammar();
+        $grammar         = $this->queryBuilder->getGrammar();
 
         $sql = call_user_func_array([$grammar, $compileFunction], [
             'builder'  => $this->queryBuilder,

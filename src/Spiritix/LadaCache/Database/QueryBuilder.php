@@ -34,6 +34,13 @@ class QueryBuilder extends Builder
     private $handler;
 
     /**
+     * Current Model instance.
+     *
+     * @var Model
+     */
+    private $model;
+
+    /**
      * Create a new query builder instance.
      *
      * @param  ConnectionInterface $connection
@@ -42,11 +49,11 @@ class QueryBuilder extends Builder
      * @param  QueryHandler        $handler
      */
     public function __construct(ConnectionInterface $connection, Grammar $grammar, Processor $processor,
-                                QueryHandler $handler)
-    {
+        QueryHandler $handler, Model $model) {
         parent::__construct($connection, $grammar, $processor);
 
         $this->handler = $handler;
+        $this->model   = $model;
     }
 
     /**
@@ -66,7 +73,7 @@ class QueryBuilder extends Builder
      */
     protected function runSelect()
     {
-        return $this->handler->setBuilder($this)->cacheQuery(function() {
+        return $this->handler->setBuilder($this)->cacheQuery(function () {
             return parent::runSelect();
         });
     }
@@ -151,7 +158,7 @@ class QueryBuilder extends Builder
         $result = parent::delete($id);
 
         $this->handler->setBuilder($this)
-            ->invalidateQuery(Reflector::QUERY_TYPE_DELETE, [Reflector::PRIMARY_KEY_COLUMN => $id]);
+            ->invalidateQuery(Reflector::QUERY_TYPE_DELETE, [$this->getModelPrimaryKey() => $id]);
 
         return $result;
     }
