@@ -47,14 +47,15 @@ trait LadaCacheTrait
      */
     protected function newBaseQueryBuilder()
     {
-        $conn = $this->getConnection();
+        $conn    = $this->getConnection();
         $grammar = $conn->getQueryGrammar();
 
         return new QueryBuilder(
             $conn,
             $grammar,
             $conn->getPostProcessor(),
-            app()->make('lada.handler')
+            app()->make('lada.handler'),
+            $this
         );
     }
 }
