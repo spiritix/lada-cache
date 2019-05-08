@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [3.0.1] - 2019-05-08
+### Fixed
+- Fixed bug with updating pivot tables (#60)
+
 ## [3.0] - 2018-11-15
 ### Fixed
 - Fixed bug caused by 'leftJoinSub' in Laravel 5.7
