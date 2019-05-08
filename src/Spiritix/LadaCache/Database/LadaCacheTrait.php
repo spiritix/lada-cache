@@ -11,6 +11,8 @@
 
 namespace Spiritix\LadaCache\Database;
 
+use Illuminate\Database\Eloquent\Model;
+
 /**
  * Trait for overriding Laravel's query builder in models.
  *
@@ -22,6 +24,22 @@ namespace Spiritix\LadaCache\Database;
  */
 trait LadaCacheTrait
 {
+    /**
+     * Create a new pivot model instance.
+     *
+     * @param  \Illuminate\Database\Eloquent\Model  $parent
+     * @param  array  $attributes
+     * @param  string  $table
+     * @param  bool  $exists
+     * @param  string|null  $using
+     * @return \Illuminate\Database\Eloquent\Relations\Pivot
+     */
+    public function newPivot(Model $parent, array $attributes, $table, $exists, $using = null)
+    {
+        return $using ? $using::fromRawAttributes($parent, $attributes, $table, $exists)
+            : Pivot::fromAttributes($parent, $attributes, $table, $exists);
+    }
+
     /**
      * Get a new query builder instance for the connection.
      *
