@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [3.0.2] - 2019-05-08
+### Fixed
+- Fixed limitation with hardcoded primary key names (#16)
+
 ## [3.0.1] - 2019-05-08
 ### Fixed
 - Fixed bug with updating pivot tables (#60)
