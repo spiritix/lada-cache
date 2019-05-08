@@ -47,7 +47,7 @@ trait LadaCacheTrait
      */
     protected function newBaseQueryBuilder()
     {
-        $conn    = $this->getConnection();
+        $conn = $this->getConnection();
         $grammar = $conn->getQueryGrammar();
 
         return new QueryBuilder(

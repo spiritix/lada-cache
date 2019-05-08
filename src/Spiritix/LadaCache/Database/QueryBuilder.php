@@ -12,6 +12,7 @@
 namespace Spiritix\LadaCache\Database;
 
 use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Query\Grammars\Grammar;
 use Illuminate\Database\Query\Processors\Processor;
@@ -27,18 +28,18 @@ use Spiritix\LadaCache\Reflector;
 class QueryBuilder extends Builder
 {
     /**
+     * Model instance.
+     *
+     * @var Model
+     */
+    public $model;
+
+    /**
      * Handler instance.
      *
      * @var QueryHandler
      */
     private $handler;
-
-    /**
-     * Current Model instance.
-     *
-     * @var Model
-     */
-    private $model;
 
     /**
      * Create a new query builder instance.
@@ -47,13 +48,15 @@ class QueryBuilder extends Builder
      * @param  Grammar             $grammar
      * @param  Processor           $processor
      * @param  QueryHandler        $handler
+     * @param  Model               $model
      */
     public function __construct(ConnectionInterface $connection, Grammar $grammar, Processor $processor,
-        QueryHandler $handler, Model $model) {
+                                QueryHandler $handler, Model $model)
+    {
         parent::__construct($connection, $grammar, $processor);
 
         $this->handler = $handler;
-        $this->model   = $model;
+        $this->model = $model;
     }
 
     /**
@@ -63,7 +66,7 @@ class QueryBuilder extends Builder
      */
     public function newQuery()
     {
-        return new static($this->connection, $this->grammar, $this->processor, $this->handler);
+        return new static($this->connection, $this->grammar, $this->processor, $this->handler, $this->model);
     }
 
     /**
@@ -73,7 +76,7 @@ class QueryBuilder extends Builder
      */
     protected function runSelect()
     {
-        return $this->handler->setBuilder($this)->cacheQuery(function () {
+        return $this->handler->setBuilder($this)->cacheQuery(function() {
             return parent::runSelect();
         });
     }
@@ -158,7 +161,7 @@ class QueryBuilder extends Builder
         $result = parent::delete($id);
 
         $this->handler->setBuilder($this)
-            ->invalidateQuery(Reflector::QUERY_TYPE_DELETE, [$this->getModelPrimaryKey() => $id]);
+            ->invalidateQuery(Reflector::QUERY_TYPE_DELETE, [$this->model->getKeyName() => $id]);
 
         return $result;
     }
