@@ -94,7 +94,7 @@ class Tagger
         // Consisting of the prefixed table and the row with prefix
         foreach ($tables as $table) {
 
-            if (!isset($rows[$table])) {
+            if (!is_string($table) || !isset($rows[$table])) {
                 continue;
             }
 
@@ -121,6 +121,11 @@ class Tagger
         $type = $this->reflector->getType();
 
         foreach ($tables as $table) {
+
+            if (!is_string($table)) {
+                continue;
+            }
+
             $isSpecific = (isset($rows[$table]) && !empty($rows[$table]));
 
             // These types of queries require a specific tag
