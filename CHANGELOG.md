@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [3.0.3] - 2019-05-24
+### Fixed
+- Fixed exception caused by raw queries (#66)
+
 ## [3.0.2] - 2019-05-08
 ### Fixed
 - Fixed limitation with hardcoded primary key names (#16)
