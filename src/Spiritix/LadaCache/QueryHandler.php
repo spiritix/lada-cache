@@ -199,7 +199,7 @@ class QueryHandler
             $this->collector = app()->make('lada.collector');
             $this->collector->startMeasuring();
         }
-        catch (\Illuminate\Contracts\Container\BindingResolutionException $e) {
+        catch (\Exception $e) {
             $this->collector = null;
         }
     }
