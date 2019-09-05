@@ -2,16 +2,16 @@
 
 namespace Spiritix\LadaCache\Tests;
 
-use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Hasher;
 use Spiritix\LadaCache\Reflector;
+use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Tests\Database\Models\Car;
 
 class IntegrationTest extends TestCase
 {
     private $cache;
 
-    public function setUp()
+    public function setUp(): void
     {
         parent::setUp();
 
@@ -21,7 +21,7 @@ class IntegrationTest extends TestCase
 
     public function testInsert()
     {
-        $this->factory->times(5)->create(Car::class);
+        factory(Car::class, 5)->create();
 
         $tableBuilder = Car::where(1, '=', 1);
         $tableBuilder->get();
@@ -44,7 +44,7 @@ class IntegrationTest extends TestCase
 
     public function testUpdate()
     {
-        $this->factory->times(5)->create(Car::class);
+        factory(Car::class, 5)->create();
 
         $tableBuilder = Car::where(1, '=', 1);
         $tableBuilder->get();
@@ -70,7 +70,7 @@ class IntegrationTest extends TestCase
 
     public function testDelete()
     {
-        $this->factory->times(5)->create(Car::class);
+        factory(Car::class, 5)->create();
 
         $tableBuilder = Car::where(1, '=', 1);
         $tableBuilder->get();
@@ -94,7 +94,7 @@ class IntegrationTest extends TestCase
 
     public function testTruncate()
     {
-        $this->factory->times(5)->create(Car::class);
+        factory(Car::class, 5)->create();
 
         $tableBuilder = Car::where(1, '=', 1);
         $tableBuilder->get();

@@ -8,7 +8,7 @@ class EncoderTest extends TestCase
 {
     private $encoder;
 
-    public function setUp()
+    public function setUp(): void
     {
         parent::setUp();
 
@@ -17,15 +17,15 @@ class EncoderTest extends TestCase
 
     public function testEncode()
     {
-        $this->assertInternalType('string', $this->encoder->encode(['array']));
-        $this->assertInternalType('string', $this->encoder->encode(5));
-        $this->assertInternalType('string', $this->encoder->encode('string'));
+        $this->assertIsString($this->encoder->encode(['array']));
+        $this->assertIsString($this->encoder->encode(5));
+        $this->assertIsString($this->encoder->encode('string'));
     }
 
     public function testDecode()
     {
-        $this->assertInternalType('array', $this->encoder->decode($this->encoder->encode(['array'])));
-        $this->assertInternalType('int', $this->encoder->decode($this->encoder->encode(5)));
-        $this->assertInternalType('string', $this->encoder->decode($this->encoder->encode('string')));
+        $this->assertIsArray($this->encoder->decode($this->encoder->encode(['array'])));
+        $this->assertIsInt($this->encoder->decode($this->encoder->encode(5)));
+        $this->assertIsString($this->encoder->decode($this->encoder->encode('string')));
     }
 }

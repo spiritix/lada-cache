@@ -1,34 +1,42 @@
 <?php
 
+use Faker\Generator as Faker;
 use Spiritix\LadaCache\Tests\Database\Models\Car;
-use Spiritix\LadaCache\Tests\Database\Models\CarMaterial;
 use Spiritix\LadaCache\Tests\Database\Models\Driver;
 use Spiritix\LadaCache\Tests\Database\Models\Engine;
 use Spiritix\LadaCache\Tests\Database\Models\Material;
+use Spiritix\LadaCache\Tests\Database\Models\CarMaterial;
 
-/* @var $factory callable */
-/* @var $faker \Laracasts\TestDummy\FakerAdapter */
-
-$factory(Car::class, [
+$factory->define(Car::class, function (Faker $faker) {
+    return [
     'name' => $faker->word,
     'engine_id' => $faker->randomNumber(8),
     'driver_id' => $faker->randomNumber(8),
-]);
+    ];
+});
 
-$factory(Engine::class, [
-    'name' => $faker->word,
-    'car_id' => $faker->randomNumber(8),
-]);
+$factory->define(Engine::class, function (Faker $faker) {
+    return [
+        'name' => $faker->word,
+        'car_id' => $faker->randomNumber(8),
+    ];
+});
 
-$factory(Driver::class, [
-    'name' => $faker->word,
-]);
+$factory->define(Driver::class, function (Faker $faker) {
+    return [
+        'name' => $faker->word,
+    ];
+});
 
-$factory(Material::class, [
-    'name' => $faker->word,
-]);
+$factory->define(Material::class, function (Faker $faker) {
+    return [
+        'name' => $faker->word,
+    ];
+});
 
-$factory(CarMaterial::class, [
-    'car_id' => $faker->randomNumber(8),
-    'material_id' => $faker->randomNumber(8),
-]);
+$factory->define(CarMaterial::class, function (Faker $faker) {
+    return [
+        'car_id' => $faker->randomNumber(8),
+       'material_id' => $faker->randomNumber(8),
+    ];
+});
