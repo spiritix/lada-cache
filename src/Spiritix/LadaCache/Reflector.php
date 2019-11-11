@@ -113,7 +113,36 @@ class Reflector
             }
         }
 
+        $this->getTablesFromWhere($this->queryBuilder,$tables);
+
         return $tables;
+    }
+
+    /**
+     * Get Table Names From Where Exists, Not Exists (whereHas/whereDoesnthave builder syntax)
+     *
+     * @param QueryBuilder $queryBuilder
+     */
+    private function getTablesFromWhere(QueryBuilder $queryBuilder, &$tables) {
+        if (!isset($queryBuilder->wheres)) {
+            return;
+        }
+        $wheres = $queryBuilder->wheres ?: [];
+        foreach ($wheres as $where) {
+            if ($where['type'] == 'Exists' || $where['type'] == 'NotExists') {
+                $tables[] = $where['query']->from;
+
+                // Add possible join tables
+                $joins = $where['query']->joins ?: [];
+                foreach ($joins as $join) {
+
+                    if (!in_array($join->table, $tables) && is_string($join->table)) {
+                        $tables[] = $join->table;
+                    }
+                }
+                $this->getTablesFromWhere($where['query'], $tables);
+            }
+        }
     }
 
     /**
