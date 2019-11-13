@@ -315,6 +315,74 @@ class TaggerTest extends TestCase
     /**
      * Testing that
      *
+     * select cars.id from cars where exists (select * from engines where cars.id = engines.car_id)
+     * Generates tags like:  table_unspecific_cars, table_unspecific_engines
+     */
+    public function testSelectWhereHas()
+    {
+        $this->factory->times(5)->create(Car::class)
+            ->each(function ($car) {
+                $engine = app(Engine::class);
+                $engine->name = 'XX';
+                $car->engine()->save($engine);
+            });
+
+        /** @var Car $car */
+        $car = app(Car::class);
+        /** @var Engine $engine */
+        $engine = app(Engine::class);
+
+        $sqlBuilder = $car->whereHas('engine')->select('cars.id');
+        $sqlBuilder->get();
+
+        $expectedTags = [
+            $this->getUnspecificTableTag($car->getTable()),
+            $this->getUnspecificTableTag($engine->getTable()),
+        ];
+
+        $generatedTags = $this->redis->keys($this->redis->prefix('') . 'tags:*');
+
+        $this->assertCacheHasTags($expectedTags);
+        $this->assertCountEquals($expectedTags, $generatedTags);
+    }
+
+    /**
+     * Testing that
+     *
+     * select cars.id from cars where not exists (select * from engines where cars.id = engines.car_id)
+     * Generates tags like:  table_unspecific_cars, table_unspecific_engines
+     */
+    public function testSelectWhereDoesntHave()
+    {
+        $this->factory->times(5)->create(Car::class)
+            ->each(function ($car) {
+                $engine = app(Engine::class);
+                $engine->name = 'XX';
+                $car->engine()->save($engine);
+            });
+
+        /** @var Car $car */
+        $car = app(Car::class);
+        /** @var Engine $engine */
+        $engine = app(Engine::class);
+
+        $sqlBuilder = $car->whereDoesntHave('engine')->select('cars.id');
+        $sqlBuilder->get();
+
+        $expectedTags = [
+            $this->getUnspecificTableTag($car->getTable()),
+            $this->getUnspecificTableTag($engine->getTable()),
+        ];
+
+        $generatedTags = $this->redis->keys($this->redis->prefix('') . 'tags:*');
+
+        $this->assertCacheHasTags($expectedTags);
+        $this->assertCountEquals($expectedTags, $generatedTags);
+    }
+
+    /**
+     * Testing that
+     *
      * INSERT INTO cars …….
      * Invalidates tags like:  table_unspecific_cars
      */

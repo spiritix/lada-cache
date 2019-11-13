@@ -113,7 +113,7 @@ class Reflector
             }
         }
 
-        $this->getTablesFromWhere($this->queryBuilder,$tables);
+        $this->getTablesFromWhere($this->queryBuilder, $tables);
 
         return $tables;
     }
