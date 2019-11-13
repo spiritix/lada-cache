@@ -67,5 +67,7 @@ class TestCase extends \Orchestra\Testbench\TestCase
             'database' => ':memory:',
             'prefix'   => '',
         ]);
+        //If the database redis has a prefix, Lada fails to flush the cache
+        $app['config']->set('database.redis.options.prefix', false);
     }
 }
