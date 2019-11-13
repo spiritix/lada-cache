@@ -20,7 +20,7 @@ class TestCase extends \Orchestra\Testbench\TestCase
         $this->useArtisan = version_compare('5.4', Application::VERSION, '>');
     }
 
-    public function setUp()
+    public function setUp(): void
     {
         parent::setUp();
 
@@ -41,7 +41,7 @@ class TestCase extends \Orchestra\Testbench\TestCase
         DB::beginTransaction();
     }
 
-    public function tearDown()
+    public function tearDown(): void
     {
         DB::rollback();
 

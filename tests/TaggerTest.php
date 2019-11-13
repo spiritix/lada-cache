@@ -13,7 +13,7 @@ class TaggerTest extends TestCase
 
     private $redis;
 
-    public function setUp()
+    public function setUp(): void
     {
         parent::setUp();
 

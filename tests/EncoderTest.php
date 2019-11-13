@@ -8,7 +8,7 @@ class EncoderTest extends TestCase
 {
     private $encoder;
 
-    public function setUp()
+    public function setUp(): void
     {
         parent::setUp();
 
