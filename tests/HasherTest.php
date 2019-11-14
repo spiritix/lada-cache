@@ -9,7 +9,7 @@ class HasherTest extends TestCase
 {
     private $hasher;
 
-    public function setUp()
+    public function setUp(): void
     {
         parent::setUp();
 
