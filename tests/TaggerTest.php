@@ -5,7 +5,9 @@ namespace Spiritix\LadaCache\Tests;
 use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Tagger;
 use Spiritix\LadaCache\Tests\Database\Models\Car;
+use Spiritix\LadaCache\Tests\Database\Models\CarMaterial;
 use Spiritix\LadaCache\Tests\Database\Models\Engine;
+use Spiritix\LadaCache\Tests\Database\Models\Material;
 
 class TaggerTest extends TestCase
 {
@@ -370,6 +372,52 @@ class TaggerTest extends TestCase
         $sqlBuilder->get();
 
         $expectedTags = [
+            $this->getUnspecificTableTag($car->getTable()),
+            $this->getUnspecificTableTag($engine->getTable()),
+        ];
+
+        $generatedTags = $this->redis->keys($this->redis->prefix('') . 'tags:*');
+
+        $this->assertCacheHasTags($expectedTags);
+        $this->assertCountEquals($expectedTags, $generatedTags);
+    }
+
+    /**
+     * Testing that
+     *
+     * select materials.id from materials where (exists (select * from cars inner join car_material on cars.id = car_material.car_id where materials.id = car_material.material_id and not exists (select * from engines where cars.id = engines.car_id)))
+     * Generates tags like:  table_unspecific_materials, table_unspecific_car_material, table_unspecific_cars, table_unspecific_engines
+     *
+     * This will test nested joins to verify that nesting works properly
+     */
+    public function testSelectWhereNested()
+    {
+        $this->factory->times(5)->create(Car::class)
+            ->each(function ($car) {
+                $engine = app(Engine::class);
+                $engine->name = 'XX';
+                $car->engine()->save($engine);
+            });
+
+        /** @var Material $material */
+        $material = app(Material::class);
+        /** @var CarMaterial $car_material */
+        $car_material = app(CarMaterial::class);
+        /** @var Car $car */
+        $car = app(Car::class);
+        /** @var Engine $engine */
+        $engine = app(Engine::class);
+
+        $sqlBuilder = $material->where(function($query) {
+            $query->whereHas('cars', function ($query) {
+                $query->whereDoesntHave('engine');
+            });
+        })->select('materials.id');
+        $sqlBuilder->get();
+
+        $expectedTags = [
+            $this->getUnspecificTableTag($material->getTable()),
+            $this->getUnspecificTableTag($car_material->getTable()),
             $this->getUnspecificTableTag($car->getTable()),
             $this->getUnspecificTableTag($engine->getTable()),
         ];

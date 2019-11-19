@@ -140,6 +140,8 @@ class Reflector
                         $tables[] = $join->table;
                     }
                 }
+            }
+            if (isset($where['query'])) {
                 $this->getTablesFromWhere($where['query'], $tables);
             }
         }
