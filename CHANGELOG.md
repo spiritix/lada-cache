@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [3.0.4] - 2019-11-22
+### Fixed
+- Fixed missing table tag for WhereHas/WhereDoesntHave functions
+
 ## [3.0.3] - 2019-05-24
 ### Fixed
 - Fixed exception caused by raw queries (#66)
