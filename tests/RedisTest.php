@@ -23,7 +23,7 @@ class RedisTest extends TestCase
 
     public function testCall()
     {
-        $this->expectException('Predis\ClientException');
+        $this->expectException('Error');
 
         $this->redis->doesNotExistInPredis();
     }
