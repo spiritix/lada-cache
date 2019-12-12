@@ -121,7 +121,7 @@ class Cache
     public function flush()
     {
         $prefix = config('database.redis.options.prefix');
-        $keys = $this->redis->scan(null, $prefix . $this->redis->prefix('*'));
+        $keys = $this->redis->keys($this->redis->prefix('*'));
 
         foreach ($keys as $key) {
             $this->redis->del(str_replace($prefix, '', $key));
