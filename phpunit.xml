@@ -9,7 +9,7 @@
          processIsolation="false"
          stopOnFailure="false">
     <logging>
-        <log type="coverage-clover" target="build/logs/clover.xml"/>
+        <log type="coverage-clover" target="build/logs/clover.xml" />
     </logging>
     <testsuites>
         <testsuite name="unit">
@@ -21,7 +21,7 @@
             <directory suffix=".php">./src</directory>
             <exclude>
                 <directory>./vendor</directory>
-            </exclude>>
+            </exclude>
         </whitelist>
     </filter>
 </phpunit>
