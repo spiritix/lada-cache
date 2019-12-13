@@ -12,6 +12,7 @@
 namespace Spiritix\LadaCache\Debug;
 
 use DebugBar\DataCollector\TimeDataCollector;
+use DebugBar\DebugBarException;
 
 /**
  * Custom collector for the Laravel Debugbar package.
@@ -66,6 +67,8 @@ class CacheCollector extends TimeDataCollector
 
     /**
      * Adds the quantity of the cache requests to the collector data.
+     *
+     * @throws DebugBarException
      *
      * @return array
      */
