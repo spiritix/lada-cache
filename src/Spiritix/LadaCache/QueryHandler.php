@@ -11,6 +11,7 @@
 
 namespace Spiritix\LadaCache;
 
+use Exception;
 use Spiritix\LadaCache\Debug\CacheCollector;
 use Spiritix\LadaCache\Database\QueryBuilder;
 
@@ -198,7 +199,7 @@ class QueryHandler
             $this->collector = app()->make('lada.collector');
             $this->collector->startMeasuring();
         }
-        catch (\Exception $e) {
+        catch (Exception $e) {
             $this->collector = null;
         }
     }

@@ -148,7 +148,7 @@ php artisan lada-cache:enable
 Contributions in any form are welcome.
 Please consider the following guidelines before submitting pull requests:
 
-- **Coding standard** - It's mostly [PSR-2](https://github.com/php-fig/fig-standards/blob/master/accepted/PSR-2-coding-style-guide.md) with some differences. 
+- **Coding standard** - It's [PSR-2](https://github.com/php-fig/fig-standards/blob/master/accepted/PSR-2-coding-style-guide.md)
 - **Add tests!** - Your PR won't be accepted if it doesn't have tests.
 - **Create feature branches** - I won't pull from your master branch.
 
