@@ -35,13 +35,6 @@ class LadaCacheServiceProvider extends ServiceProvider
     const CONFIG_FILE = 'lada-cache.php';
 
     /**
-     * Indicates if loading of the provider is deferred.
-     *
-     * @var bool
-     */
-    protected $defer = false;
-
-    /**
      * Bootstrap the application events.
      */
     public function boot()
@@ -54,7 +47,7 @@ class LadaCacheServiceProvider extends ServiceProvider
             __DIR__ . '/../../../config/' . self::CONFIG_FILE, str_replace('.php', '', self::CONFIG_FILE)
         );
 
-        if ($this->app->offsetExists('debugbar')) {
+        if ($this->app->bound('debugbar')) {
             $this->registerDebugbarCollector();
         }
     }
@@ -76,7 +69,7 @@ class LadaCacheServiceProvider extends ServiceProvider
      */
     public function provides()
     {
-        return ['lada.cache', 'lada.invalidator'];
+        return ['lada.redis', 'lada.cache', 'lada.invalidator', 'lada.handler'];
     }
 
     /**

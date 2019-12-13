@@ -43,7 +43,7 @@ trait LadaCacheTrait
     /**
      * Get a new query builder instance for the connection.
      *
-     * @return QueryBuilder
+     * @return \Illuminate\Database\Query\Builder
      */
     protected function newBaseQueryBuilder()
     {
