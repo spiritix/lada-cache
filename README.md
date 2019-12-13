@@ -9,6 +9,9 @@ A Redis based, fully automated and scalable database cache layer for Laravel
 [![Latest Unstable Version](https://poser.pugx.org/spiritix/lada-cache/v/unstable.svg)](https://packagist.org/packages/spiritix/lada-cache)
 [![License](https://poser.pugx.org/spiritix/lada-cache/license.svg)](https://packagist.org/packages/spiritix/lada-cache)
 
+_Contributors wanted!
+Since I am running two companies at the moment, my time is very limited. Send me an email if you are interested and I'll be happy to give you an introduction._
+
 ## Table of Contents
 
 - [Features](#features)
