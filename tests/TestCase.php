@@ -3,21 +3,10 @@
 namespace Spiritix\LadaCache\Tests;
 
 use Illuminate\Support\Facades\DB;
-use Illuminate\Foundation\Application;
-use Illuminate\Database\DatabaseServiceProvider;
 use Spiritix\LadaCache\LadaCacheServiceProvider;
 
 class TestCase extends \Orchestra\Testbench\TestCase
 {
-    private $useArtisan;
-
-    public function __construct($name = null, array $data = [], $dataName = '')
-    {
-        parent::__construct($name, $data, $dataName);
-
-        $this->useArtisan = version_compare('5.4', Application::VERSION, '>');
-    }
-
     public function setUp(): void
     {
         parent::setUp();
@@ -28,12 +17,8 @@ class TestCase extends \Orchestra\Testbench\TestCase
             '--realpath' => true,
         ];
 
-        if ($this->useArtisan) {
-            $this->artisan('migrate', $migrationParams);
-        } else {
-            $this->loadMigrationsFrom($migrationParams);
-        }
-        
+        $this->artisan('migrate', $migrationParams);
+
         $this->withFactories(realpath(__DIR__.'/../database/factories'));
         DB::beginTransaction();
     }
