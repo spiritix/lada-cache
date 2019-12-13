@@ -8,6 +8,9 @@ language: php
 services:
   - redis-server
 
+before_install:
+  - redis-cli info # Make sure Redis is running
+
 php:
   - 7.2
   - 7.3
