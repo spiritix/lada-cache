@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [4.0] - 2019-12-13
+### Added
+- Added support for Laravel 6.0
+
 ## [3.0.3] - 2019-05-24
 ### Fixed
 - Fixed exception caused by raw queries (#66)

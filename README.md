@@ -79,7 +79,7 @@ If you still want to use another storage backend, please feel free to contribute
 
 - PHP 7.2+
 - Redis 2+
-- Laravel 6.0+ (for older version see [Version Compatibility](#version-compatibility))
+- Laravel 6.0+ (for older versions see [Version Compatibility](#version-compatibility))
 - [Predis](https://github.com/nrk/predis) 
 - [Phpiredis](https://github.com/nrk/phpiredis) increases cache performance (optional)
 - [Laravel Debugbar](https://github.com/barryvdh/laravel-debugbar) provides debug information (optional)
@@ -92,6 +92,8 @@ Or simply run this command:
 ```sh
 composer require spiritix/lada-cache
 ```
+
+The Lada Cache service provider will automatically be installed using [Package Discovery](https://laravel.com/docs/6.x/packages#package-discovery).
 
 Finally, all your models must include the `Spiritix\LadaCache\Database\LadaCacheTrait` trait.
 It's a good practice to create a base model class which includes the trait and then gets extended by all your models.
