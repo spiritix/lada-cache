@@ -11,9 +11,8 @@
 
 namespace Spiritix\LadaCache;
 
-use ReflectionException;
-use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Debug\CacheCollector;
+use Spiritix\LadaCache\Database\QueryBuilder;
 
 /**
  * Query handler is Eloquent's gateway to access the cache.
@@ -199,7 +198,7 @@ class QueryHandler
             $this->collector = app()->make('lada.collector');
             $this->collector->startMeasuring();
         }
-        catch (ReflectionException $e) {
+        catch (\Exception $e) {
             $this->collector = null;
         }
     }

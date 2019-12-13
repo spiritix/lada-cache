@@ -2,15 +2,13 @@
 
 namespace Spiritix\LadaCache\Tests;
 
-use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\DB;
-use Laracasts\TestDummy\Factory;
+use Illuminate\Foundation\Application;
+use Illuminate\Database\DatabaseServiceProvider;
 use Spiritix\LadaCache\LadaCacheServiceProvider;
 
 class TestCase extends \Orchestra\Testbench\TestCase
 {
-    protected $factory;
-
     private $useArtisan;
 
     public function __construct($name = null, array $data = [], $dataName = '')
@@ -20,28 +18,27 @@ class TestCase extends \Orchestra\Testbench\TestCase
         $this->useArtisan = version_compare('5.4', Application::VERSION, '>');
     }
 
-    public function setUp()
+    public function setUp(): void
     {
         parent::setUp();
 
         $migrationParams = [
             '--database' => 'testing',
-            '--realpath' => realpath(__DIR__ . '/../database/migrations'),
+            '--path' => realpath(__DIR__.'/../database/migrations'),
+            '--realpath' => true,
         ];
 
         if ($this->useArtisan) {
             $this->artisan('migrate', $migrationParams);
-        }
-        else {
+        } else {
             $this->loadMigrationsFrom($migrationParams);
         }
-
-        $this->factory = new Factory(__DIR__ . '/../database/factories');
-
+        
+        $this->withFactories(realpath(__DIR__.'/../database/factories'));
         DB::beginTransaction();
     }
 
-    public function tearDown()
+    public function tearDown(): void
     {
         DB::rollback();
 

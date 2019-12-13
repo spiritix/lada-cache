@@ -8,7 +8,7 @@ class InvalidatorTest extends TestCase
 
     private $invalidator;
 
-    public function setUp()
+    public function setUp(): void
     {
         parent::setUp();
 
