@@ -186,8 +186,7 @@ class Reflector
                 if ($where['operator'] === '=' && is_numeric($where['value'])) {
                     $rows[$table][] = $where['value'];
                 }
-            }
-            else if ($where['type'] === 'In') {
+            } else if ($where['type'] === 'In') {
                 $rows[$table] += $where['values'];
             }
         }
@@ -274,12 +273,11 @@ class Reflector
 
         $parts = explode('.', $sqlString);
 
-        // If we have three parts, the identifier also contains the database name
+        // If we have three parts, the identifier also contains the database name$
+        // Otherwise it contains table and column
         if (count($parts) === 3) {
             $table = $parts[1];
-        }
-        // Otherwise it contains table and column
-        else {
+        } else {
             $table = $parts[0];
         }
 

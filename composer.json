@@ -11,21 +11,26 @@
         }
     ],
     "require": {
-        "php": ">=7.1",
-        "illuminate/support": "~5.7",
-        "illuminate/database": "~5.7",
-        "illuminate/redis": "~5.7",
-        "predis/predis": "~1.0"
+        "php": ">=7.2",
+        "illuminate/support": "^6.0",
+        "illuminate/database": "^6.0",
+        "illuminate/redis": "^6.0"
     },
     "require-dev": {
+<<<<<<< HEAD
         "phpunit/phpunit": "~7.0",
         "codeclimate/php-test-reporter": "dev-master",
         "orchestra/testbench": "~3.7",
         "laracasts/testdummy": "~2.3",
         "mockery/mockery": "^1.0"
+=======
+        "phpunit/phpunit": "^8.0",
+        "orchestra/testbench": "^4.0",
+        "mockery/mockery": "^1.2",
+        "barryvdh/laravel-debugbar": "^3.2"
+>>>>>>> origin/74-laravel6-support
     },
     "suggest": {
-        "ext-phpiredis": "Allows faster serialization and deserialization of the Redis protocol",
         "barryvdh/laravel-debugbar": "Provides debug information about the cache"
     },
     "autoload": {
@@ -39,5 +44,12 @@
             "Spiritix\\LadaCache\\Tests\\Database\\": "database/"
         }
     },
-    "minimum-stability": "stable"
+    "minimum-stability": "stable",
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Spiritix\\LadaCache\\LadaCacheServiceProvider"
+            ]
+        }
+    }
 }

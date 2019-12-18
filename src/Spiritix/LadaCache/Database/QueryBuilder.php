@@ -50,9 +50,13 @@ class QueryBuilder extends Builder
      * @param  QueryHandler        $handler
      * @param  Model               $model
      */
-    public function __construct(ConnectionInterface $connection, Grammar $grammar, Processor $processor,
-                                QueryHandler $handler, Model $model)
-    {
+    public function __construct(
+        ConnectionInterface $connection,
+        Grammar $grammar,
+        Processor $processor,
+        QueryHandler $handler,
+        Model $model
+    ) {
         parent::__construct($connection, $grammar, $processor);
 
         $this->handler = $handler;
@@ -84,10 +88,11 @@ class QueryBuilder extends Builder
     /**
      * Add a subselect expression to the query.
      *
-     * @param  \Closure|static|string $query
+     * @param  \Closure|\Illuminate\Database\Query\Builder|string  $query
      * @param  string  $as
+     * @return \Illuminate\Database\Query\Builder|static
      *
-     * @return \Illuminate\Database\Query\Builder
+     * @throws \InvalidArgumentException
      */
     public function selectSub($query, $as)
     {
@@ -100,8 +105,7 @@ class QueryBuilder extends Builder
     /**
      * Insert a new record into the database.
      *
-     * @param  array $values
-     *
+     * @param  array  $values
      * @return bool
      */
     public function insert(array $values)
@@ -118,8 +122,7 @@ class QueryBuilder extends Builder
      * Insert a new record and get the value of the primary key.
      *
      * @param  array  $values
-     * @param  string $sequence
-     *
+     * @param  string|null  $sequence
      * @return int
      */
     public function insertGetId(array $values, $sequence = null)
@@ -135,8 +138,7 @@ class QueryBuilder extends Builder
     /**
      * Update a record in the database.
      *
-     * @param  array $values
-     *
+     * @param  array  $values
      * @return int
      */
     public function update(array $values)
@@ -152,8 +154,7 @@ class QueryBuilder extends Builder
     /**
      * Delete a record from the database.
      *
-     * @param  null|int $id
-     *
+     * @param  mixed  $id
      * @return int
      */
     public function delete($id = null)
@@ -168,6 +169,8 @@ class QueryBuilder extends Builder
 
     /**
      * Run a truncate statement on the table.
+     *
+     * @return void
      */
     public function truncate()
     {

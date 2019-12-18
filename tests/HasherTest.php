@@ -18,7 +18,7 @@ class HasherTest extends TestCase
 
     public function testHash()
     {
-        $this->assertInternalType('string', $this->hasher->getHash());
+        $this->assertIsString($this->hasher->getHash());
     }
 
     public function testDatabase()

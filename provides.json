@@ -1,5 +1,0 @@
-{
-    "providers": [
-        "Spiritix\\LadaCache\\LadaCacheServiceProvider"
-    ]
-}

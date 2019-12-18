@@ -13,14 +13,13 @@ namespace Spiritix\LadaCache\Database\Connection;
 
 use Spiritix\LadaCache\Database\Connection;
 use Doctrine\DBAL\Driver\PDOPgSql\Driver as DoctrineDriver;
-use Illuminate\Database\Query\Processors\PostgresProcessor;
 use Illuminate\Database\Query\Grammars\PostgresGrammar as QueryGrammar;
+use Illuminate\Database\Query\Processors\PostgresProcessor;
 use Illuminate\Database\Schema\Grammars\PostgresGrammar as SchemaGrammar;
+use Illuminate\Database\Schema\PostgresBuilder;
 
 /**
  * Overrides Laravel's PostgreSQL connection class.
- *
- * Contains code smell copy-pasted from Laravel :(
  *
  * @package Spiritix\LadaCache\Database\Connection
  * @author  Matthias Isler <mi@matthias-isler.ch>
@@ -38,6 +37,20 @@ class PostgresConnection extends Connection
     }
 
     /**
+     * Get a schema builder instance for the connection.
+     *
+     * @return \Illuminate\Database\Schema\PostgresBuilder
+     */
+    public function getSchemaBuilder()
+    {
+        if (is_null($this->schemaGrammar)) {
+            $this->useDefaultSchemaGrammar();
+        }
+
+        return new PostgresBuilder($this);
+    }
+
+    /**
      * Get the default schema grammar instance.
      *
      * @return \Illuminate\Database\Schema\Grammars\PostgresGrammar
@@ -48,6 +61,7 @@ class PostgresConnection extends Connection
     }
 
     /**
+     *
      * Get the default post processor instance.
      *
      * @return \Illuminate\Database\Query\Processors\PostgresProcessor

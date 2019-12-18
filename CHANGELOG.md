@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [4.0] - 2019-12-18
+### Added
+- Added support for Laravel 6.0
+
 ## [3.0.4] - 2019-11-22
 ### Fixed
 - Fixed missing table tag for WhereHas/WhereDoesntHave functions

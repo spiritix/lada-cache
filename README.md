@@ -35,14 +35,15 @@ For further information on how this library works and how to debug it please hav
 - Intelligent cache invalidation with high granularity
 - Works with existing code, no changes required after setup
 - Possibility to cache only specific models or exclude some models
-- Makes use of [Laravel Redis](http://laravel.com/docs/5.7/redis) (supports [clustering](https://laravel.com/docs/5.7/redis#introduction))
+- Makes use of [Laravel Redis](https://laravel.com/docs/6.x/redis) (supports [clustering](https://laravel.com/docs/6.x/redis#configuration))
 
 ## Version Compatibility
 
  Laravel  | PHP       | Lada Cache
 :---------|:----------|:----------
  5.1-5.6  | 5.6.4+    | 2.x
- 5.7      | 7.1+      | 3.x
+ 5.7-5.8  | 7.1+      | 3.x
+ 6.0+     | 7.2+      | 4.x
 
 ## Performance
 
@@ -68,7 +69,7 @@ Install, scale up and lean back.
 
 ## Why only Redis?
 
-As you may have discovered while looking at the source code, this library is built directly on top of [Laravel Redis](http://laravel.com/docs/5.7/redis) instead of [Laravel Cache](http://laravel.com/docs/5.7/cache), which would make more sense from a general point of view.
+As you may have discovered while looking at the source code, this library is built directly on top of [Laravel Redis](https://laravel.com/docs/6.x/redis) instead of [Laravel Cache](https://laravel.com/docs/6.x/cache), which would make more sense from a general point of view.
 However, there are several important reasons behind this decision:
 
 - Storage must be in-memory (wouldn't make much sense otherwise)
@@ -79,32 +80,22 @@ If you still want to use another storage backend, please feel free to contribute
 
 ## Requirements
 
-- PHP 7.1+
+- PHP 7.2+
 - Redis 2+
-- Laravel 5.7+
-- [Predis](https://github.com/nrk/predis) 
-- [Phpiredis](https://github.com/nrk/phpiredis) increases cache performance (optional)
+- Laravel 6.0+ (for older versions see [Version Compatibility](#version-compatibility))
+- [PhpRedis](https://github.com/phpredis/phpredis) increases cache performance (optional)
 - [Laravel Debugbar](https://github.com/barryvdh/laravel-debugbar) provides debug information (optional)
 
 ## Installation
 
-Lada Cache can be installed via [Composer](http://getcomposer.org) by requiring the
-`spiritix/lada-cache` package in your project's `composer.json`.
+Lada Cache can be installed via [Composer](http://getcomposer.org) by requiring the `spiritix/lada-cache` package in your project's `composer.json`.
 Or simply run this command:
 
 ```sh
 composer require spiritix/lada-cache
 ```
 
-Now you must register the service provider when bootstrapping your Laravel application.
-Find the `providers` key in your `config/app.php` and register the Lada Cache Service Provider.
-
-```php
-    'providers' => array(
-        // ...
-        Spiritix\LadaCache\LadaCacheServiceProvider::class,
-    )
-```
+The Lada Cache service provider will automatically be installed using [Package Discovery](https://laravel.com/docs/6.x/packages#package-discovery).
 
 Finally, all your models must include the `Spiritix\LadaCache\Database\LadaCacheTrait` trait.
 It's a good practice to create a base model class which includes the trait and then gets extended by all your models.
@@ -126,7 +117,7 @@ In the configuration, you will find the possibility to include or exclude specif
 Use the following command to publish the ``lada-cache.php``config file to your configuration folder:
 
 ```shell
-php artisan vendor:publish --provider="Spiritix\LadaCache\LadaCacheServiceProvider" --tag=config
+php artisan vendor:publish 
 ```
 
 ## Console commands
@@ -146,8 +137,8 @@ php artisan lada-cache:enable
 
 ## Known issues and limitations
 
-- Doesn't work with [raw SQL queries](http://laravel.com/docs/5.7/database#running-queries). This would require an SQL parser to be implemented which is quite hard and very inefficient. As long as you are only using raw queries for reading data, it just won't get cached. Serious issues will only occur if you use raw queries for writing data (which you shouldn't be doing anyway).
-- Doesn't work with [multiple connections](https://laravel.com/docs/5.7/database#using-multiple-database-connections) if done like ``DB::connection('foo')``. Instead, specify the ``protected $connection = 'foo';`` property in the relevant models.
+- Doesn't work with [raw SQL queries](https://laravel.com/docs/6.x/database#running-queries). This would require an SQL parser to be implemented which is quite hard and very inefficient. As long as you are only using raw queries for reading data, it just won't get cached. Serious issues will only occur if you use raw queries for writing data (which you shouldn't be doing anyway).
+- Doesn't work with [multiple connections](https://laravel.com/docs/6.x/database#using-multiple-database-connections) if done like ``DB::connection('foo')``. Instead, specify the ``protected $connection = 'foo';`` property in the relevant models.
 - The cache must be truncated manually after migrations are executed.
 - Pessimistic locking (sharedLock, lockForUpdate) requires usage of [raw sql queries](https://github.com/spiritix/lada-cache/issues/49).
 
@@ -156,7 +147,7 @@ php artisan lada-cache:enable
 Contributions in any form are welcome.
 Please consider the following guidelines before submitting pull requests:
 
-- **Coding standard** - It's mostly [PSR-2](https://github.com/php-fig/fig-standards/blob/master/accepted/PSR-2-coding-style-guide.md) with some differences. 
+- **Coding standard** - It's [PSR-2](https://github.com/php-fig/fig-standards/blob/master/accepted/PSR-2-coding-style-guide.md)
 - **Add tests!** - Your PR won't be accepted if it doesn't have tests.
 - **Create feature branches** - I won't pull from your master branch.
 

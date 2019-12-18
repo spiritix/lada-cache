@@ -2,8 +2,8 @@
 
 namespace Spiritix\LadaCache\Tests;
 
-use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Tagger;
+use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Tests\Database\Models\Car;
 use Spiritix\LadaCache\Tests\Database\Models\CarMaterial;
 use Spiritix\LadaCache\Tests\Database\Models\Engine;
@@ -33,7 +33,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWithoutCondition()
     {
-        $this->factory->times(5)->create(Car::class);
+        factory(Car::class, 5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
@@ -56,7 +56,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWithUnspecificWhere()
     {
-        $this->factory->times(5)->create(Car::class);
+        factory(Car::class, 5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
@@ -79,7 +79,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWithInCondition()
     {
-        $this->factory->times(5)->create(Car::class);
+        factory(Car::class, 5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
@@ -108,7 +108,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWithInConditionAndSpecificIdContidionVariant1()
     {
-        $this->factory->times(5)->create(Car::class)
+        factory(Car::class, 5)->create()
             ->each(function ($car) {
                 $engine = app(Engine::class);
                 $engine->name = 'XX';
@@ -149,7 +149,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWithInConditionAndSpecificIdConditionVariant2()
     {
-        $this->factory->times(5)->create(Car::class)
+        factory(Car::class, 5)->create()
             ->each(function ($car) {
                 $engine = app(Engine::class);
                 $engine->name = 'XX';
@@ -196,7 +196,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWithJoinAndInConditionAndSpecificIdCondition()
     {
-        $this->factory->times(5)->create(Car::class)
+        factory(Car::class, 5)->create()
             ->each(function ($car) {
                 $engine = app(Engine::class);
                 $engine->name = 'XX';
@@ -246,7 +246,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWithJoinSub()
     {
-        $this->factory->times(5)->create(Car::class)
+        factory(Car::class, 5)->create()
             ->each(function ($car) {
                 $engine = app(Engine::class);
                 $engine->name = 'XX';
@@ -288,7 +288,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWithCount()
     {
-        $this->factory->times(5)->create(Car::class)
+        factory(Car::class, 5)->create()
             ->each(function ($car) {
                 $engine = app(Engine::class);
                 $engine->name = 'XX';
@@ -436,7 +436,7 @@ class TaggerTest extends TestCase
      */
     public function testInsertWithoutCondition()
     {
-        $this->factory->times(5)->create(Car::class)
+        factory(Car::class, 5)->create()
             ->each(function ($car) {
                 $engine = app(Engine::class);
                 $engine->name = 'XX';
@@ -478,7 +478,7 @@ class TaggerTest extends TestCase
      */
     public function testUpdateWithUnspecificCondition()
     {
-        $this->factory->times(5)->create(Car::class);
+        factory(Car::class, 5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
@@ -520,7 +520,7 @@ class TaggerTest extends TestCase
      */
     public function testUpdateWithSpecificIdCondition()
     {
-        $this->factory->times(5)->create(Car::class);
+        factory(Car::class, 5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
@@ -564,7 +564,7 @@ class TaggerTest extends TestCase
      */
     public function testUpdateWithSpecificInCondition()
     {
-        $this->factory->times(5)->create(Car::class);
+        factory(Car::class, 5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
@@ -613,7 +613,7 @@ class TaggerTest extends TestCase
      */
     public function testDeleteWithUnspecificCondition()
     {
-        $this->factory->times(5)->create(Car::class);
+        factory(Car::class, 5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
@@ -652,7 +652,7 @@ class TaggerTest extends TestCase
      */
     public function testDeleteWithSpecificIdCondition()
     {
-        $this->factory->times(5)->create(Car::class);
+        factory(Car::class, 5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
@@ -692,7 +692,7 @@ class TaggerTest extends TestCase
      */
     public function testDeleteWithSpecificInIdCondition()
     {
-        $this->factory->times(5)->create(Car::class);
+        factory(Car::class, 5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
@@ -737,7 +737,7 @@ class TaggerTest extends TestCase
      */
     public function testTruncate()
     {
-        $this->factory->times(5)->create(Car::class);
+        factory(Car::class, 5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
