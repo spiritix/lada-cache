@@ -83,8 +83,7 @@ If you still want to use another storage backend, please feel free to contribute
 - PHP 7.2+
 - Redis 2+
 - Laravel 6.0+ (for older versions see [Version Compatibility](#version-compatibility))
-- [Predis](https://github.com/nrk/predis) 
-- [Phpiredis](https://github.com/nrk/phpiredis) increases cache performance (optional)
+- [PhpRedis](https://github.com/phpredis/phpredis) increases cache performance (optional)
 - [Laravel Debugbar](https://github.com/barryvdh/laravel-debugbar) provides debug information (optional)
 
 ## Installation

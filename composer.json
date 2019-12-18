@@ -14,8 +14,7 @@
         "php": ">=7.2",
         "illuminate/support": "^6.0",
         "illuminate/database": "^6.0",
-        "illuminate/redis": "^6.0",
-        "predis/predis": "^1.1"
+        "illuminate/redis": "^6.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^8.0",
@@ -24,7 +23,6 @@
         "barryvdh/laravel-debugbar": "^3.2"
     },
     "suggest": {
-        "ext-phpiredis": "Allows faster serialization and deserialization of the Redis protocol",
         "barryvdh/laravel-debugbar": "Provides debug information about the cache"
     },
     "autoload": {
