@@ -17,18 +17,10 @@
         "illuminate/redis": "^6.0"
     },
     "require-dev": {
-<<<<<<< HEAD
-        "phpunit/phpunit": "~7.0",
-        "codeclimate/php-test-reporter": "dev-master",
-        "orchestra/testbench": "~3.7",
-        "laracasts/testdummy": "~2.3",
-        "mockery/mockery": "^1.0"
-=======
         "phpunit/phpunit": "^8.0",
         "orchestra/testbench": "^4.0",
         "mockery/mockery": "^1.2",
         "barryvdh/laravel-debugbar": "^3.2"
->>>>>>> origin/74-laravel6-support
     },
     "suggest": {
         "barryvdh/laravel-debugbar": "Provides debug information about the cache"
