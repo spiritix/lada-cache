@@ -322,7 +322,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWhereHas()
     {
-        $this->factory->times(5)->create(Car::class)
+        factory(Car::class, 5)->create()
             ->each(function ($car) {
                 $engine = app(Engine::class);
                 $engine->name = 'XX';
@@ -356,7 +356,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWhereDoesntHave()
     {
-        $this->factory->times(5)->create(Car::class)
+        factory(Car::class, 5)->create()
             ->each(function ($car) {
                 $engine = app(Engine::class);
                 $engine->name = 'XX';
@@ -392,7 +392,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWhereNested()
     {
-        $this->factory->times(5)->create(Car::class)
+        factory(Car::class, 5)->create()
             ->each(function ($car) {
                 $engine = app(Engine::class);
                 $engine->name = 'XX';
