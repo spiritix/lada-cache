@@ -17,6 +17,11 @@ matrix:
     allow_failures:
         - php: nightly
 
+before_install:
+  - sudo apt-get -y install php-redis
+  - echo 'extension = redis.so' >> ~/.phpenv/versions/$(phpenv version-name)/etc/php.ini
+  - php -r "if (new Redis() == true){ echo \"OK \r\n\"; }"
+
 before_script:
   - travis_wait composer self-update
   - travis_wait composer install --prefer-source --no-interaction
