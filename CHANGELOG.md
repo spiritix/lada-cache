@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [4.0.2] - 2020-01-23
+### Fixed
+- Fixed bug with ignoring disabled cache in invalidation (#86)
+
+## [4.0.1] - 2019-12-18
+### Fixed
+- Hotfix for merge issue
+
 ## [4.0] - 2019-12-18
 ### Added
 - Added support for Laravel 6.0
