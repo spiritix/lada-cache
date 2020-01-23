@@ -178,6 +178,14 @@ class QueryHandler
         /* @var Reflector $reflector */
         $reflector = new Reflector($this->builder, $statementType, $values);
 
+        /* @var Manager $manager */
+        $manager = new Manager($reflector);
+
+        // If cache is disabled, abort already here to save time
+        if (!$manager->shouldCache()) {
+            return;
+        }
+
         /* @var Tagger $tagger */
         $tagger = new Tagger($reflector);
         $tags = $tagger->getTags();
