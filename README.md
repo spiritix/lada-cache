@@ -35,7 +35,7 @@ For further information on how this library works and how to debug it please hav
 - Intelligent cache invalidation with high granularity
 - Works with existing code, no changes required after setup
 - Possibility to cache only specific models or exclude some models
-- Makes use of [Laravel Redis](https://laravel.com/docs/6.x/redis) (supports [clustering](https://laravel.com/docs/6.x/redis#configuration))
+- Makes use of [Laravel Redis](https://laravel.com/docs/7.x/redis) (supports [clustering](https://laravel.com/docs/7.x/redis#configuration))
 
 ## Version Compatibility
 
@@ -43,7 +43,8 @@ For further information on how this library works and how to debug it please hav
 :---------|:----------|:----------
  5.1-5.6  | 5.6.4+    | 2.x
  5.7-5.8  | 7.1+      | 3.x
- 6.0+     | 7.2+      | 4.x
+ 6.x      | 7.2+      | 4.x
+ 7.x      | 7.2+      | 5.x
 
 ## Performance
 
@@ -69,7 +70,7 @@ Install, scale up and lean back.
 
 ## Why only Redis?
 
-As you may have discovered while looking at the source code, this library is built directly on top of [Laravel Redis](https://laravel.com/docs/6.x/redis) instead of [Laravel Cache](https://laravel.com/docs/6.x/cache), which would make more sense from a general point of view.
+As you may have discovered while looking at the source code, this library is built directly on top of [Laravel Redis](https://laravel.com/docs/7.x/redis) instead of [Laravel Cache](https://laravel.com/docs/7.x/cache), which would make more sense from a general point of view.
 However, there are several important reasons behind this decision:
 
 - Storage must be in-memory (wouldn't make much sense otherwise)
@@ -82,7 +83,7 @@ If you still want to use another storage backend, please feel free to contribute
 
 - PHP 7.2+
 - Redis 2+
-- Laravel 6.0+ (for older versions see [Version Compatibility](#version-compatibility))
+- Laravel 7.0+ (for older versions see [Version Compatibility](#version-compatibility))
 - [PhpRedis](https://github.com/phpredis/phpredis) increases cache performance (optional)
 - [Laravel Debugbar](https://github.com/barryvdh/laravel-debugbar) provides debug information (optional)
 
@@ -95,7 +96,7 @@ Or simply run this command:
 composer require spiritix/lada-cache
 ```
 
-The Lada Cache service provider will automatically be installed using [Package Discovery](https://laravel.com/docs/6.x/packages#package-discovery).
+The Lada Cache service provider will automatically be installed using [Package Discovery](https://laravel.com/docs/7.x/packages#package-discovery).
 
 Finally, all your models must include the `Spiritix\LadaCache\Database\LadaCacheTrait` trait.
 It's a good practice to create a base model class which includes the trait and then gets extended by all your models.
@@ -137,8 +138,8 @@ php artisan lada-cache:enable
 
 ## Known issues and limitations
 
-- Doesn't work with [raw SQL queries](https://laravel.com/docs/6.x/database#running-queries). This would require an SQL parser to be implemented which is quite hard and very inefficient. As long as you are only using raw queries for reading data, it just won't get cached. Serious issues will only occur if you use raw queries for writing data (which you shouldn't be doing anyway).
-- Doesn't work with [multiple connections](https://laravel.com/docs/6.x/database#using-multiple-database-connections) if done like ``DB::connection('foo')``. Instead, specify the ``protected $connection = 'foo';`` property in the relevant models.
+- Doesn't work with [raw SQL queries](https://laravel.com/docs/7.x/database#running-queries). This would require an SQL parser to be implemented which is quite hard and very inefficient. As long as you are only using raw queries for reading data, it just won't get cached. Serious issues will only occur if you use raw queries for writing data (which you shouldn't be doing anyway).
+- Doesn't work with [multiple connections](https://laravel.com/docs/7.x/database#using-multiple-database-connections) if done like ``DB::connection('foo')``. Instead, specify the ``protected $connection = 'foo';`` property in the relevant models.
 - The cache must be truncated manually after migrations are executed.
 - Pessimistic locking (sharedLock, lockForUpdate) requires usage of [raw sql queries](https://github.com/spiritix/lada-cache/issues/49).
 
