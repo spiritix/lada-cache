@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [5.0] - 2020-03-18
+### Added
+- Added support for Laravel 7
+
 ## [4.0.2] - 2020-01-23
 ### Fixed
 - Fixed bug with ignoring disabled cache in invalidation (#86)
@@ -12,7 +16,7 @@
 
 ## [4.0] - 2019-12-18
 ### Added
-- Added support for Laravel 6.0
+- Added support for Laravel 6
 
 ## [3.0.4] - 2019-11-22
 ### Fixed
