@@ -55,7 +55,7 @@ class QueryBuilder extends Builder
         Grammar $grammar,
         Processor $processor,
         QueryHandler $handler,
-        Model $model = null
+        Model $model
     ) {
         parent::__construct($connection, $grammar, $processor);
 
