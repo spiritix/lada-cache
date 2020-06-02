@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [5.0.2] - 2020-06-02
+### Fixed
+- Hotfix for previous release
+
 ## [5.0.1] - 2020-05-25
 ### Fixed
 - Fixed bug with Laravel Telescope (#91)
