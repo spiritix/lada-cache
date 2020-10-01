@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [5.1] - 2020-10-01
+### Fixed
+- Added support for Laravel 8
+
 ## [5.0.2] - 2020-06-02
 ### Fixed
 - Hotfix for previous release
