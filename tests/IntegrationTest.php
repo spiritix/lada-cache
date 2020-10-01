@@ -21,7 +21,7 @@ class IntegrationTest extends TestCase
 
     public function testInsert()
     {
-        factory(Car::class, 5)->create();
+        Car::factory(5)->create();
 
         $tableBuilder = Car::where(1, '=', 1);
         $tableBuilder->get();
@@ -44,7 +44,7 @@ class IntegrationTest extends TestCase
 
     public function testUpdate()
     {
-        factory(Car::class, 5)->create();
+        Car::factory(5)->create();
 
         $tableBuilder = Car::where(1, '=', 1);
         $tableBuilder->get();
@@ -70,7 +70,7 @@ class IntegrationTest extends TestCase
 
     public function testDelete()
     {
-        factory(Car::class, 5)->create();
+        Car::factory(5)->create();
 
         $tableBuilder = Car::where(1, '=', 1);
         $tableBuilder->get();
@@ -94,7 +94,7 @@ class IntegrationTest extends TestCase
 
     public function testTruncate()
     {
-        factory(Car::class, 5)->create();
+        Car::factory(5)->create();
 
         $tableBuilder = Car::where(1, '=', 1);
         $tableBuilder->get();

@@ -2,8 +2,10 @@
 
 namespace Spiritix\LadaCache\Tests;
 
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\DB;
 use Spiritix\LadaCache\LadaCacheServiceProvider;
+use Spiritix\LadaCache\Tests\Database\factories\CarFactory;
 
 class TestCase extends \Orchestra\Testbench\TestCase
 {
@@ -19,7 +21,10 @@ class TestCase extends \Orchestra\Testbench\TestCase
 
         $this->artisan('migrate', $migrationParams);
 
-        $this->withFactories(realpath(__DIR__.'/../database/factories'));
+        Factory::guessFactoryNamesUsing(static function (string $modelName) {
+            return sprintf("Spiritix\\LadaCache\\Tests\\Database\\Factories\\%sFactory", class_basename($modelName));
+        });
+
         DB::beginTransaction();
     }
 

@@ -12,13 +12,13 @@
     ],
     "require": {
         "php": ">=7.2",
-        "illuminate/support": "^7.0",
-        "illuminate/database": "^7.0",
-        "illuminate/redis": "^7.0"
+        "illuminate/support": "^7.0|^8.0",
+        "illuminate/database": "^7.0|^8.0",
+        "illuminate/redis": "^7.0|^8.0"
     },
     "require-dev": {
-        "phpunit/phpunit": "^8.0",
-        "orchestra/testbench": "^5.1",
+        "phpunit/phpunit": "^9.0",
+        "orchestra/testbench": "^6.0",
         "mockery/mockery": "^1.3",
         "barryvdh/laravel-debugbar": "^3.2"
     },
@@ -33,7 +33,8 @@
     "autoload-dev": {
         "psr-4": {
             "Spiritix\\LadaCache\\Tests\\": "tests/",
-            "Spiritix\\LadaCache\\Tests\\Database\\": "database/"
+            "Spiritix\\LadaCache\\Tests\\Database\\": "database/",
+            "Spiritix\\LadaCache\\Tests\\Database\\Factories\\": "database/factories"
         }
     },
     "minimum-stability": "stable",

@@ -33,7 +33,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWithoutCondition()
     {
-        factory(Car::class, 5)->create();
+        Car::factory(5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
@@ -56,7 +56,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWithUnspecificWhere()
     {
-        factory(Car::class, 5)->create();
+        Car::factory(5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
@@ -79,7 +79,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWithInCondition()
     {
-        factory(Car::class, 5)->create();
+        Car::factory(5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
@@ -108,7 +108,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWithInConditionAndSpecificIdContidionVariant1()
     {
-        factory(Car::class, 5)->create()
+        Car::factory(5)->create()
             ->each(function ($car) {
                 $engine = app(Engine::class);
                 $engine->name = 'XX';
@@ -149,7 +149,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWithInConditionAndSpecificIdConditionVariant2()
     {
-        factory(Car::class, 5)->create()
+        Car::factory(5)->create()
             ->each(function ($car) {
                 $engine = app(Engine::class);
                 $engine->name = 'XX';
@@ -196,7 +196,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWithJoinAndInConditionAndSpecificIdCondition()
     {
-        factory(Car::class, 5)->create()
+        Car::factory(5)->create()
             ->each(function ($car) {
                 $engine = app(Engine::class);
                 $engine->name = 'XX';
@@ -246,7 +246,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWithJoinSub()
     {
-        factory(Car::class, 5)->create()
+        Car::factory(5)->create()
             ->each(function ($car) {
                 $engine = app(Engine::class);
                 $engine->name = 'XX';
@@ -288,7 +288,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWithCount()
     {
-        factory(Car::class, 5)->create()
+        Car::factory(5)->create()
             ->each(function ($car) {
                 $engine = app(Engine::class);
                 $engine->name = 'XX';
@@ -322,7 +322,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWhereHas()
     {
-        factory(Car::class, 5)->create()
+        Car::factory(5)->create()
             ->each(function ($car) {
                 $engine = app(Engine::class);
                 $engine->name = 'XX';
@@ -356,7 +356,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWhereDoesntHave()
     {
-        factory(Car::class, 5)->create()
+        Car::factory(5)->create()
             ->each(function ($car) {
                 $engine = app(Engine::class);
                 $engine->name = 'XX';
@@ -392,7 +392,7 @@ class TaggerTest extends TestCase
      */
     public function testSelectWhereNested()
     {
-        factory(Car::class, 5)->create()
+        Car::factory(5)->create()
             ->each(function ($car) {
                 $engine = app(Engine::class);
                 $engine->name = 'XX';
@@ -436,7 +436,7 @@ class TaggerTest extends TestCase
      */
     public function testInsertWithoutCondition()
     {
-        factory(Car::class, 5)->create()
+        Car::factory(5)->create()
             ->each(function ($car) {
                 $engine = app(Engine::class);
                 $engine->name = 'XX';
@@ -478,7 +478,7 @@ class TaggerTest extends TestCase
      */
     public function testUpdateWithUnspecificCondition()
     {
-        factory(Car::class, 5)->create();
+        Car::factory(5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
@@ -520,7 +520,7 @@ class TaggerTest extends TestCase
      */
     public function testUpdateWithSpecificIdCondition()
     {
-        factory(Car::class, 5)->create();
+        Car::factory(5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
@@ -564,7 +564,7 @@ class TaggerTest extends TestCase
      */
     public function testUpdateWithSpecificInCondition()
     {
-        factory(Car::class, 5)->create();
+        Car::factory(5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
@@ -613,7 +613,7 @@ class TaggerTest extends TestCase
      */
     public function testDeleteWithUnspecificCondition()
     {
-        factory(Car::class, 5)->create();
+        Car::factory(5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
@@ -652,7 +652,7 @@ class TaggerTest extends TestCase
      */
     public function testDeleteWithSpecificIdCondition()
     {
-        factory(Car::class, 5)->create();
+        Car::factory(5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
@@ -692,7 +692,7 @@ class TaggerTest extends TestCase
      */
     public function testDeleteWithSpecificInIdCondition()
     {
-        factory(Car::class, 5)->create();
+        Car::factory(5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
@@ -737,7 +737,7 @@ class TaggerTest extends TestCase
      */
     public function testTruncate()
     {
-        factory(Car::class, 5)->create();
+        Car::factory(5)->create();
 
         /** @var Car $car */
         $car = app(Car::class);
