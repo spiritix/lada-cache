@@ -58,6 +58,6 @@ class TestCase extends \Orchestra\Testbench\TestCase
         $app['config']->set('database.redis.options.prefix', false);
 
         // Set Redis host name for Docker
-        $app['config']->set('database.redis.default.host', 'redis');
+        // $app['config']->set('database.redis.default.host', 'redis');
     }
 }
