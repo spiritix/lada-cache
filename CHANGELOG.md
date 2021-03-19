@@ -4,7 +4,7 @@
 
 ## [5.1.1] - 2021-19-03
 ### Fixed
-- Fixed bugs related to PHP 8.0
+- Fixed bugs related to PHP 8.0 (#102)
 
 ## [5.1] - 2020-10-01
 ### Added
