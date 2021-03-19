@@ -6,3 +6,5 @@
 /.gitignore         export-ignore
 /.travis.yml        export-ignore
 /phpunit.xml        export-ignore
+/Dockerfile         export-ignore
+/docker-compose.yml export-ignore

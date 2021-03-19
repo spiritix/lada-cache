@@ -5,7 +5,6 @@ namespace Spiritix\LadaCache\Tests;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\DB;
 use Spiritix\LadaCache\LadaCacheServiceProvider;
-use Spiritix\LadaCache\Tests\Database\factories\CarFactory;
 
 class TestCase extends \Orchestra\Testbench\TestCase
 {
@@ -54,7 +53,11 @@ class TestCase extends \Orchestra\Testbench\TestCase
             'database' => ':memory:',
             'prefix'   => '',
         ]);
-        //If the database redis has a prefix, Lada fails to flush the cache
+
+        // If the database Redis has a prefix, Lada fails to flush the cache
         $app['config']->set('database.redis.options.prefix', false);
+
+        // Set Redis host name for Docker
+        $app['config']->set('database.redis.default.host', 'redis');
     }
 }

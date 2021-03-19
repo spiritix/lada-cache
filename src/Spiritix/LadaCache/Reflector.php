@@ -231,11 +231,11 @@ class Reflector
         $compileFunction = $this->getCompileFunction();
         $grammar = $this->queryBuilder->getGrammar();
 
-        $sql = call_user_func_array([$grammar, $compileFunction], [
+        $sql = call_user_func_array([$grammar, $compileFunction], array_values([
             'builder'  => $this->queryBuilder,
             'values'   => $this->values,
             'sequence' => '',
-        ]);
+        ]));
 
         // For some DBMS like SQLite Laravel issues two queries as an array instead of one string
         // This is seriously not ok, but anyway...
