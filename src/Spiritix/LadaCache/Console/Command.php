@@ -26,6 +26,9 @@ class Command extends IlluminateCommand
 {
     /**
      * Writes a value to package configuration file.
+     *
+     * @param mixed $key
+     * @param mixed $value
      */
     protected function writeConfig($key, $value)
     {

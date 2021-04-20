@@ -18,6 +18,8 @@ use Illuminate\Support\Facades\Redis as RedisFacade;
  *
  * @package Spiritix\LadaCache
  * @author  Matthias Isler <mi@matthias-isler.ch>
+ *
+ * @mixin \Redis
  */
 class Redis
 {

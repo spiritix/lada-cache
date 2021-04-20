@@ -45,7 +45,6 @@ class Cache
      *
      * @param Redis   $redis
      * @param Encoder $encoder
-     * @param array   $config
      */
     public function __construct(Redis $redis, Encoder $encoder)
     {

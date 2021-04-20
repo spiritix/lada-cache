@@ -1,0 +1,7 @@
+parameters:
+    level: 8
+    paths:
+        - src/
+    checkMissingIterableValueType: false
+    ignoreErrors:
+        - '#has no return typehint specified.#'
