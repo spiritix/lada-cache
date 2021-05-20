@@ -2,11 +2,15 @@
 
 ## [Unreleased]
 
-## [5.1.1] - 2021-19-03
+## [5.1.2] - 2021-05-20
+### Fixed
+- Fixed bug in query builder related to primary key names (#104, #103, #91)
+
+## [5.1.1] - 2021-03-19
 ### Fixed
 - Fixed bugs related to PHP 8.0 (#102)
 
-## [5.1] - 2020-10-01
+## [5.1] - 2020-01-10
 ### Added
 - Added support for Laravel 8
 
