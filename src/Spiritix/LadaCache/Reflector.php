@@ -172,7 +172,7 @@ class Reflector
             list($table, $column) = $this->splitTableAndColumn($where['column']);
 
             // Make sure that the where clause applies for the primary key column
-            if ($column !== $this->queryBuilder->model->getKeyName()) {
+            if ($column !== $this->queryBuilder->getPrimaryKeyName()) {
                 continue;
             }
 

@@ -2,6 +2,7 @@
 
 namespace Spiritix\LadaCache\Tests;
 
+use Illuminate\Database\QueryException;
 use Spiritix\LadaCache\Hasher;
 use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Database\QueryBuilder;

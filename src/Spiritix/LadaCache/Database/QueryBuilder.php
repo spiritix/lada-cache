@@ -28,11 +28,11 @@ use Spiritix\LadaCache\Reflector;
 class QueryBuilder extends Builder
 {
     /**
-     * Model instance.
+     * Default primary key name.
      *
-     * @var Model
+     * Is being used if a query builder is initiated without a model.
      */
-    public $model;
+    const DEFAULT_PRIMARY_KEY_NAME = 'id';
 
     /**
      * Handler instance.
@@ -42,25 +42,42 @@ class QueryBuilder extends Builder
     private $handler;
 
     /**
+     * Model instance.
+     *
+     * @var null|Model
+     */
+    private $model = null;
+
+    /**
      * Create a new query builder instance.
      *
      * @param  ConnectionInterface $connection
-     * @param  Grammar             $grammar
-     * @param  Processor           $processor
+     * @param  Grammar|null        $grammar
+     * @param  Processor|null      $processor
      * @param  QueryHandler        $handler
-     * @param  Model               $model
+     * @param  Model|null          $model
      */
     public function __construct(
         ConnectionInterface $connection,
-        Grammar $grammar,
-        Processor $processor,
+        Grammar $grammar = null,
+        Processor $processor = null,
         QueryHandler $handler,
-        Model $model
+        Model $model = null
     ) {
         parent::__construct($connection, $grammar, $processor);
 
         $this->handler = $handler;
         $this->model = $model;
+    }
+
+    /**
+     * Returns the primary key name of the model, or the default one if not available.
+     *
+     * @return string
+     */
+    public function getPrimaryKeyName()
+    {
+        return $this->model ? $this->model->getKeyName() : self::DEFAULT_PRIMARY_KEY_NAME;
     }
 
     /**
@@ -162,7 +179,7 @@ class QueryBuilder extends Builder
         $result = parent::delete($id);
 
         $this->handler->setBuilder($this)
-            ->invalidateQuery(Reflector::QUERY_TYPE_DELETE, [$this->model->getKeyName() => $id]);
+            ->invalidateQuery(Reflector::QUERY_TYPE_DELETE, [$this->getPrimaryKeyName() => $id]);
 
         return $result;
     }
