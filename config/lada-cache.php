@@ -85,4 +85,14 @@ return [
     */
     'exclude-tables' => [],
 
+    |--------------------------------------------------------------------------
+    | Debugbar Collector
+    |--------------------------------------------------------------------------
+    |
+    | By setting this value to true, we will add a collector for Laravel debugbar.
+    | This may be useful for debugging purposes.
+    |
+    */
+    'enable-debugbar' => env('LADA_CACHE_ENABLE_DEBUGBAR', true),
+
 ];
