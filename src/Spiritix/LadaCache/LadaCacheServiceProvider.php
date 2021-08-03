@@ -47,7 +47,7 @@ class LadaCacheServiceProvider extends ServiceProvider
             __DIR__ . '/../../../config/' . self::CONFIG_FILE, str_replace('.php', '', self::CONFIG_FILE)
         );
 
-        if ($this->app->bound('debugbar')) {
+        if (config('lada-cache.enable_debugbar') && $this->app->bound('debugbar')) {
             $this->registerDebugbarCollector();
         }
     }
