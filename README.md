@@ -143,6 +143,7 @@ php artisan lada-cache:enable
 - Doesn't work with [multiple connections](https://laravel.com/docs/7.x/database#using-multiple-database-connections) if done like ``DB::connection('foo')``. Instead, specify the ``protected $connection = 'foo';`` property in the relevant models.
 - The cache must be truncated manually after migrations are executed.
 - Pessimistic locking (sharedLock, lockForUpdate) requires usage of [raw SQL queries](https://github.com/spiritix/lada-cache/issues/49).
+- Some third-party packages are not working well together with Lada Cache. A workaround for most of the issues can be found [here](https://github.com/spiritix/lada-cache/issues/99#issuecomment-1017250267).
 
 ## Contributing
 
