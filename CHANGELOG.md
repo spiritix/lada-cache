@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [5.2] - 2022-02-14
+### Added
+- Added support for Laravel 9
+
 ## [5.1.2] - 2021-05-20
 ### Fixed
 - Fixed bug in query builder related to primary key names (#104, #103, #91)
