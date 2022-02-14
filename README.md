@@ -46,6 +46,7 @@ For further information on how this library works and how to debug it please hav
  6.x      | 7.2+      | 4.x
  7.x      | 7.2+      | 5.x
  8.x      | 7.3+      | 5.x
+ 9.x      | 8.0+      | 5.x
 
 ## Performance
 
@@ -82,9 +83,9 @@ If you still want to use another storage backend, please feel free to contribute
 
 ## Requirements
 
-- PHP 7.3+
+- PHP 8.0+
 - Redis 2+
-- Laravel 8.0+ (for older versions see [Version Compatibility](#version-compatibility))
+- Laravel 9.0+ (for older versions see [Version Compatibility](#version-compatibility))
 - [PhpRedis](https://github.com/phpredis/phpredis) increases cache performance (optional but recommended)
 - [Laravel Debugbar](https://github.com/barryvdh/laravel-debugbar) provides debug information (optional)
 
