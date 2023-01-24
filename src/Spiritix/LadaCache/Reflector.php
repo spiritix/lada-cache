@@ -11,6 +11,7 @@
 
 namespace Spiritix\LadaCache;
 
+use Illuminate\Database\Query\Builder;
 use RuntimeException;
 use Spiritix\LadaCache\Database\QueryBuilder;
 
@@ -121,9 +122,9 @@ class Reflector
     /**
      * Get Table Names From Where Exists, Not Exists (whereHas/whereDoesnthave builder syntax)
      *
-     * @param QueryBuilder $queryBuilder
+     * @param Builder $queryBuilder
      */
-    private function getTablesFromWhere(QueryBuilder $queryBuilder, &$tables) {
+    private function getTablesFromWhere(Builder $queryBuilder, &$tables) {
         if (!isset($queryBuilder->wheres)) {
             return;
         }
