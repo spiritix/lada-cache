@@ -1,5 +1,5 @@
 {
-    "name": "spiritix/lada-cache",
+    "name": "michael-rubel/lada-cache",
     "type": "library",
     "description": "A Redis based, automated and scalable database caching layer for Laravel",
     "license": "MIT",
