@@ -21,6 +21,16 @@ jobs:
             php: 8.0
 
     name: P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.stability }} - ${{ matrix.os }}
+    env:
+      CACHE_DRIVER: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+    services:
+      redis:
+        image: redis
+        ports:
+          - 6379/tcp
+        options: --health-cmd="redis-cli ping" --health-interval=10s --health-timeout=5s --health-retries=3
 
     steps:
       - name: Checkout code
@@ -37,6 +47,10 @@ jobs:
         run: |
           composer require "laravel/framework:${{ matrix.laravel }}" "nesbot/carbon:^2.64.1" --dev --no-interaction --no-update
           composer update --${{ matrix.stability }} --prefer-dist --no-interaction
+        env:
+          REDIS_PORT: ${{ job.services.redis.ports['6379'] }}
 
       - name: Execute tests
         run: ./vendor/bin/phpunit
+        env:
+          REDIS_PORT: ${{ job.services.redis.ports['6379'] }}
