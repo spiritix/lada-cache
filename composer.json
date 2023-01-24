@@ -38,7 +38,7 @@
             "Spiritix\\LadaCache\\Tests\\Database\\Factories\\": "database/factories"
         }
     },
-    "minimum-stability": "stable",
+    "minimum-stability": "dev",
     "extra": {
         "laravel": {
             "providers": [
