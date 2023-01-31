@@ -3,7 +3,16 @@
     "type": "library",
     "description": "A Redis based, automated and scalable database caching layer for Laravel",
     "license": "MIT",
-    "keywords": ["php","laravel","cache","caching","redis","database","eloquent","model"],
+    "keywords": [
+        "php",
+        "laravel",
+        "cache",
+        "caching",
+        "redis",
+        "database",
+        "eloquent",
+        "model"
+    ],
     "authors": [
         {
             "name": "Matthias Isler",
@@ -12,15 +21,15 @@
     ],
     "require": {
         "php": ">=7.3",
-        "illuminate/support": "^7.0|^8.0|^9.0",
-        "illuminate/database": "^7.0|^8.0|^9.0",
-        "illuminate/redis": "^7.0|^8.0|^9.0"
+        "illuminate/support": "^7.0|^8.0|^9.0|^10.0",
+        "illuminate/database": "^7.0|^8.0|^9.0|^10.0",
+        "illuminate/redis": "^7.0|^8.0|^9.0|^10.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^9.0",
-        "orchestra/testbench": "^6.0",
+        "orchestra/testbench": "^6.0|^8.0",
         "mockery/mockery": "^1.3",
-        "barryvdh/laravel-debugbar": "^3.2"
+        "barryvdh/laravel-debugbar": "^3.2|dev-master"
     },
     "suggest": {
         "barryvdh/laravel-debugbar": "Provides debug information about the cache"
