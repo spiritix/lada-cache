@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [5.3] - 2023-02-20
+### Added
+- Added support for Laravel 10
+
 ## [5.2] - 2022-02-14
 ### Added
 - Added support for Laravel 9
