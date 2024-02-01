@@ -48,15 +48,9 @@ class Invalidator
      */
     public function invalidate(array $tags)
     {
-        $hashes = $this->getHashes($tags);
-
-        // Prefix tags in order to delete them
-        foreach ($tags as $key => $tag) {
-            $tags[$key] = $this->redis->prefix($tag);
-        }
+        $hashes = $this->getHashesAndDeleteTags($tags);
 
         $this->deleteItems($hashes);
-        $this->deleteItems($tags);
 
         return $hashes;
     }
@@ -68,7 +62,7 @@ class Invalidator
      *
      * @return array
      */
-    private function getHashes(array $tags)
+    private function getHashesAndDeleteTags(array $tags)
     {
         $hashes = [];
 
@@ -79,7 +73,12 @@ class Invalidator
                 continue;
             }
 
-            $hashes = array_merge($hashes, $this->redis->smembers($tag));
+            $transactionResult = $this->redis->transaction(function ($redis) use ($tag) {
+                $redis->smembers($tag);
+                $redis->del($tag);
+            });
+
+            $hashes = array_merge($hashes, $transactionResult[0]);
         }
 
         return array_unique($hashes);
