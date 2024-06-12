@@ -91,6 +91,14 @@ class Cache
         }
     }
 
+    public function setCacheTagsForKey($key, array $tags)
+    {
+        $key = $this->redis->prefix($key);
+        foreach ($tags as $tag) {
+            $this->redis->sadd($this->redis->prefix($tag), $key);
+        }
+    }
+
     /**
      * Returns value of a cached key.
      *
