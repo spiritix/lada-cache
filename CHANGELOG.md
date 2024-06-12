@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [5.4] - 2024-03-17
+### Added
+- Added support for Laravel 11
+
+## [5.3.1] - 2024-02-01
+### Fixed
+- Fixed stale state bug (see https://github.com/spiritix/lada-cache/pull/124)
+
 ## [5.3] - 2023-02-20
 ### Added
 - Added support for Laravel 10
