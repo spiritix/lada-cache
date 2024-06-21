@@ -91,4 +91,24 @@ class InvalidatorTest extends TestCase
         $this->assertTrue($this->cache->has('key3'));
         $this->assertTrue($this->cache->has('tag2'));
     }
+
+    public function testCacheHitsValidateKeyInTags(): void
+    {
+        $this->cache->set('key1', ['tag2'], 'data'); // <-- Bug, simulate 'tag1' missing from key1
+        $this->cache->set('key2', ['tag1', 'tag2'], 'data');
+
+        // Simulate cache hit on Key1
+        // Start --------------------------------------------------------------------------------
+        $data = $this->cache->get('key1');
+        $this->assertSame('data', $data);
+        $this->cache->setCacheTagsForKey('key1', ['tag1', 'tag2']); // <-- Validate tags for key
+        // End ----------------------------------------------------------------------------------
+
+        // Invalidate cache.
+        $this->invalidator->invalidate(['tag1']);
+
+        // Check cache is invalidated:
+        $this->assertFalse($this->cache->has('key1'));
+        $this->assertFalse($this->cache->has('key2'));
+    }
 }
