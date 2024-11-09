@@ -57,6 +57,9 @@ class LadaCacheServiceProvider extends ServiceProvider
      */
     public function register()
     {
+        if ($this->app->environment('testing')) {
+            return;
+        }
         $this->registerSingletons();
         $this->registerConnections();
         $this->registerCommand();
