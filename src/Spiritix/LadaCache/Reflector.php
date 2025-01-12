@@ -11,6 +11,7 @@
 
 namespace Spiritix\LadaCache;
 
+use Illuminate\Database\Query\Expression;
 use RuntimeException;
 use Spiritix\LadaCache\Database\QueryBuilder;
 
@@ -164,12 +165,17 @@ class Reflector
                 continue;
             }
 
+           // Get the value of Query Expression
+            if ($where['column'] instanceof Expression) {
+                $where['column'] = $where['column']->getValue($this->queryBuilder->getGrammar());
+            }
+
             // If it doesn't contain the table name assume it's the "FROM" table
             if (strpos($where['column'], '.') === false) {
                 $where['column'] = implode('.', [$this->queryBuilder->from, $where['column']]);
             }
 
-            list($table, $column) = $this->splitTableAndColumn($where['column']);
+            [$table, $column] = $this->splitTableAndColumn($where['column']);
 
             // Make sure that the where clause applies for the primary key column
             if ($column !== $this->queryBuilder->getPrimaryKeyName()) {
