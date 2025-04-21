@@ -1,4 +1,4 @@
-FROM php:8.0-fpm
+FROM php:8.1-fpm
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -16,3 +16,11 @@ RUN pecl install -o -f redis \
 
 # Get latest Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+# Upgrade Composer to latest
+RUN composer self-update
+
+# Copy code and install PHP dependencies
+COPY . /var/www
+WORKDIR /var/www
+RUN composer install
