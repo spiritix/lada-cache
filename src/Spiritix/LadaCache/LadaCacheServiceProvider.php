@@ -57,6 +57,11 @@ class LadaCacheServiceProvider extends ServiceProvider
      */
     public function register()
     {
+        if (!config('lada-cache.active')) {
+            // LadaCache is not active, do not register anything, default to Laravel behavior
+            return;
+        }
+
         if ($this->app->environment('testing')) {
             return;
         }

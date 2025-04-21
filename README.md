@@ -118,6 +118,7 @@ In the configuration, you will find the possibility to include or exclude specif
 ## Configuration
 
 Use the following command to publish the ``lada-cache.php``config file to your configuration folder:
+Use the following command to publish the ``lada-cache.php``config file to your configuration folder:
 
 ```shell
 php artisan vendor:publish 
