@@ -62,9 +62,6 @@ class LadaCacheServiceProvider extends ServiceProvider
             return;
         }
 
-        if ($this->app->environment('testing')) {
-            return;
-        }
         $this->registerSingletons();
         $this->registerConnections();
         $this->registerCommand();

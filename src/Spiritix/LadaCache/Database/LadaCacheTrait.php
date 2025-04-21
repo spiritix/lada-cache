@@ -53,9 +53,7 @@ trait LadaCacheTrait
         if (!config('lada-cache.active')) {
             return parent::newBaseQueryBuilder();
         }
-        if (app()->environment('testing')) {
-            return parent::newBaseQueryBuilder(); // Use default Laravel query builder
-        }
+        
         $conn = $this->getConnection();
         $grammar = $conn->getQueryGrammar();
 
