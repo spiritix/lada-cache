@@ -12,6 +12,7 @@
 namespace Spiritix\LadaCache\Database;
 
 use Illuminate\Database\Eloquent\Model;
+use Spiritix\LadaCache\LadaCacheToggle;
 
 /**
  * Trait for overriding Laravel's query builder in models.
@@ -36,6 +37,9 @@ trait LadaCacheTrait
      */
     public function newPivot(Model $parent, array $attributes, $table, $exists, $using = null)
     {
+        if (LadaCacheToggle::isTemporarilyDisabled()) {
+            return parent::newPivot($parent, $attributes, $table, $exists, $using);
+        }
         return $using ? $using::fromRawAttributes($parent, $attributes, $table, $exists)
             : Pivot::fromAttributes($parent, $attributes, $table, $exists);
     }
@@ -47,6 +51,10 @@ trait LadaCacheTrait
      */
     protected function newBaseQueryBuilder()
     {
+        if (LadaCacheToggle::isTemporarilyDisabled()) {
+            return parent::newBaseQueryBuilder();
+        }
+        
         $conn = $this->getConnection();
         $grammar = $conn->getQueryGrammar();
 

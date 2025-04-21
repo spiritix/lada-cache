@@ -53,5 +53,13 @@
                 "Spiritix\\LadaCache\\LadaCacheServiceProvider"
             ]
         }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test-docker": [
+            "docker-compose up -d --build",
+            "docker-compose exec app vendor/bin/phpunit",
+            "docker-compose down --volumes --remove-orphans"
+        ]
     }
 }
