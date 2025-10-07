@@ -2,7 +2,7 @@
 
 A **Redis-based**, fully automated, and scalable query cache layer for Laravel.
 
-![Tests](https://github.com/spiritix/lada-cache/actions/workflows/tests.yml/badge.svg)
+[![Tests](https://github.com/spiritix/lada-cache/actions/workflows/tests.yml/badge.svg)](https://github.com/spiritix/lada-cache/actions/workflows/tests.yml)
 [![Coverage](https://codecov.io/gh/spiritix/lada-cache/branch/main/graph/badge.svg)](https://codecov.io/gh/spiritix/lada-cache)
 [![Downloads](https://poser.pugx.org/spiritix/lada-cache/d/total.svg)](https://packagist.org/packages/spiritix/lada-cache)
 [![Version](https://poser.pugx.org/spiritix/lada-cache/v/stable.svg)](https://packagist.org/packages/spiritix/lada-cache)
@@ -16,11 +16,13 @@ A **Redis-based**, fully automated, and scalable query cache layer for Laravel.
 - [Version Compatibility](#version-compatibility)
 - [Architecture](#architecture)
 - [Performance](#performance)
+- [Why?](#why)
+- [Why only Redis?](#why-only-redis)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Usage](#usage)
 - [Console Commands](#console-commands)
-- [Known Limitations](#known-limitations)
+- [Known Issues and Limitations](#known-issues-and-limitations)
 - [Contributing](#contributing)
 - [License](#license)
 
