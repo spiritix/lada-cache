@@ -96,7 +96,10 @@ final readonly class Tagger
             }
 
             if ($type === Reflector::QUERY_TYPE_TRUNCATE) {
+                // Truncate should invalidate all cache entries linked to the table,
+                // both specific (row-aware) and unspecific (table-level) tags.
                 $tags[] = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
+                $tags[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
             }
         }
 

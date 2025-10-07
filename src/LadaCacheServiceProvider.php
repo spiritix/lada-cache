@@ -5,13 +5,15 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\Events\TransactionCommitted;
+use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 
 use Spiritix\LadaCache\Console\DisableCommand;
 use Spiritix\LadaCache\Console\EnableCommand;
 use Spiritix\LadaCache\Console\FlushCommand;
-use Spiritix\LadaCache\Database\ConnectionDecorator;
+use Spiritix\LadaCache\Database\Connection as LadaConnection;
 use Spiritix\LadaCache\Debug\CacheCollector;
 
 /**
@@ -31,9 +33,34 @@ final class LadaCacheServiceProvider extends ServiceProvider
             __DIR__ . '/../config/' . self::CONFIG_FILE => config_path(self::CONFIG_FILE),
         ], 'config');
 
+        // If Lada Cache is not active, avoid wiring listeners / debugbar that could resolve Redis.
+        if (! (bool) config('lada-cache.active', true)) {
+            return;
+        }
+
         if (config('lada-cache.enable_debugbar') && $this->app->bound('debugbar')) {
             $this->registerDebugbarCollector();
         }
+
+        // Register transaction event listeners to coordinate transaction-aware invalidations.
+        $events = $this->app['events'];
+        $events->listen(TransactionCommitted::class, function (TransactionCommitted $event): void {
+            /** @var \Spiritix\LadaCache\QueryHandler $handler */
+            $handler = $this->app->make('lada.handler');
+            $handler->flushQueuedInvalidationsForConnection($event->connection);
+        });
+        $events->listen(TransactionRolledBack::class, function (TransactionRolledBack $event): void {
+            /** @var \Spiritix\LadaCache\QueryHandler $handler */
+            $handler = $this->app->make('lada.handler');
+            $handler->clearQueuedInvalidationsForConnection($event->connection);
+        });
+
+        // Auto-flush cache after migrations complete to prevent stale schema-related cache.
+        $events->listen(\Illuminate\Database\Events\MigrationsEnded::class, function (): void {
+            /** @var \Spiritix\LadaCache\Cache $cache */
+            $cache = $this->app->make('lada.cache');
+            $cache->flush();
+        });
     }
 
     /**
@@ -46,8 +73,11 @@ final class LadaCacheServiceProvider extends ServiceProvider
             'lada-cache'
         );
 
-        $this->registerSingletons();
-        $this->registerDatabaseDecorator();
+        // Only register Redis-backed singletons when active to avoid initializing Redis in disabled environments.
+        if ((bool) config('lada-cache.active', true)) {
+            $this->registerSingletons();
+            $this->registerDatabaseDecorator();
+        }
         $this->registerCommands();
     }
 
@@ -84,9 +114,31 @@ final class LadaCacheServiceProvider extends ServiceProvider
     private function registerDatabaseDecorator(): void
     {
         foreach (['mysql', 'pgsql', 'sqlite', 'sqlsrv'] as $driver) {
-            DB::extend($driver, static function (array $config, string $name): ConnectionDecorator {
-                $connection = app('db.factory')->make($config, $name);
-                return new ConnectionDecorator($connection);
+            DB::extend($driver, static function (array $config, string $name): \Illuminate\Database\Connection {
+                /** @var \Illuminate\Database\Connection $base */
+                $base = app('db.factory')->make($config, $name);
+
+                // Recreate a Lada-aware Connection using the base connection's resources.
+                $lada = new LadaConnection(
+                    $base->getPdo(),
+                    $base->getDatabaseName(),
+                    $base->getTablePrefix(),
+                    $base->getConfig(),
+                );
+
+                // Mirror read PDO and name to preserve behavior.
+                if (method_exists($lada, 'setReadPdo')) {
+                    $lada->setReadPdo($base->getReadPdo());
+                }
+                if (method_exists($lada, 'setName')) {
+                    $lada->setName($name);
+                }
+
+                // Reuse the same grammar and processor to maintain driver-specific SQL.
+                $lada->setQueryGrammar($base->getQueryGrammar());
+                $lada->setPostProcessor($base->getPostProcessor());
+
+                return $lada;
             });
         }
     }

@@ -27,7 +27,12 @@ final readonly class Redis
 
     public function __construct(?Connection $connection = null)
     {
-        $this->connection = $connection ?? RedisFacade::connection();
+        if ($connection !== null) {
+            $this->connection = $connection;
+        } else {
+            $connectionName = (string) config('lada-cache.redis_connection', 'cache');
+            $this->connection = RedisFacade::connection($connectionName);
+        }
         $this->prefix = (string) config('lada-cache.prefix', 'lada:');
     }
 

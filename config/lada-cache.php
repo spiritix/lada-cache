@@ -28,6 +28,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Redis Connection Name
+    |--------------------------------------------------------------------------
+    |
+    | Choose which Redis connection (as defined in config/database.php -> redis)
+    | Lada Cache should use. This allows isolating Lada Cache from your default
+    | Redis connection. Typically you can set this to 'cache' or define a
+    | dedicated 'lada-cache' connection.
+    |
+    */
+    'redis_connection' => env('LADA_CACHE_REDIS_CONNECTION', 'cache'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Redis Prefix
     |--------------------------------------------------------------------------
     |

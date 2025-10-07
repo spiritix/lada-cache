@@ -2,8 +2,24 @@
 
 ## [Unreleased]
 
-## [6.0] - 2025-10-06
-TODO
+## [6.0] - 2025-10-07
+### Added
+- Laravel 12 and PHP 8.3 support
+- Connection decorator via DB::extend() for core drivers
+- Auto-flush after migrations (MigrationsEnded event)
+- Selectable Redis connection (lada-cache.redis_connection, default "cache")
+
+### Changed
+- Pessimistic locks (lockForUpdate/sharedLock) bypass cache
+- exists() uses cached select path when not locked
+- Added invalidation for insertUsing/insertOrIgnoreUsing/updateFrom
+- Tag sets self-heal on cache hits (idempotent SADD)
+
+### Fixed
+- No Redis initialization when disabled; flush command is a no-op when inactive
+- Reflector detects joinSub tables and strips aliases across from/join/where
+- Reflector handles Expression columns and improves UNION/EXISTS traversal
+- exclude_tables respected by Manager
 
 ## [5.4] - 2024-03-17
 ### Added

@@ -8,7 +8,7 @@ A **Redis-based**, fully automated, and scalable query cache layer for Laravel.
 [![Version](https://poser.pugx.org/spiritix/lada-cache/v/stable.svg)](https://packagist.org/packages/spiritix/lada-cache)
 [![License](https://poser.pugx.org/spiritix/lada-cache/license.svg)](https://packagist.org/packages/spiritix/lada-cache)
 
-> **Lada Cache 6.x** - Updated for Laravel 12 and PHP 8.3+ with connection decorators, improved tagging, and addressing some old issues and bugs.
+> **Lada Cache 6.x** - Updated for Laravel 12 and PHP 8.3+ with connection decorators, improved tagging, and addressing a number of old issues and bugs.
 
 ---
 
@@ -71,10 +71,36 @@ The result is **automatic, consistent caching** across all database operations.
 
 ## Performance
 
-Typical performance improvement: **10–30%** for most applications.  
-In read-heavy or complex-query systems, reductions of **70–90% in database load** are possible.  
+Real-world gains range from **5% to 95%**, depending on how many and how complex your queries are. Typical Laravel apps see **~10–30%** faster responses and a **significant drop in DB load**.
 
-The more redundant or repetitive your queries, the more Lada Cache accelerates performance.
+Notes:
+- Large payloads still cost to move/encode; e.g. a query returning ~500MB won’t get faster from caching alone.
+- The more redundant and complex the queries per request, the bigger the benefit.
+- Reduced database traffic can translate to lower infra cost and easier horizontal scaling.
+
+---
+
+## Why?
+
+- **Database-heavy apps** (especially with Eloquent) often repeat the same queries and not all are efficient.
+- **RDBMS internal caches** (e.g., MySQL Query Cache) have hard limits:
+  - Do not cache multi-table queries (joins)
+  - **Coarse invalidation** (row change can evict a whole table)
+  - **Not distributed** across DB servers
+  - **Poor scalability** under load
+- **Laravel manual caching** requires manual invalidation or time-based expiry.
+
+Lada Cache provides automated, granular, distributed caching with transparent invalidation and scale-out via Redis.
+
+---
+
+## Why only Redis?
+
+- Requires **in-memory** storage for latency and throughput.
+- Must be **easily scalable** and **distributed**.
+- Needs **tagging** support for granular invalidation (Laravel Cache tags exist but are slow for this use case).
+
+Therefore, Lada Cache builds directly on top of Laravel Redis. If you need another backend, contributions are welcome.
 
 ---
 
@@ -154,10 +180,11 @@ php artisan lada-cache:enable
 
 ## Known Issues and Limitations
 
-- Multiple connections (`DB::connection('foo')`) are supported only when wrapped by Lada’s `ConnectionDecorator`. Models defining `$connection` work automatically.  
-- Cache must be flushed manually after migrations.  
-- Pessimistic locks (`lockForUpdate`, `sharedLock`) require raw SQL.  
+- Multiple connections (`DB::connection('foo')`) are only supported when using Lada’s connection integration. Models defining `$connection` work automatically.  
 - Third-party packages with custom query builders may bypass caching.
+- Complex SQL constructs such as `UNION`/`INTERSECT`/advanced expressions may not be fully reflected for row-level tagging; invalidation falls back to table-level tags.
+- Raw SQL executed directly via the connection (e.g., `DB::select()`, `DB::statement()`) is not cached by design.
+- Row-level tagging relies on standard single-column primary keys. Composite or unconventional primary keys fall back to table-level invalidation.
 
 ---
 

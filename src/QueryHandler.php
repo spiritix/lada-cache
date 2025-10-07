@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use Closure;
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\App;
 use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Debug\CacheCollector;
@@ -25,6 +26,12 @@ final class QueryHandler
     private ?CacheCollector $collector = null;
     /** @var string[] */
     private array $subQueryTags = [];
+
+    /**
+     * Queued invalidation tags per connection name for transaction-aware flushing.
+     * @var array<string, array<int, string>>
+     */
+    private array $queuedInvalidations = [];
 
     public function __construct(
         private readonly Cache $cache,
@@ -97,6 +104,9 @@ final class QueryHandler
         if ($cached === null) {
             $cached = $queryClosure();
             $this->cache->set($key, $tags, $cached);
+        } else {
+            // Self-heal tag membership inconsistencies by idempotently adding the key to each tag set.
+            $this->cache->repairTagMembership($key, $tags);
         }
 
         $this->stopCollector($reflector, $tags, $key, $action);
@@ -126,9 +136,58 @@ final class QueryHandler
 
         $tagger = new Tagger($reflector);
         $tags = $tagger->getTags();
-        $hashes = $this->invalidator->invalidate($tags);
 
+        // If in a transaction, queue invalidation until commit; otherwise, execute immediately.
+        $connection = $this->builder->getConnection();
+        if (method_exists($connection, 'transactionLevel') && $connection->transactionLevel() > 0) {
+            $this->queueInvalidationForConnection($connection, $tags);
+
+            // Ensure we flush after commit for this connection.
+            if (method_exists($connection, 'afterCommit')) {
+                $connection->afterCommit(function () use ($connection): void {
+                    $this->flushQueuedInvalidationsForConnection($connection);
+                });
+            }
+
+            // We can't know hashes before flushing; record action only.
+            $this->stopCollector($reflector, $tags, [], "Invalidation queued ({$statementType})");
+            return;
+        }
+
+        $hashes = $this->invalidator->invalidate($tags);
         $this->stopCollector($reflector, $tags, $hashes, "Invalidation ({$statementType})");
+    }
+
+    /**
+     * Queue tags for invalidation for a specific connection (by name) during a transaction.
+     */
+    public function queueInvalidationForConnection(ConnectionInterface $connection, array $tags): void
+    {
+        $name = (string) ($connection->getName() ?? 'default');
+        $existing = $this->queuedInvalidations[$name] ?? [];
+        $this->queuedInvalidations[$name] = array_values(array_unique([...$existing, ...$tags]));
+    }
+
+    /**
+     * Flush all queued invalidations for the given connection and clear the queue.
+     */
+    public function flushQueuedInvalidationsForConnection(ConnectionInterface $connection): void
+    {
+        $name = (string) ($connection->getName() ?? 'default');
+        $tags = $this->queuedInvalidations[$name] ?? [];
+        if ($tags !== []) {
+            $this->invalidator->invalidate($tags);
+        }
+        unset($this->queuedInvalidations[$name]);
+    }
+
+    /**
+     * Clear queued invalidations for a connection (e.g., on rollback).
+     */
+    public function clearQueuedInvalidationsForConnection(ConnectionInterface $connection): void
+    {
+        $name = (string) ($connection->getName() ?? 'default');
+        unset($this->queuedInvalidations[$name]);
     }
 
     /**

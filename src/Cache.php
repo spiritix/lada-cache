@@ -59,6 +59,19 @@ final class Cache
         return $encoded === null ? null : $this->encoder->decode($encoded);
     }
 
+    public function repairTagMembership(string $key, array $tags): void
+    {
+        $prefixedKey = $this->redis->prefix($key);
+
+        foreach ($tags as $tag) {
+            try {
+                $this->redis->sadd($this->redis->prefix($tag), $prefixedKey);
+            } catch (Throwable $e) {
+                Log::warning('[LadaCache] Tag repair failed: ' . $e->getMessage());
+            }
+        }
+    }
+
     /**
      * Flush all cache keys matching the configured prefix.
      *

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Spiritix\LadaCache\Tests\Database\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;

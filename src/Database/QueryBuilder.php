@@ -37,6 +37,19 @@ class QueryBuilder extends Builder
         $this->model = $model;
     }
 
+    /** {@inheritDoc} */
+    public function exists()
+    {
+        // If locked, defer to base implementation (always hit DB).
+        if ($this->lock !== null) {
+            return parent::exists();
+        }
+
+        // Use a cached-select pathway by limiting to 1 row and checking non-emptiness.
+        // This ensures existence checks benefit from caching without changing semantics.
+        return $this->clone()->limit(1)->get(['*'])->isNotEmpty();
+    }
+
     public function getPrimaryKeyName(): string
     {
         return $this->model?->getKeyName() ?? self::DEFAULT_PRIMARY_KEY_NAME;
@@ -57,6 +70,12 @@ class QueryBuilder extends Builder
     /** {@inheritDoc} */
     protected function runSelect()
     {
+        // Do not cache queries that use pessimistic locks (lockForUpdate/sharedLock).
+        // Laravel stores lock intent in $this->lock; when present we should always hit the DB.
+        if ($this->lock !== null) {
+            return parent::runSelect();
+        }
+
         return $this->handler
             ->setBuilder($this)
             ->cacheQuery(function () {
@@ -91,6 +110,45 @@ class QueryBuilder extends Builder
     }
 
     /** {@inheritDoc} */
+    public function insertUsing(array $columns, $query)
+    {
+        $result = parent::insertUsing($columns, $query);
+
+        // Treat as INSERT for invalidation.
+        $this->handler
+            ->setBuilder($this)
+            ->invalidateQuery(Reflector::QUERY_TYPE_INSERT, []);
+
+        return $result;
+    }
+
+    /** {@inheritDoc} */
+    public function insertOrIgnoreUsing(array $columns, $query)
+    {
+        $result = parent::insertOrIgnoreUsing($columns, $query);
+
+        // May still insert rows; invalidate conservatively as INSERT.
+        $this->handler
+            ->setBuilder($this)
+            ->invalidateQuery(Reflector::QUERY_TYPE_INSERT, []);
+
+        return $result;
+    }
+
+    /** {@inheritDoc} */
+    public function updateFrom(array $values)
+    {
+        $result = parent::updateFrom($values);
+
+        // Update-from modifies rows; invalidate as UPDATE.
+        $this->handler
+            ->setBuilder($this)
+            ->invalidateQuery(Reflector::QUERY_TYPE_UPDATE, $values);
+
+        return $result;
+    }
+
+    /** {@inheritDoc} */
     public function insertGetId(array $values, $sequence = null)
     {
         $id = parent::insertGetId($values, $sequence);
@@ -112,6 +170,45 @@ class QueryBuilder extends Builder
             ->invalidateQuery(Reflector::QUERY_TYPE_UPDATE, $values);
 
         return $count;
+    }
+
+    /** {@inheritDoc} */
+    public function upsert(array $values, $uniqueBy, $update = null)
+    {
+        $result = parent::upsert($values, $uniqueBy, $update);
+
+        // Treat UPSERT as an UPDATE-like invalidation to safely clear unspecific table tags.
+        $this->handler
+            ->setBuilder($this)
+            ->invalidateQuery(Reflector::QUERY_TYPE_UPDATE, is_array($values) ? (array) $values : []);
+
+        return $result;
+    }
+
+    /** {@inheritDoc} */
+    public function insertOrIgnore(array $values)
+    {
+        $result = parent::insertOrIgnore($values);
+
+        // Insert-or-ignore may still insert rows; invalidate as INSERT.
+        $this->handler
+            ->setBuilder($this)
+            ->invalidateQuery(Reflector::QUERY_TYPE_INSERT, $values);
+
+        return $result;
+    }
+
+    /** {@inheritDoc} */
+    public function updateOrInsert(array $attributes, array $values = [])
+    {
+        $result = parent::updateOrInsert($attributes, $values);
+
+        // May perform insert or update; invalidate conservatively as UPDATE.
+        $this->handler
+            ->setBuilder($this)
+            ->invalidateQuery(Reflector::QUERY_TYPE_UPDATE, $values ?: $attributes);
+
+        return $result;
     }
 
     /** {@inheritDoc} */
