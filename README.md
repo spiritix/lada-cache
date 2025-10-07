@@ -10,8 +10,6 @@ A **Redis-based**, fully automated, and scalable query cache layer for Laravel.
 
 > **Lada Cache 6.x** - Updated for Laravel 12 and PHP 8.3+ with connection decorators, improved tagging, and addressing a number of old issues and bugs.
 
----
-
 ## Table of Contents
 
 - [Features](#features)
@@ -26,8 +24,6 @@ A **Redis-based**, fully automated, and scalable query cache layer for Laravel.
 - [Contributing](#contributing)
 - [License](#license)
 
----
-
 ## Features
 
 - 🚀 **Fully automated query caching** - no code changes required after setup  
@@ -36,9 +32,7 @@ A **Redis-based**, fully automated, and scalable query cache layer for Laravel.
 - ⚡ **Redis-backed** - in-memory speed, cluster-ready, horizontally scalable  
 - 🧰 **Laravel Debugbar integration** - visualize cache hits, misses, and invalidations  
 - 🎛️ **Fine-grained control** - include or exclude tables from caching  
-- 🧱 **Connection decorator architecture** - DB queries pass through Lada transparently  
-
----
+- 🧱 **Connection decorator architecture** - DB queries pass through Lada transparently
 
 ## Version Compatibility
 
@@ -51,8 +45,6 @@ A **Redis-based**, fully automated, and scalable query cache layer for Laravel.
 |   8.x    |  7.3+  |    5.x     |
 | 9.x-11.x |  8.0+  |    5.x     |
 |  12.x    |  8.3+  |    6.x     |
-
----
 
 ## Architecture
 
@@ -67,18 +59,13 @@ Lada Cache decorates Laravel’s database connections and query builders to inte
 
 The result is **automatic, consistent caching** across all database operations.
 
----
-
 ## Performance
 
 Real-world gains range from **5% to 95%**, depending on how many and how complex your queries are. Typical Laravel apps see **~10–30%** faster responses and a **significant drop in DB load**.
 
-Notes:
 - Large payloads still cost to move/encode; e.g. a query returning ~500MB won’t get faster from caching alone.
 - The more redundant and complex the queries per request, the bigger the benefit.
 - Reduced database traffic can translate to lower infra cost and easier horizontal scaling.
-
----
 
 ## Why?
 
@@ -92,8 +79,6 @@ Notes:
 
 Lada Cache provides automated, granular, distributed caching with transparent invalidation and scale-out via Redis.
 
----
-
 ## Why only Redis?
 
 - Requires **in-memory** storage for latency and throughput.
@@ -101,8 +86,6 @@ Lada Cache provides automated, granular, distributed caching with transparent in
 - Needs **tagging** support for granular invalidation (Laravel Cache tags exist but are slow for this use case).
 
 Therefore, Lada Cache builds directly on top of Laravel Redis. If you need another backend, contributions are welcome.
-
----
 
 ## Installation
 
@@ -133,8 +116,6 @@ class Car extends Model
 
 > 💡 It’s best to add the trait in a shared `BaseModel` class that all models extend.
 
----
-
 ## Configuration
 After publishing the configuration file (see [Installation](#installation)), you will find a comprehensive config file at `config/lada-cache.php`.
 
@@ -147,8 +128,6 @@ This file allows you to fine-tune cache behavior, such as:
 
 The default configuration is already optimized for most Laravel applications, so you typically won’t need to modify it unless you want more granular control.
 
----
-
 ## Usage
 
 After installation, Lada Cache works **automatically**.  
@@ -160,8 +139,6 @@ You can control global behavior via `.env`:
 LADA_CACHE_ACTIVE=true
 LADA_CACHE_DEBUGBAR=true
 ```
-
----
 
 ## Console Commands
 
@@ -176,8 +153,6 @@ php artisan lada-cache:disable
 php artisan lada-cache:enable
 ```
 
----
-
 ## Known Issues and Limitations
 
 - Multiple connections (`DB::connection('foo')`) are only supported when using Lada’s connection integration. Models defining `$connection` work automatically.  
@@ -186,8 +161,6 @@ php artisan lada-cache:enable
 - Raw SQL executed directly via the connection (e.g., `DB::select()`, `DB::statement()`) is not cached by design.
 - Row-level tagging relies on standard single-column primary keys. Composite or unconventional primary keys fall back to table-level invalidation.
 
----
-
 ## Contributing
 
 Pull requests and issue reports are welcome!
@@ -195,8 +168,6 @@ Pull requests and issue reports are welcome!
 - Follow **PSR-12** coding style  
 - Add tests for all new features  
 - Submit via feature branches (no direct PRs from `master`)
-
----
 
 ## License
 
