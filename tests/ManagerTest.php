@@ -34,32 +34,32 @@ class ManagerTest extends TestCase
 
     public function testInclusive()
     {
-        $this->app['config']->set('lada-cache.include-tables', ['table1', 'table2']);
+        $this->app['config']->set('lada-cache.include_tables', ['table1', 'table2']);
         $manager = new Manager($this->stub);
         $this->assertTrue($manager->shouldCache());
 
-        $this->app['config']->set('lada-cache.include-tables', ['table2']);
+        $this->app['config']->set('lada-cache.include_tables', ['table2']);
         $manager = new Manager($this->stub);
         $this->assertFalse($manager->shouldCache());
 
-        $this->app['config']->set('lada-cache.include-tables', ['other']);
+        $this->app['config']->set('lada-cache.include_tables', ['other']);
         $manager = new Manager($this->stub);
         $this->assertFalse($manager->shouldCache());
     }
 
     public function testExclusive()
     {
-        $this->app['config']->set('lada-cache.include-tables', []);
+        $this->app['config']->set('lada-cache.include_tables', []);
 
-        $this->app['config']->set('lada-cache.exclude-tables', ['table1', 'table2']);
+        $this->app['config']->set('lada-cache.exclude_tables', ['table1', 'table2']);
         $manager = new Manager($this->stub);
         $this->assertFalse($manager->shouldCache());
 
-        $this->app['config']->set('lada-cache.exclude-tables', ['table2']);
+        $this->app['config']->set('lada-cache.exclude_tables', ['table2']);
         $manager = new Manager($this->stub);
         $this->assertFalse($manager->shouldCache());
 
-        $this->app['config']->set('lada-cache.exclude-tables', ['other']);
+        $this->app['config']->set('lada-cache.exclude_tables', ['other']);
         $manager = new Manager($this->stub);
         $this->assertTrue($manager->shouldCache());
     }

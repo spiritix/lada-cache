@@ -2,10 +2,10 @@
 
 namespace Spiritix\LadaCache\Tests;
 
+use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Hasher;
 use Spiritix\LadaCache\Reflector;
-use Spiritix\LadaCache\Database\QueryBuilder;
-use Spiritix\LadaCache\Tests\Database\Models\Car;
+use Spiritix\LadaCache\Tests\Database\models\Car;
 
 class IntegrationTest extends TestCase
 {

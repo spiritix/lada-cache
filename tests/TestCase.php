@@ -45,7 +45,7 @@ class TestCase extends \Orchestra\Testbench\TestCase
     {
         $app['config']->set('lada-cache.active', true);
         $app['config']->set('lada-cache.prefix', 'lada:');
-        $app['config']->set('lada-cache.consider-rows', true);
+        $app['config']->set('lada-cache.consider_rows', true);
 
         $app['config']->set('database.default', 'testing');
         $app['config']->set('database.connections.testing', [

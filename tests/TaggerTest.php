@@ -2,12 +2,12 @@
 
 namespace Spiritix\LadaCache\Tests;
 
-use Spiritix\LadaCache\Tagger;
 use Spiritix\LadaCache\Reflector;
-use Spiritix\LadaCache\Tests\Database\Models\Car;
-use Spiritix\LadaCache\Tests\Database\Models\CarMaterial;
-use Spiritix\LadaCache\Tests\Database\Models\Engine;
-use Spiritix\LadaCache\Tests\Database\Models\Material;
+use Spiritix\LadaCache\Tagger;
+use Spiritix\LadaCache\Tests\Database\models\Car;
+use Spiritix\LadaCache\Tests\Database\models\CarMaterial;
+use Spiritix\LadaCache\Tests\Database\models\Engine;
+use Spiritix\LadaCache\Tests\Database\models\Material;
 
 class TaggerTest extends TestCase
 {

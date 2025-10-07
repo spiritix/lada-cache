@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+## [6.0] - 2025-10-06
+TODO
+
 ## [5.4] - 2024-03-17
 ### Added
 - Added support for Laravel 11

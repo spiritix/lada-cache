@@ -1,6 +1,20 @@
+# OS / Editor junk
 .DS_Store
 .idea/
-/vendor
-/build
+.vscode/
+*.log
+
+# Composer & vendor
+/vendor/
 composer.phar
+composer.lock
+
+# Build artifacts
+/build/
+coverage.xml
+
+# PHPUnit cache
 .phpunit.result.cache
+
+# IDE metadata
+*.iml

@@ -1,30 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         backupGlobals="false"
-         backupStaticAttributes="false"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/11.0/phpunit.xsd"
          bootstrap="vendor/autoload.php"
          colors="true"
-         convertErrorsToExceptions="true"
-         convertNoticesToExceptions="true"
-         convertWarningsToExceptions="true"
-         processIsolation="false"
          stopOnFailure="false"
-         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.3/phpunit.xsd">
-    <coverage processUncoveredFiles="true">
-        <include>
-            <directory suffix=".php">./src</directory>
-        </include>
-        <exclude>
-            <directory>./vendor</directory>
-        </exclude>
-        <report>
-            <clover outputFile="build/logs/clover.xml"/>
-        </report>
-    </coverage>
-    <logging/>
+         failOnWarning="true"
+         failOnRisky="true"
+         executionOrder="depends,defects"
+         beStrictAboutCoversAnnotation="false">
+
     <testsuites>
-        <testsuite name="unit">
-            <directory suffix="Test.php">./tests/</directory>
+        <testsuite name="Unit">
+            <directory suffix="Test.php">tests</directory>
         </testsuite>
     </testsuites>
+
+    <coverage>
+        <include>
+            <directory suffix=".php">src</directory>
+        </include>
+        <report>
+            <clover outputFile="coverage.xml"/>
+        </report>
+    </coverage>
+
+    <php>
+        <env name="APP_ENV" value="testing"/>
+        <env name="CACHE_DRIVER" value="redis"/>
+        <env name="REDIS_HOST" value="127.0.0.1"/>
+    </php>
 </phpunit>

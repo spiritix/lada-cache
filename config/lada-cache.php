@@ -4,96 +4,116 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Disabling cache
+    | Enable or Disable Lada Cache
     |--------------------------------------------------------------------------
     |
-    | By setting this value to false, the cache will be disabled completely.
-    | This may be useful for debugging purposes.
+    | By setting this value to false, Lada Cache will be completely disabled.
+    | This can be useful during debugging, development, or when temporarily
+    | troubleshooting cache-related behavior.
     |
     */
     'active' => env('LADA_CACHE_ACTIVE', true),
 
     /*
     |--------------------------------------------------------------------------
-    | Redis prefix
+    | Cache Driver
     |--------------------------------------------------------------------------
     |
-    | This prefix will be prepended to all items in Redis store.
-    | Do not change this value in production, it will cause unexpected behavior.
+    | The cache driver that should be used for storing Lada Cache entries.
+    | By default, Redis is used since it provides excellent performance for
+    | tagged and granular cache invalidation.
     |
     */
-    'prefix' => 'lada:',
+    'driver' => env('LADA_CACHE_DRIVER', 'redis'),
 
     /*
     |--------------------------------------------------------------------------
-    | Expiration time
+    | Redis Prefix
     |--------------------------------------------------------------------------
     |
-    | By default, if this value is set to null, cached items will never expire.
-    | If you are afraid of dead data or if you care about disk space, it may
-    | be a good idea to set this value to something like 604800 (7 days).
+    | This prefix will be prepended to all cache keys stored in Redis.
+    | It helps to isolate data between different environments or projects.
+    | Do not change this value in production, as doing so will make all
+    | previously cached entries inaccessible.
     |
     */
-    'expiration-time' => null,
+    'prefix' => env('LADA_CACHE_PREFIX', 'lada:'),
 
     /*
     |--------------------------------------------------------------------------
-    | Cache granularity
+    | Expiration Time
     |--------------------------------------------------------------------------
     |
-    | If you experience any issues while using the cache, try to set this value
-    | to false. This will tell the cache to use a lower granularity and not
-    | consider the row primary keys when creating the tags for a database query.
-    | Since this will dramatically reduce the efficiency of the cache, it is
-    | not recommended to do so in production environment.
+    | The number of seconds after which cached items should expire.
+    | Setting this value to null will store cached items indefinitely
+    | (until manually invalidated). If you want automatic cleanup or
+    | to avoid stale data, set this to something like 604800 (7 days).
     |
     */
-    'consider-rows' => true,
-
+    'expiration_time' => env('LADA_CACHE_EXPIRATION', 0),
 
     /*
     |--------------------------------------------------------------------------
-    | Include tables
+    | Cache Granularity
     |--------------------------------------------------------------------------
     |
-    | If you want to cache only specific tables, put the table names into this
-    | array. Then as soon as a query contains a table which is not specified in
-    | here, it will not be cached. If you have this feature enabled, the value
-    | of "exclude-tables" will be ignored and has no effect.
+    | Determines how precisely the cache is tagged. When enabled (true),
+    | cache invalidation happens at the row level, using primary keys to
+    | generate tags for each database query. This provides maximum accuracy
+    | but may produce more Redis keys.
     |
-    | Instead of hard coding table names in the configuration, it is a good
-    | practice to initialize a new model instance and get the table name from
-    | there like in the following example:
+    | If you experience issues or performance degradation, set this to false
+    | to reduce granularity. This tells Lada Cache to ignore row-level keys
+    | and cache results at a broader level.
     |
-    | 'include-tables' => [
+    */
+    'consider_rows' => env('LADA_CACHE_CONSIDER_ROWS', true),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Include Tables
+    |--------------------------------------------------------------------------
+    |
+    | Use this array if you want to cache *only specific tables*.
+    | Once any query involves a table not listed here, that query
+    | will not be cached.
+    |
+    | If "include_tables" is not empty, "exclude_tables" will be ignored.
+    |
+    | Tip: Instead of hardcoding table names, use model instances:
+    |
+    | 'include_tables' => [
     |     (new \App\Models\User())->getTable(),
     |     (new \App\Models\Post())->getTable(),
     | ],
     |
     */
-    'include-tables' => [],
+    'include_tables' => [],
 
     /*
     |--------------------------------------------------------------------------
-    | Exclude tables
+    | Exclude Tables
     |--------------------------------------------------------------------------
     |
-    | If you want to cache all tables but some specific ones, put them into this
-    | array. As soon as a query contains at least one table specified in here, it
-    | will not be cached.
+    | Use this array if you want to cache all tables *except* specific ones.
+    | If a query touches any table listed here, it will not be cached.
+    | This is the inverse of "include_tables".
     |
     */
-    'exclude-tables' => [],
-    
+    'exclude_tables' => [],
+
     /*
     |--------------------------------------------------------------------------
     | Debugbar Collector
     |--------------------------------------------------------------------------
     |
-    | By setting this value to true, we will add a collector for Laravel debugbar.
-    | This may be useful for debugging purposes.
+    | When enabled, Lada Cache will register a collector for the Laravel
+    | Debugbar package, allowing you to view cache activity and hit/miss
+    | statistics directly in your browser during development.
+    |
+    | This is useful for debugging and optimizing query performance.
     |
     */
-    'enable-debugbar' => env('LADA_CACHE_ENABLE_DEBUGBAR', true),
+    'enable_debugbar' => env('LADA_CACHE_ENABLE_DEBUGBAR', true),
 
 ];
