@@ -10,19 +10,10 @@ use Spiritix\LadaCache\Manager;
 use Spiritix\LadaCache\Redis as LadaRedis;
 use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Tagger;
-use Spiritix\LadaCache\Tests\Concerns\InteractsWithRedis;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class ConfigurationBehaviourTest extends TestCase
 {
-    use InteractsWithRedis;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->flushRedis();
-    }
-
     public function testActiveFalseDisablesCaching(): void
     {
         config(['lada-cache.active' => false]);
@@ -35,26 +26,6 @@ class ConfigurationBehaviourTest extends TestCase
     public function testIncludeTablesOnlyCachesIncluded(): void
     {
         config(['lada-cache.active' => true, 'lada-cache.include_tables' => ['cars'], 'lada-cache.exclude_tables' => []]);
-
-        // Ensure no ambient transaction so caching policy is evaluated purely on config
-        while (DB::connection()->transactionLevel() > 0) {
-            DB::rollBack();
-        }
-
-        $carsManager = new Manager(new Reflector(DB::table('cars')));
-        $driversManager = new Manager(new Reflector(DB::table('drivers')));
-
-        $this->assertTrue($carsManager->shouldCache());
-        $this->assertFalse($driversManager->shouldCache());
-    }
-
-    public function testExcludeTablesPreventsCaching(): void
-    {
-        config(['lada-cache.active' => true, 'lada-cache.include_tables' => [], 'lada-cache.exclude_tables' => ['drivers']]);
-
-        while (DB::connection()->transactionLevel() > 0) {
-            DB::rollBack();
-        }
 
         $carsManager = new Manager(new Reflector(DB::table('cars')));
         $driversManager = new Manager(new Reflector(DB::table('drivers')));

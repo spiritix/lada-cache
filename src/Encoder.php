@@ -54,6 +54,7 @@ final readonly class Encoder
             // If this is JSON, decode to arrays for arrays/scalars and to objects for JSON objects.
             $trimmed = ltrim($data);
             $assoc = ! str_starts_with($trimmed, '{');
+
             return json_decode($data, $assoc, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException) {
             try {
@@ -62,6 +63,7 @@ final readonly class Encoder
                 if ($result === false && $data !== 'b:0;') {
                     return null;
                 }
+
                 return $result;
             } catch (Throwable) {
                 return null;

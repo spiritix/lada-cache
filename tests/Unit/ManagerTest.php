@@ -11,14 +11,6 @@ use Spiritix\LadaCache\Tests\TestCase;
 
 class ManagerTest extends TestCase
 {
-    protected function setUp(): void
-    {
-        parent::setUp();
-        while (DB::connection()->transactionLevel() > 0) {
-            DB::rollBack();
-        }
-    }
-
     private function makeReflectorFromTables(array $tables): Reflector
     {
         // Use first table as FROM and join remaining tables (no execution occurs)

@@ -16,12 +16,16 @@ namespace Spiritix\LadaCache;
  */
 final readonly class Tagger
 {
-    private const string PREFIX_DATABASE         = 'tags:database:';
-    private const string PREFIX_TABLE_SPECIFIC   = ':table_specific:';
+    private const string PREFIX_DATABASE = 'tags:database:';
+
+    private const string PREFIX_TABLE_SPECIFIC = ':table_specific:';
+
     private const string PREFIX_TABLE_UNSPECIFIC = ':table_unspecific:';
-    private const string PREFIX_ROW              = ':row:';
+
+    private const string PREFIX_ROW = ':row:';
 
     private Reflector $reflector;
+
     private bool $considerRows;
 
     public function __construct(Reflector $reflector)
@@ -44,7 +48,7 @@ final readonly class Tagger
             }
         }
 
-        if (!$this->considerRows) {
+        if (! $this->considerRows) {
             return $this->prefix($tables, $databaseTag);
         }
 
@@ -72,11 +76,11 @@ final readonly class Tagger
         $type = $this->reflector->getType();
 
         foreach ($tables as $table) {
-            if (!is_string($table)) {
+            if (! is_string($table)) {
                 continue;
             }
 
-            $hasSpecificRows = !empty($rows[$table] ?? []);
+            $hasSpecificRows = ! empty($rows[$table] ?? []);
 
             if ($type === Reflector::QUERY_TYPE_SELECT) {
                 if ($hasSpecificRows) {
@@ -115,6 +119,7 @@ final readonly class Tagger
             foreach ($value as $item) {
                 if (is_scalar($item) || is_string($item)) {
                     $out[] = (string) $this->prefix((string) $item, $prefix);
+
                     continue;
                 }
                 if (is_object($item) && method_exists($item, '__toString')) {
@@ -123,10 +128,12 @@ final readonly class Tagger
                 // Otherwise skip unstringable items (e.g., Query Expressions). Reflector should already
                 // have provided normalized string table names for tagging purposes.
             }
+
             return $out;
         }
 
         $normalized = preg_replace('/\s+as\s+\w+$/i', '', (string) $value);
-        return $prefix . (string) $normalized;
+
+        return $prefix.(string) $normalized;
     }
 }

@@ -14,6 +14,7 @@ use Illuminate\Console\Command;
 final class FlushCommand extends Command
 {
     protected $signature = 'lada-cache:flush';
+
     protected $description = 'Flush all entries from the Lada Cache database cache.';
 
     public function handle(): int
@@ -21,6 +22,7 @@ final class FlushCommand extends Command
         // If disabled, do not resolve cache / Redis. Treat as no-op.
         if (! (bool) config('lada-cache.active', true)) {
             $this->info('Lada Cache is disabled. Nothing to flush.');
+
             return self::SUCCESS;
         }
 
@@ -29,9 +31,11 @@ final class FlushCommand extends Command
             $cache = app('lada.cache');
             $cache->flush();
             $this->info('Lada Cache has been flushed successfully.');
+
             return self::SUCCESS;
         } catch (\Throwable $e) {
-            $this->error('Failed to flush Lada Cache: ' . $e->getMessage());
+            $this->error('Failed to flush Lada Cache: '.$e->getMessage());
+
             return self::FAILURE;
         }
     }

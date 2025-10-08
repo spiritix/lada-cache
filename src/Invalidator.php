@@ -23,7 +23,7 @@ final readonly class Invalidator
     ) {}
 
     /**
-     * @param array<string> $tags
+     * @param  array<string>  $tags
      * @return array<string>
      */
     public function invalidate(array $tags): array
@@ -35,7 +35,7 @@ final readonly class Invalidator
     }
 
     /**
-     * @param array<string> $tags
+     * @param  array<string>  $tags
      * @return array<string>
      */
     private function collectAndDeleteTagSets(array $tags): array
@@ -45,7 +45,7 @@ final readonly class Invalidator
         foreach ($tags as $tag) {
             $tagKey = $this->redis->prefix($tag);
 
-            if (!$this->redis->exists($tagKey)) {
+            if (! $this->redis->exists($tagKey)) {
                 continue;
             }
 
@@ -55,7 +55,7 @@ final readonly class Invalidator
                 $this->redis->del($tagKey);
                 $result = $this->redis->exec();
 
-                if (!empty($result[0])) {
+                if (! empty($result[0])) {
                     $hashes = [...$hashes, ...$result[0]];
                 }
             } catch (Throwable $e) {
@@ -67,7 +67,7 @@ final readonly class Invalidator
     }
 
     /**
-     * @param array<string> $keys
+     * @param  array<string>  $keys
      */
     private function deleteKeys(array $keys): void
     {

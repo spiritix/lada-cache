@@ -10,11 +10,6 @@ use Spiritix\LadaCache\Tests\TestCase;
 
 class TagsAndKeysTest extends TestCase
 {
-    protected function setUp(): void
-    {
-        parent::setUp();
-    }
-
     public function testSelectWithoutRowsHasUnspecificTag(): void
     {
         $builder = DB::table('cars');

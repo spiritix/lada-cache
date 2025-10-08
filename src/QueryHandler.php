@@ -23,12 +23,15 @@ use Throwable;
 final class QueryHandler
 {
     private ?QueryBuilder $builder = null;
+
     private ?CacheCollector $collector = null;
+
     /** @var string[] */
     private array $subQueryTags = [];
 
     /**
      * Queued invalidation tags per connection name for transaction-aware flushing.
+     *
      * @var array<string, array<int, string>>
      */
     private array $queuedInvalidations = [];
@@ -36,12 +39,12 @@ final class QueryHandler
     public function __construct(
         private readonly Cache $cache,
         private readonly Invalidator $invalidator,
-    ) {
-    }
+    ) {}
 
     public function setBuilder(QueryBuilder $builder): self
     {
         $this->builder = $builder;
+
         return $this;
     }
 
@@ -58,7 +61,7 @@ final class QueryHandler
             $reflector = new Reflector($this->builder);
             $manager = new Manager($reflector);
 
-            if (!$manager->shouldCache()) {
+            if (! $manager->shouldCache()) {
                 return;
             }
 
@@ -74,68 +77,10 @@ final class QueryHandler
     }
 
     /**
-     * Execute and cache a query.
-     *
-     * @param Closure(): array<mixed> $queryClosure
-     * @return array<mixed>
-     */
-    public function cacheQuery(Closure $queryClosure): array
-    {
-        $this->startCollector();
-
-        $subQueryTags = $this->subQueryTags;
-        $this->subQueryTags = [];
-
-        if ($this->builder === null) {
-            return $queryClosure();
-        }
-
-        try {
-            $reflector = new Reflector($this->builder);
-            $manager = new Manager($reflector);
-
-            if (!$manager->shouldCache()) {
-                return $queryClosure();
-            }
-
-            $hasher = new Hasher($reflector);
-            $tagger = new Tagger($reflector);
-
-            $key = $hasher->getHash();
-            $tags = array_values(array_unique([...$tagger->getTags(), ...$subQueryTags]));
-
-            $cached = $this->cache->has($key) ? $this->cache->get($key) : null;
-            $action = $cached === null ? 'Miss' : 'Hit';
-
-            if ($cached === null) {
-                $cached = $queryClosure();
-                $this->cache->set($key, $tags, $cached);
-            } else {
-                // Self-heal tag membership inconsistencies by idempotently adding the key to each tag set.
-                $this->cache->repairTagMembership($key, $tags);
-            }
-
-            $this->stopCollector($reflector, $tags, $key, $action);
-            return $cached;
-        } catch (Throwable) {
-            // On any reflection/type/tagging error, do not cache; run the query directly.
-            $result = $queryClosure();
-            // Best effort to stop collector with bypass info.
-            try {
-                $reflector = new Reflector($this->builder);
-                $this->stopCollector($reflector, [], '', 'Bypass (error)');
-            } catch (Throwable) {
-                // ignore
-            }
-            return $result;
-        }
-    }
-
-    /**
      * Invalidate cache entries affected by a modifying query.
      *
-     * @param string $statementType
-     * @param array<string, mixed> $values
+     * @param string $statementType One of Reflector::QUERY_TYPE_*
+     * @param array<string, mixed> $values Values used by the grammar to compile the SQL (e.g., update sets)
      */
     public function invalidateQuery(string $statementType, array $values = []): void
     {
@@ -149,7 +94,7 @@ final class QueryHandler
             $reflector = new Reflector($this->builder, $statementType, $values);
             $manager = new Manager($reflector);
 
-            if (!$manager->shouldCache()) {
+            if (! $manager->shouldCache()) {
                 return;
             }
 
@@ -161,7 +106,6 @@ final class QueryHandler
             if (method_exists($connection, 'transactionLevel') && $connection->transactionLevel() > 0) {
                 $this->queueInvalidationForConnection($connection, $tags);
 
-                // Ensure we flush after commit for this connection.
                 if (method_exists($connection, 'afterCommit')) {
                     $connection->afterCommit(function () use ($connection): void {
                         $this->flushQueuedInvalidationsForConnection($connection);
@@ -183,7 +127,66 @@ final class QueryHandler
             } catch (Throwable) {
                 // ignore
             }
-            return;
+        }
+    }
+
+    /**
+     * Execute and cache a query.
+     *
+     * @param  Closure(): array<mixed>  $queryClosure
+     * @return array<mixed>
+     */
+    public function cacheQuery(Closure $queryClosure): array
+    {
+        $this->startCollector();
+
+        $subQueryTags = $this->subQueryTags;
+        $this->subQueryTags = [];
+
+        if ($this->builder === null) {
+            return $queryClosure();
+        }
+
+        try {
+            $reflector = new Reflector($this->builder);
+            $manager = new Manager($reflector);
+
+            if (! $manager->shouldCache()) {
+                return $queryClosure();
+            }
+
+            $hasher = new Hasher($reflector);
+            $tagger = new Tagger($reflector);
+
+            $key = $hasher->getHash();
+            $tags = array_values(array_unique([...$tagger->getTags(), ...$subQueryTags]));
+
+            $cached = $this->cache->has($key) ? $this->cache->get($key) : null;
+            $action = $cached === null ? 'Miss' : 'Hit';
+
+            if ($cached === null) {
+                $cached = $queryClosure();
+                $this->cache->set($key, $tags, $cached);
+            } else {
+                // Self-heal tag membership inconsistencies by idempotently adding the key to each tag set.
+                $this->cache->repairTagMembership($key, $tags);
+            }
+
+            $this->stopCollector($reflector, $tags, $key, $action);
+
+            return $cached;
+        } catch (Throwable) {
+            // On any reflection/type/tagging error, do not cache; run the query directly.
+            $result = $queryClosure();
+            // Best effort to stop collector with bypass info.
+            try {
+                $reflector = new Reflector($this->builder);
+                $this->stopCollector($reflector, [], '', 'Bypass (error)');
+            } catch (Throwable) {
+                // ignore
+            }
+
+            return $result;
         }
     }
 
@@ -235,8 +238,8 @@ final class QueryHandler
     /**
      * Finalize the Debugbar measurement if the collector is available.
      *
-     * @param array<string>            $tags
-     * @param array<string>|string     $hashes
+     * @param  array<string>  $tags
+     * @param  array<string>|string  $hashes
      */
     private function stopCollector(Reflector $reflector, array $tags, string|array $hashes, string $action): void
     {

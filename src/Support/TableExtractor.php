@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Support;
 
 use Illuminate\Database\Query\Builder as BaseBuilder;
-use Illuminate\Database\Query\JoinClause;
 use Illuminate\Database\Query\Expression;
+use Illuminate\Database\Query\JoinClause;
 
 /**
  * Utility to extract table names (as strings) from a Laravel Query Builder.
@@ -37,11 +37,12 @@ final class TableExtractor
 
         // JOINs
         foreach ($builder->joins ?? [] as $join) {
-            if (!($join instanceof JoinClause)) {
+            if (! ($join instanceof JoinClause)) {
                 continue;
             }
             if (is_string($join->table)) {
                 $tables[] = SqlAliasParser::stripAlias($join->table);
+
                 continue;
             }
             if ($join->table instanceof Expression) {

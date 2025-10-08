@@ -19,14 +19,16 @@ use Illuminate\Support\Facades\Config;
 final readonly class Manager
 {
     private bool $cacheActive;
+
     /** @var string[] */
     private array $includeTables;
+
     /** @var string[] */
     private array $excludeTables;
 
     public function __construct(private Reflector $reflector)
     {
-        $this->cacheActive   = (bool) Config::get('lada-cache.active', true);
+        $this->cacheActive = (bool) Config::get('lada-cache.active', true);
         $this->includeTables = (array) Config::get('lada-cache.include_tables', []);
         $this->excludeTables = (array) Config::get('lada-cache.exclude_tables', []);
     }
@@ -53,10 +55,11 @@ final readonly class Manager
         // Inclusive mode → all must be explicitly listed
         if ($this->includeTables !== []) {
             foreach ($tables as $table) {
-                if (!in_array($table, $this->includeTables, true)) {
+                if (! in_array($table, $this->includeTables, true)) {
                     return false;
                 }
             }
+
             return true;
         }
 

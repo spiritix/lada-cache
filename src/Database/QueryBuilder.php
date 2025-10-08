@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Database;
@@ -15,14 +16,13 @@ use Spiritix\LadaCache\Reflector;
  * LadaCache Query Builder for Laravel 12+
  *
  * Extends the base query builder to provide automatic caching and invalidation.
- *
- * @package Spiritix\LadaCache\Database
  */
 class QueryBuilder extends Builder
 {
     public const string DEFAULT_PRIMARY_KEY_NAME = 'id';
 
     private readonly QueryHandler $handler;
+
     private readonly ?Model $model;
 
     public function __construct(
@@ -94,6 +94,7 @@ class QueryBuilder extends Builder
         if ($query instanceof self) {
             $this->handler->setBuilder($query)->collectSubQueryTags();
         }
+
         return parent::selectSub($query, $as);
     }
 
@@ -103,6 +104,7 @@ class QueryBuilder extends Builder
         if ($query instanceof self) {
             $this->handler->setBuilder($query)->collectSubQueryTags();
         }
+
         return parent::joinSub($query, $as, $first, $operator, $second, $type, $where);
     }
 
@@ -228,7 +230,7 @@ class QueryBuilder extends Builder
         $this->handler
             ->setBuilder($this)
             ->invalidateQuery(Reflector::QUERY_TYPE_DELETE, [
-                $this->getPrimaryKeyName() => $id
+                $this->getPrimaryKeyName() => $id,
             ]);
 
         return $count;

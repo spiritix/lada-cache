@@ -50,7 +50,7 @@ A **Redis-based**, fully automated, and scalable query cache layer for Laravel.
 
 ## Architecture
 
-Lada Cache integrates with Laravel’s database layer by registering a Lada-aware connection (via `DB::extend()`), which returns a custom query builder to intercept and cache SQL operations automatically.
+Lada Cache integrates with Laravel’s database layer by registering a Lada-aware connection, which returns a custom query builder to intercept and cache SQL operations automatically.
 
 **Query lifecycle:**
 1. Intercept query → Reflector analyzes SQL, bindings, and affected tables.  

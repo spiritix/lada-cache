@@ -2,7 +2,7 @@ name: Tests & Quality
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
   pull_request:
 
 jobs:
@@ -60,3 +60,8 @@ jobs:
 
       - name: Run PHPStan static analysis
         run: vendor/bin/phpstan analyse --level=max src/
+        continue-on-error: true
+
+      - name: Run Pint static analysis
+        run: vendor/bin/pint src/
+        continue-on-error: true

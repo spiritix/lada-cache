@@ -6,19 +6,10 @@ namespace Spiritix\LadaCache\Tests\Integration\QueryBuilder;
 use Illuminate\Support\Facades\DB;
 use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Tagger;
-use Spiritix\LadaCache\Tests\Concerns\InteractsWithRedis;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class UnionSubqueryTest extends TestCase
 {
-    use InteractsWithRedis;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->flushRedis();
-    }
-
     public function testUnionIncludesTagsFromBothBranches(): void
     {
         // Seed minimal rows so builders are valid

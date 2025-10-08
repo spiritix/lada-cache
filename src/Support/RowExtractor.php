@@ -29,7 +29,7 @@ final class RowExtractor
             : 'id';
 
         foreach ($builder->wheres ?? [] as $where) {
-            if (!isset($where['column'])) {
+            if (! isset($where['column'])) {
                 // Skip non-column where types; nested queries handled by TableExtractor for tables
                 continue;
             }
@@ -38,12 +38,12 @@ final class RowExtractor
             if ($columnRef instanceof Expression) {
                 $columnRef = $builder->getGrammar()->getValue($columnRef);
             }
-            if (!is_string($columnRef)) {
+            if (! is_string($columnRef)) {
                 continue;
             }
 
-            if (!str_contains($columnRef, '.') && is_string($builder->from)) {
-                $columnRef = $builder->from . '.' . $columnRef;
+            if (! str_contains($columnRef, '.') && is_string($builder->from)) {
+                $columnRef = $builder->from.'.'.$columnRef;
             }
 
             [$table, $column] = self::splitTableAndColumn($columnRef);
@@ -77,7 +77,7 @@ final class RowExtractor
      */
     private static function splitTableAndColumn(string $identifier): array
     {
-        if (!str_contains($identifier, '.')) {
+        if (! str_contains($identifier, '.')) {
             return [null, $identifier];
         }
 
@@ -104,7 +104,7 @@ final class RowExtractor
         }
 
         foreach ($builder->joins ?? [] as $join) {
-            if (!($join instanceof JoinClause)) {
+            if (! ($join instanceof JoinClause)) {
                 continue;
             }
             if (is_string($join->table)) {

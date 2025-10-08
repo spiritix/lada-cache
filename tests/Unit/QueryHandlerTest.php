@@ -27,10 +27,6 @@ class QueryHandlerTest extends TestCase
         parent::setUp();
         config(['lada-cache.prefix' => 'p:']);
 
-        while (DB::connection()->transactionLevel() > 0) {
-            DB::rollBack();
-        }
-
         $this->conn = $this->getMockBuilder(RedisConnection::class)
             ->disableOriginalConstructor()
             ->addMethods(['exists', 'get', 'set', 'sadd'])

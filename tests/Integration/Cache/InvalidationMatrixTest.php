@@ -4,19 +4,10 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Tests\Concerns\InteractsWithRedis;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class InvalidationMatrixTest extends TestCase
 {
-    use InteractsWithRedis;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->flushRedis();
-    }
-
     public function testInsertInvalidatesCachedSelect(): void
     {
         // Prime: count cars named 'C'

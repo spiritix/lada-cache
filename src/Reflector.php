@@ -24,9 +24,13 @@ use Spiritix\LadaCache\Support\TableExtractor;
 final readonly class Reflector
 {
     public const string QUERY_TYPE_SELECT = 'select';
+
     public const string QUERY_TYPE_INSERT = 'insert';
+
     public const string QUERY_TYPE_UPDATE = 'update';
+
     public const string QUERY_TYPE_DELETE = 'delete';
+
     public const string QUERY_TYPE_TRUNCATE = 'truncate';
 
     private string $sqlOperation;
@@ -73,7 +77,7 @@ final readonly class Reflector
         $sql = strtolower(trim($this->getSql()));
         $type = preg_replace('/[^a-z]/i', '', strtok($sql, ' ') ?: '');
 
-        if (!in_array($type, $valid, true)) {
+        if (! in_array($type, $valid, true)) {
             throw new RuntimeException("Invalid query type detected: {$type}");
         }
 
@@ -110,6 +114,7 @@ final readonly class Reflector
     public function inTransaction(): bool
     {
         $connection = $this->queryBuilder->getConnection();
+
         return method_exists($connection, 'transactionLevel') && $connection->transactionLevel() > 0;
     }
 }

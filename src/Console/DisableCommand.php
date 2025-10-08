@@ -13,16 +13,19 @@ namespace Spiritix\LadaCache\Console;
 final class DisableCommand extends Command
 {
     protected $signature = 'lada-cache:disable';
+
     protected $description = 'Disable the Lada Cache database cache.';
 
     public function handle(): int
     {
         if ($this->writeConfig('active', false)) {
             $this->info('Lada Cache disabled.');
+
             return self::SUCCESS;
         }
 
         $this->error('Failed to disable Lada Cache.');
+
         return self::FAILURE;
     }
 }

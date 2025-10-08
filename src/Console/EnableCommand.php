@@ -13,6 +13,7 @@ namespace Spiritix\LadaCache\Console;
 final class EnableCommand extends Command
 {
     protected $signature = 'lada-cache:enable';
+
     protected $description = 'Enable the Lada Cache database cache.';
 
     public function handle(): int
@@ -20,10 +21,12 @@ final class EnableCommand extends Command
         if ($this->writeConfig('active', true)) {
             $this->info('Lada Cache enabled.');
             $this->line('Note: if you have LADA_CACHE_ACTIVE=false in your .env, this setting will be ignored.');
+
             return self::SUCCESS;
         }
 
         $this->error('Failed to enable Lada Cache.');
+
         return self::FAILURE;
     }
 }

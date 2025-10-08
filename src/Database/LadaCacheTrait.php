@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Database;
@@ -17,7 +18,7 @@ use Spiritix\LadaCache\QueryHandler;
  */
 trait LadaCacheTrait
 {
-    /** @inheritDoc */
+    /** {@inheritDoc} */
     public function newPivot(Model $parent, array $attributes, $table, $exists, $using = null)
     {
         return $using
@@ -25,13 +26,13 @@ trait LadaCacheTrait
             : Pivot::fromAttributes($parent, $attributes, $table, $exists);
     }
 
-    /** @inheritDoc */
+    /** {@inheritDoc} */
     protected function newBaseQueryBuilder()
     {
         $connection = $this->getConnection();
 
         /** @var QueryHandler $handler */
-        $handler = app(QueryHandler::class);
+        $handler = app('lada.handler');
 
         return new QueryBuilder(
             $connection,

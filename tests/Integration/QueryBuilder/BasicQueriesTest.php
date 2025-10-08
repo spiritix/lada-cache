@@ -5,20 +5,11 @@ namespace Spiritix\LadaCache\Tests\Integration\QueryBuilder;
 
 use Illuminate\Support\Facades\DB;
 use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
-use Spiritix\LadaCache\Tests\Concerns\InteractsWithRedis;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class BasicQueriesTest extends TestCase
 {
-    use InteractsWithRedis;
     use CacheAssertions;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        // Ensure Redis is clean before each test
-        $this->flushRedis();
-    }
 
     public function testSelectCachesResultAndIsAddressableByComputedKey(): void
     {

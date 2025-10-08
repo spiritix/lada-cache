@@ -36,46 +36,47 @@ final class CacheCollector extends TimeDataCollector
         $endTime = microtime(true);
 
         $this->addMeasure(
-            '[' . ucfirst($type) . '] ' . $sql,
+            '['.ucfirst($type).'] '.$sql,
             $this->startTime ?? $endTime,
             $endTime,
             [
-                'hash'       => $hash,
-                'tags'       => $tags,
+                'hash' => $hash,
+                'tags' => $tags,
                 'parameters' => $parameters,
             ]
         );
     }
 
-    /** @inheritDoc */
+    /** {@inheritDoc} */
     #[\Override]
     public function collect()
     {
         $data = parent::collect();
         $data['lada-measures'] = count($data['measures'] ?? []);
+
         return $data;
     }
 
-    /** @inheritDoc */
+    /** {@inheritDoc} */
     #[\Override]
     public function getName()
     {
         return 'lada';
     }
 
-    /** @inheritDoc */
+    /** {@inheritDoc} */
     #[\Override]
     public function getWidgets()
     {
         return [
             'Lada Cache' => [
-                'icon'    => 'database',
-                'widget'  => 'PhpDebugBar.Widgets.TimelineWidget',
-                'map'     => 'lada',
+                'icon' => 'database',
+                'widget' => 'PhpDebugBar.Widgets.TimelineWidget',
+                'map' => 'lada',
                 'default' => '{}',
             ],
             'Lada Cache:badge' => [
-                'map'     => 'lada.lada-measures',
+                'map' => 'lada.lada-measures',
                 'default' => 0,
             ],
         ];

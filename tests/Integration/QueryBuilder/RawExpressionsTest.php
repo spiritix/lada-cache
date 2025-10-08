@@ -7,19 +7,11 @@ use Illuminate\Support\Facades\DB;
 use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Tagger;
 use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
-use Spiritix\LadaCache\Tests\Concerns\InteractsWithRedis;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class RawExpressionsTest extends TestCase
 {
-    use InteractsWithRedis;
     use CacheAssertions;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->flushRedis();
-    }
 
     public function testJoinSubPropagatesSubqueryTags(): void
     {

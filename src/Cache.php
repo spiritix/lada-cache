@@ -35,7 +35,7 @@ final class Cache
     /**
      * Store the encoded value under the prefixed key and attach tag memberships.
      *
-     * @param array<string> $tags
+     * @param  array<string>  $tags
      */
     public function set(string $key, array $tags, mixed $data): void
     {
@@ -56,6 +56,7 @@ final class Cache
     public function get(string $key): mixed
     {
         $encoded = $this->redis->get($this->redis->prefix($key));
+
         return $encoded === null ? null : $this->encoder->decode($encoded);
     }
 
@@ -67,7 +68,7 @@ final class Cache
             try {
                 $this->redis->sadd($this->redis->prefix($tag), $prefixedKey);
             } catch (Throwable $e) {
-                Log::warning('[LadaCache] Tag repair failed: ' . $e->getMessage());
+                Log::warning('[LadaCache] Tag repair failed: '.$e->getMessage());
             }
         }
     }
@@ -86,13 +87,12 @@ final class Cache
 
             do {
                 [$cursor, $keys] = $this->redis->scan($cursor, 'MATCH', $pattern, 'COUNT', 1000);
-                if (!empty($keys)) {
+                if (! empty($keys)) {
                     $this->redis->del(...$keys);
                 }
             } while ($cursor !== '0' && $cursor !== 0);
         } catch (Throwable $e) {
-            Log::warning('[LadaCache] Redis flush failed: ' . $e->getMessage());
+            Log::warning('[LadaCache] Redis flush failed: '.$e->getMessage());
         }
     }
 }
-

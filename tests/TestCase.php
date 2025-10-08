@@ -4,8 +4,8 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Tests;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Illuminate\Support\Facades\DB;
 use Orchestra\Testbench\TestCase as BaseTestCase;
+use Illuminate\Support\Facades\Redis;
 use Spiritix\LadaCache\LadaCacheServiceProvider;
 
 class TestCase extends BaseTestCase
@@ -26,14 +26,9 @@ class TestCase extends BaseTestCase
             return sprintf('Spiritix\\LadaCache\\Tests\\Database\\Factories\\%sFactory', class_basename($modelName));
         });
 
-        DB::beginTransaction();
-    }
-
-    protected function tearDown(): void
-    {
-        DB::rollBack();
-
-        parent::tearDown();
+        // Ensure a clean cache for every test: flush configured Redis connection
+        $connection = (string) config('lada-cache.redis_connection', 'cache');
+        Redis::connection($connection)->flushdb();
     }
 
     protected function getPackageProviders($app): array

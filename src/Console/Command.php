@@ -32,7 +32,7 @@ abstract class Command extends BaseCommand
     {
         $configFile = config_path(LadaCacheServiceProvider::CONFIG_FILE);
 
-        if (!File::exists($configFile)) {
+        if (! File::exists($configFile)) {
             Artisan::call('vendor:publish', [
                 '--provider' => LadaCacheServiceProvider::class,
                 '--tag' => 'config',
@@ -47,13 +47,13 @@ abstract class Command extends BaseCommand
                 is_bool($value) => $value ? 'true' : 'false',
                 is_numeric($value) => (string) $value,
                 $value === null => 'null',
-                default => "'" . addslashes((string) $value) . "'",
+                default => "'".addslashes((string) $value)."'",
             };
 
             // Escape the key to avoid unintended regex behavior.
             $escapedKey = preg_quote($key, '/');
             $pattern = "/(['\"]{$escapedKey}['\"]\s*=>\s*)(.*?),(\r?\n)/s";
-            $replacement = '$1' . $formatted . ',$3';
+            $replacement = '$1'.$formatted.',$3';
 
             $newContents = preg_replace($pattern, $replacement, $contents, 1, $count);
             if ($newContents === null) {
@@ -76,7 +76,8 @@ abstract class Command extends BaseCommand
                 File::put($configFile, $newContents);
             }
         } catch (Exception $e) {
-            $this->error('Could not write lada-cache config: ' . $e->getMessage());
+            $this->error('Could not write lada-cache config: '.$e->getMessage());
+
             return false;
         }
 

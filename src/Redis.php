@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\Redis as RedisFacade;
 final readonly class Redis
 {
     private string $prefix;
+
     private Connection $connection;
 
     public function __construct(?Connection $connection = null)
@@ -38,7 +39,7 @@ final readonly class Redis
 
     public function prefix(string $key): string
     {
-        return $this->prefix . $key;
+        return $this->prefix.$key;
     }
 
     public function __call(string $name, array $arguments): mixed
