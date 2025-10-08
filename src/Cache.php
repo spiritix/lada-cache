@@ -83,9 +83,14 @@ final class Cache
             do {
                 [$cursor, $keys] = $this->redis->scan($cursor, 'MATCH', $pattern, 'COUNT', 1000);
                 if (! empty($keys)) {
-                    $this->redis->del(...$keys);
+                    // Prefer non-blocking UNLINK when available; fall back to DEL.
+                    try {
+                        $this->redis->unlink(...$keys);
+                    } catch (Throwable) {
+                        $this->redis->del(...$keys);
+                    }
                 }
-            } while ($cursor !== '0' && $cursor !== 0);
+            } while ($cursor !== '0');
         } catch (Throwable $e) {
             Log::warning('[LadaCache] Redis flush failed: '.$e->getMessage());
         }

@@ -14,6 +14,7 @@
 - exists() uses cached select path when not locked
 - Added invalidation for insertUsing/insertOrIgnoreUsing/updateFrom
 - Tag sets self-heal on cache hits (idempotent SADD)
+- Cache::flush() prefers non-blocking UNLINK (falls back to DEL)
 
 ### Fixed
 - No Redis initialization when disabled; flush command is a no-op when inactive

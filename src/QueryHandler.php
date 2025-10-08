@@ -70,8 +70,8 @@ final class QueryHandler
     }
 
     /**
-     * @param string $statementType One of Reflector::QUERY_TYPE_*
-     * @param array<string, mixed> $values Values used by the grammar to compile the SQL (e.g., update sets)
+     * @param  string  $statementType  One of Reflector::QUERY_TYPE_*
+     * @param  array<string, mixed>  $values  Values used by the grammar to compile the SQL (e.g., update sets)
      */
     public function invalidateQuery(string $statementType, array $values = []): void
     {
@@ -105,6 +105,7 @@ final class QueryHandler
 
                 // We can't know hashes before flushing; record action only.
                 $this->stopCollector($reflector, $tags, [], "Invalidation queued ({$statementType})");
+
                 return;
             }
 

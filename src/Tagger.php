@@ -117,23 +117,22 @@ final readonly class Tagger
         if (is_array($value)) {
             $out = [];
             foreach ($value as $item) {
-                if (is_scalar($item) || is_string($item)) {
-                    $out[] = (string) $this->prefix((string) $item, $prefix);
+                if (is_scalar($item)) {
+                    $out[] = $prefix.(string) $item;
 
                     continue;
                 }
                 if (is_object($item) && method_exists($item, '__toString')) {
-                    $out[] = (string) $this->prefix((string) $item, $prefix);
+                    $out[] = $prefix.(string) $item;
+
+                    continue;
                 }
-                // Otherwise skip unstringable items (e.g., Query Expressions). Reflector should already
-                // have provided normalized string table names for tagging purposes.
+                // Skip unstringable items (e.g., Query Expressions). TableExtractor already normalizes names.
             }
 
             return $out;
         }
 
-        $normalized = preg_replace('/\s+as\s+\w+$/i', '', (string) $value);
-
-        return $prefix.(string) $normalized;
+        return $prefix.$value;
     }
 }

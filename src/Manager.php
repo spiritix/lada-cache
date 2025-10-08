@@ -50,24 +50,12 @@ final readonly class Manager
             return true;
         }
 
-        // Inclusive mode → all must be explicitly listed
+        // Inclusive mode: every referenced table must be present in includeTables
         if ($this->includeTables !== []) {
-            foreach ($tables as $table) {
-                if (! in_array($table, $this->includeTables, true)) {
-                    return false;
-                }
-            }
-
-            return true;
+            return array_diff($tables, $this->includeTables) === [];
         }
 
-        // Exclusive mode → none may appear in the blacklist
-        foreach ($tables as $table) {
-            if (in_array($table, $this->excludeTables, true)) {
-                return false;
-            }
-        }
-
-        return true;
+        // Exclusive mode: no referenced table may appear in excludeTables
+        return array_intersect($tables, $this->excludeTables) === [];
     }
 }

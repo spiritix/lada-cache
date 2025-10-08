@@ -66,7 +66,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
     /**
      * {@inheritDoc}
      */
-    public function register()
+    public function register(): void
     {
         $this->mergeConfigFrom(
             __DIR__.'/../config/'.self::CONFIG_FILE,
@@ -84,7 +84,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
     /**
      * {@inheritDoc}
      */
-    public function provides()
+    public function provides(): array
     {
         return [
             'lada.redis',
