@@ -11,7 +11,7 @@ services:
     depends_on:
       - redis
     command: >
-      bash -lc "set -e; vendor/bin/phpunit"
+      bash -lc "set -e; vendor/bin/phpunit --configuration phpunit.xml --coverage-clover coverage.xml"
     networks:
       - main
 

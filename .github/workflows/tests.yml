@@ -50,7 +50,7 @@ jobs:
         run: composer install --no-interaction --prefer-dist
 
       - name: Run PHPUnit tests with coverage
-        run: vendor/bin/phpunit --coverage-clover coverage.xml
+        run: vendor/bin/phpunit --configuration phpunit.xml --coverage-clover coverage.xml
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
