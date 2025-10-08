@@ -18,7 +18,7 @@ use Spiritix\LadaCache\QueryHandler;
 trait LadaCacheTrait
 {
     /** @inheritDoc */
-    public function newPivot(self $parent, array $attributes, $table, $exists, $using = null)
+    public function newPivot(Model $parent, array $attributes, $table, $exists, $using = null)
     {
         return $using
             ? $using::fromRawAttributes($parent, $attributes, $table, $exists)

@@ -55,7 +55,12 @@ class TestCase extends BaseTestCase
         // If the database Redis has a prefix, Lada fails to flush the cache
         $app['config']->set('database.redis.options.prefix', false);
 
-        // Set Redis host name for Docker
-        // $app['config']->set('database.redis.default.host', 'redis');
+        // Configure Redis host via environment to support Docker (service name) and local runs.
+        // In Docker, pass REDIS_HOST=redis; locally, default to 127.0.0.1.
+        $redisHost = env('REDIS_HOST', '127.0.0.1');
+        // Use Predis client to avoid requiring the native phpredis extension in CI/Docker.
+        $app['config']->set('database.redis.client', 'predis');
+        $app['config']->set('database.redis.default.host', $redisHost);
+        $app['config']->set('database.redis.cache.host', $redisHost);
     }
 }

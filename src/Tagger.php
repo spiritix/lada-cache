@@ -30,16 +30,19 @@ final readonly class Tagger
         $this->considerRows = (bool) config('lada-cache.consider_rows', true);
     }
 
-    /**
-     * Build all tags for the underlying query.
-     *
-     * @return array<int, string>
-     */
     public function getTags(): array
     {
         $databaseTag = $this->prefix($this->reflector->getDatabase(), self::PREFIX_DATABASE);
-        /** @var array<int, string> $tables */
-        $tables = $this->reflector->getTables();
+        // Normalize tables to strings only, ignoring any non-string artifacts
+        $rawTables = $this->reflector->getTables();
+        $tables = [];
+        foreach ($rawTables as $t) {
+            if (is_string($t)) {
+                $tables[] = $t;
+            } elseif (is_scalar($t)) {
+                $tables[] = (string) $t;
+            }
+        }
 
         if (!$this->considerRows) {
             return $this->prefix($tables, $databaseTag);
@@ -63,11 +66,6 @@ final readonly class Tagger
         return $this->prefix($tags, $databaseTag);
     }
 
-    /**
-     * @param array<int, string> $tables
-     * @param array<string, array<int, scalar>> $rows
-     * @return array<int, string>
-     */
     private function getTableTags(array $tables, array $rows): array
     {
         $tags = [];
@@ -81,10 +79,14 @@ final readonly class Tagger
             $hasSpecificRows = !empty($rows[$table] ?? []);
 
             if ($type === Reflector::QUERY_TYPE_SELECT) {
-                $tags[] = $this->prefix(
-                    $table,
-                    $hasSpecificRows ? self::PREFIX_TABLE_SPECIFIC : self::PREFIX_TABLE_UNSPECIFIC
-                );
+                if ($hasSpecificRows) {
+                    // Add both specific and unspecific table tags so that broad invalidations
+                    // (e.g., UPDATE/DELETE) catch row-specific cached entries.
+                    $tags[] = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
+                    $tags[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
+                } else {
+                    $tags[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
+                }
             }
 
             if (in_array($type, [Reflector::QUERY_TYPE_UPDATE, Reflector::QUERY_TYPE_DELETE], true)) {
@@ -106,17 +108,25 @@ final readonly class Tagger
         return array_unique($tags);
     }
 
-    /**
-     * @param string|array<int, string> $value
-     * @return string|array<int, string>
-     */
     private function prefix(string|array $value, string $prefix): string|array
     {
         if (is_array($value)) {
-            return array_map(fn(string $item): string => $this->prefix($item, $prefix), $value);
+            $out = [];
+            foreach ($value as $item) {
+                if (is_scalar($item) || is_string($item)) {
+                    $out[] = (string) $this->prefix((string) $item, $prefix);
+                    continue;
+                }
+                if (is_object($item) && method_exists($item, '__toString')) {
+                    $out[] = (string) $this->prefix((string) $item, $prefix);
+                }
+                // Otherwise skip unstringable items (e.g., Query Expressions). Reflector should already
+                // have provided normalized string table names for tagging purposes.
+            }
+            return $out;
         }
 
-        $normalized = preg_replace('/\s+as\s+\w+$/i', '', $value);
+        $normalized = preg_replace('/\s+as\s+\w+$/i', '', (string) $value);
         return $prefix . (string) $normalized;
     }
 }

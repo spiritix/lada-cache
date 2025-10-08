@@ -54,18 +54,23 @@ final class QueryHandler
             return;
         }
 
-        $reflector = new Reflector($this->builder);
-        $manager = new Manager($reflector);
+        try {
+            $reflector = new Reflector($this->builder);
+            $manager = new Manager($reflector);
 
-        if (!$manager->shouldCache()) {
+            if (!$manager->shouldCache()) {
+                return;
+            }
+
+            $tagger = new Tagger($reflector);
+            $this->subQueryTags = array_values(array_unique([
+                ...$this->subQueryTags,
+                ...$tagger->getTags(),
+            ]));
+        } catch (Throwable) {
+            // On any reflection/type error, skip collecting subquery tags.
             return;
         }
-
-        $tagger = new Tagger($reflector);
-        $this->subQueryTags = array_values(array_unique([
-            ...$this->subQueryTags,
-            ...$tagger->getTags(),
-        ]));
     }
 
     /**
@@ -85,32 +90,45 @@ final class QueryHandler
             return $queryClosure();
         }
 
-        $reflector = new Reflector($this->builder);
-        $manager = new Manager($reflector);
+        try {
+            $reflector = new Reflector($this->builder);
+            $manager = new Manager($reflector);
 
-        if (!$manager->shouldCache()) {
-            return $queryClosure();
+            if (!$manager->shouldCache()) {
+                return $queryClosure();
+            }
+
+            $hasher = new Hasher($reflector);
+            $tagger = new Tagger($reflector);
+
+            $key = $hasher->getHash();
+            $tags = array_values(array_unique([...$tagger->getTags(), ...$subQueryTags]));
+
+            $cached = $this->cache->has($key) ? $this->cache->get($key) : null;
+            $action = $cached === null ? 'Miss' : 'Hit';
+
+            if ($cached === null) {
+                $cached = $queryClosure();
+                $this->cache->set($key, $tags, $cached);
+            } else {
+                // Self-heal tag membership inconsistencies by idempotently adding the key to each tag set.
+                $this->cache->repairTagMembership($key, $tags);
+            }
+
+            $this->stopCollector($reflector, $tags, $key, $action);
+            return $cached;
+        } catch (Throwable) {
+            // On any reflection/type/tagging error, do not cache; run the query directly.
+            $result = $queryClosure();
+            // Best effort to stop collector with bypass info.
+            try {
+                $reflector = new Reflector($this->builder);
+                $this->stopCollector($reflector, [], '', 'Bypass (error)');
+            } catch (Throwable) {
+                // ignore
+            }
+            return $result;
         }
-
-        $hasher = new Hasher($reflector);
-        $tagger = new Tagger($reflector);
-
-        $key = $hasher->getHash();
-        $tags = array_values(array_unique([...$tagger->getTags(), ...$subQueryTags]));
-
-        $cached = $this->cache->has($key) ? $this->cache->get($key) : null;
-        $action = $cached === null ? 'Miss' : 'Hit';
-
-        if ($cached === null) {
-            $cached = $queryClosure();
-            $this->cache->set($key, $tags, $cached);
-        } else {
-            // Self-heal tag membership inconsistencies by idempotently adding the key to each tag set.
-            $this->cache->repairTagMembership($key, $tags);
-        }
-
-        $this->stopCollector($reflector, $tags, $key, $action);
-        return $cached;
     }
 
     /**
@@ -127,35 +145,46 @@ final class QueryHandler
             return;
         }
 
-        $reflector = new Reflector($this->builder, $statementType, $values);
-        $manager = new Manager($reflector);
+        try {
+            $reflector = new Reflector($this->builder, $statementType, $values);
+            $manager = new Manager($reflector);
 
-        if (!$manager->shouldCache()) {
-            return;
-        }
-
-        $tagger = new Tagger($reflector);
-        $tags = $tagger->getTags();
-
-        // If in a transaction, queue invalidation until commit; otherwise, execute immediately.
-        $connection = $this->builder->getConnection();
-        if (method_exists($connection, 'transactionLevel') && $connection->transactionLevel() > 0) {
-            $this->queueInvalidationForConnection($connection, $tags);
-
-            // Ensure we flush after commit for this connection.
-            if (method_exists($connection, 'afterCommit')) {
-                $connection->afterCommit(function () use ($connection): void {
-                    $this->flushQueuedInvalidationsForConnection($connection);
-                });
+            if (!$manager->shouldCache()) {
+                return;
             }
 
-            // We can't know hashes before flushing; record action only.
-            $this->stopCollector($reflector, $tags, [], "Invalidation queued ({$statementType})");
+            $tagger = new Tagger($reflector);
+            $tags = $tagger->getTags();
+
+            // If in a transaction, queue invalidation until commit; otherwise, execute immediately.
+            $connection = $this->builder->getConnection();
+            if (method_exists($connection, 'transactionLevel') && $connection->transactionLevel() > 0) {
+                $this->queueInvalidationForConnection($connection, $tags);
+
+                // Ensure we flush after commit for this connection.
+                if (method_exists($connection, 'afterCommit')) {
+                    $connection->afterCommit(function () use ($connection): void {
+                        $this->flushQueuedInvalidationsForConnection($connection);
+                    });
+                }
+
+                // We can't know hashes before flushing; record action only.
+                $this->stopCollector($reflector, $tags, [], "Invalidation queued ({$statementType})");
+                return;
+            }
+
+            $hashes = $this->invalidator->invalidate($tags);
+            $this->stopCollector($reflector, $tags, $hashes, "Invalidation ({$statementType})");
+        } catch (Throwable) {
+            // On any reflection/type/tagging error during invalidation, skip invalidation silently.
+            try {
+                $reflector = new Reflector($this->builder, $statementType, $values);
+                $this->stopCollector($reflector, [], [], 'Invalidation skipped (error)');
+            } catch (Throwable) {
+                // ignore
+            }
             return;
         }
-
-        $hashes = $this->invalidator->invalidate($tags);
-        $this->stopCollector($reflector, $tags, $hashes, "Invalidation ({$statementType})");
     }
 
     /**

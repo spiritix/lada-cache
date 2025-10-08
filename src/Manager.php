@@ -33,6 +33,12 @@ final readonly class Manager
 
     public function shouldCache(): bool
     {
+        // Avoid caching while a DB transaction is active to prevent serving
+        // stale data within the same transaction (invalidations flush on commit).
+        if ($this->reflector->inTransaction()) {
+            return false;
+        }
+
         return $this->cacheActive && $this->tablesCacheable();
     }
 

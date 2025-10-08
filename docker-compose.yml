@@ -1,22 +1,17 @@
-version: "3.9"
-
 services:
   app:
-    image: php:8.3-cli
+    build: .
+    image: lada-cache-app:latest
     container_name: lada-cache-app
     working_dir: /var/www
     volumes:
       - .:/var/www
+    environment:
+      - REDIS_HOST=redis
     depends_on:
       - redis
     command: >
-      bash -c "apt-get update &&
-               apt-get install -y git zip unzip redis-tools &&
-               docker-php-ext-install pdo_mysql &&
-               pecl install redis &&
-               docker-php-ext-enable redis &&
-               composer install &&
-               vendor/bin/phpunit"
+      bash -lc "set -e; vendor/bin/phpunit"
     networks:
       - main
 

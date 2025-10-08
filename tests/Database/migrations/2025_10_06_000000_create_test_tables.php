@@ -15,6 +15,7 @@ return new class extends Migration
             $table->foreignId('engine_id')->nullable();
             $table->foreignId('driver_id')->nullable();
             $table->string('name');
+            $table->softDeletes();
             $table->timestamps();
         });
 

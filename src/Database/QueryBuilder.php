@@ -98,6 +98,15 @@ class QueryBuilder extends Builder
     }
 
     /** {@inheritDoc} */
+    public function joinSub($query, $as, $first, $operator = null, $second = null, $type = 'inner', $where = false)
+    {
+        if ($query instanceof self) {
+            $this->handler->setBuilder($query)->collectSubQueryTags();
+        }
+        return parent::joinSub($query, $as, $first, $operator, $second, $type, $where);
+    }
+
+    /** {@inheritDoc} */
     public function insert(array $values)
     {
         $result = parent::insert($values);
@@ -199,7 +208,7 @@ class QueryBuilder extends Builder
     }
 
     /** {@inheritDoc} */
-    public function updateOrInsert(array $attributes, array $values = [])
+    public function updateOrInsert(array $attributes, callable|array $values = [])
     {
         $result = parent::updateOrInsert($attributes, $values);
 

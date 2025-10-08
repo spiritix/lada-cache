@@ -5,7 +5,7 @@
 ## [6.0] - 2025-10-07
 ### Added
 - Laravel 12 and PHP 8.3 support
-- Connection decorator via DB::extend() for core drivers
+- Connection integration via DB::extend() for core drivers 
 - Auto-flush after migrations (MigrationsEnded event)
 - Selectable Redis connection (lada-cache.redis_connection, default "cache")
 

@@ -27,11 +27,21 @@ final readonly class Encoder
 {
     public function encode(mixed $data): string
     {
-        if (is_array($data) || is_scalar($data) || $data === null) {
+        if (is_array($data)) {
+            return serialize($data);
+        }
+        if (is_scalar($data) || $data === null) {
             return json_encode($data, JSON_THROW_ON_ERROR);
         }
 
-        return serialize($data);
+        // For objects, prefer JSON to enable safe round-tripping of simple public data structures
+        // (e.g., anonymous classes with public properties). If JSON encoding fails, fall back to
+        // native serialization for complex framework types.
+        try {
+            return json_encode($data, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            return serialize($data);
+        }
     }
 
     public function decode(?string $data): mixed
@@ -41,10 +51,18 @@ final readonly class Encoder
         }
 
         try {
-            return json_decode($data, true, 512, JSON_THROW_ON_ERROR);
+            // If this is JSON, decode to arrays for arrays/scalars and to objects for JSON objects.
+            $trimmed = ltrim($data);
+            $assoc = ! str_starts_with($trimmed, '{');
+            return json_decode($data, $assoc, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException) {
             try {
-                return unserialize($data, ['allowed_classes' => true]);
+                // Suppress warnings and convert unserialize failures to null (except for serialized false 'b:0;').
+                $result = @unserialize($data, ['allowed_classes' => true]);
+                if ($result === false && $data !== 'b:0;') {
+                    return null;
+                }
+                return $result;
             } catch (Throwable) {
                 return null;
             }

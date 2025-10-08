@@ -10,10 +10,7 @@ trait InteractsWithRedis
 {
     protected function redis(string $connection = 'cache'): Connection
     {
-        /** @var Connection $conn */
-        $conn = RedisFacade::connection($connection);
-
-        return $conn;
+        return RedisFacade::connection($connection);
     }
 
     protected function flushRedis(string $connection = 'cache'): void

@@ -19,9 +19,9 @@ use Spiritix\LadaCache\Debug\CacheCollector;
 /**
  * Lada Cache service provider for Laravel 12.
  *
- * Registers bindings, database connection decorators, artisan commands,
- * and optional Debugbar integration. Configuration publishing is provided
- * and the package's config is merged during registration.
+ * Registers bindings, database connection integration (via DB::extend()),
+ * artisan commands, and optional Debugbar integration. Configuration
+ * publishing is provided and the package's config is merged during registration.
  */
 final class LadaCacheServiceProvider extends ServiceProvider
 {
@@ -137,6 +137,13 @@ final class LadaCacheServiceProvider extends ServiceProvider
                 // Reuse the same grammar and processor to maintain driver-specific SQL.
                 $lada->setQueryGrammar($base->getQueryGrammar());
                 $lada->setPostProcessor($base->getPostProcessor());
+
+                // Ensure the schema grammar is present (driver-specific) and mirror it.
+                // Calling getSchemaBuilder() initializes the schema grammar on the base connection if needed.
+                $base->getSchemaBuilder();
+                if (method_exists($lada, 'setSchemaGrammar') && $base->getSchemaGrammar() !== null) {
+                    $lada->setSchemaGrammar($base->getSchemaGrammar());
+                }
 
                 return $lada;
             });

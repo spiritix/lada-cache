@@ -30,6 +30,7 @@
         "orchestra/testbench": "^10.6",
         "mockery/mockery": "^1.6",
         "barryvdh/laravel-debugbar": "^3.16",
+        "predis/predis": "^2.2",
         "laravel/pint": "^1.16"
     },
     "suggest": {

@@ -8,7 +8,7 @@ A **Redis-based**, fully automated, and scalable query cache layer for Laravel.
 [![Version](https://poser.pugx.org/spiritix/lada-cache/v/stable.svg)](https://packagist.org/packages/spiritix/lada-cache)
 [![License](https://poser.pugx.org/spiritix/lada-cache/license.svg)](https://packagist.org/packages/spiritix/lada-cache)
 
-> **Lada Cache 6.x** - Updated for Laravel 12 and PHP 8.3+ with connection decorators, improved tagging, and addressing a number of old issues and bugs.
+> **Lada Cache 6.x - a focused rewrite for Laravel 12 and PHP 8.3, addressing many long-standing issues and adding new features.**
 
 ## Table of Contents
 
@@ -34,7 +34,7 @@ A **Redis-based**, fully automated, and scalable query cache layer for Laravel.
 - ⚡ **Redis-backed** - in-memory speed, cluster-ready, horizontally scalable  
 - 🧰 **Laravel Debugbar integration** - visualize cache hits, misses, and invalidations  
 - 🎛️ **Fine-grained control** - include or exclude tables from caching  
-- 🧱 **Connection decorator architecture** - DB queries pass through Lada transparently
+- 🧱 **Connection integration** - DB queries pass through a Lada-aware connection subclass transparently
 
 ## Version Compatibility
 
@@ -50,7 +50,7 @@ A **Redis-based**, fully automated, and scalable query cache layer for Laravel.
 
 ## Architecture
 
-Lada Cache decorates Laravel’s database connections and query builders to intercept and cache all SQL operations automatically.
+Lada Cache integrates with Laravel’s database layer by registering a Lada-aware connection (via `DB::extend()`), which returns a custom query builder to intercept and cache SQL operations automatically.
 
 **Query lifecycle:**
 1. Intercept query → Reflector analyzes SQL, bindings, and affected tables.  
@@ -123,7 +123,6 @@ After publishing the configuration file (see [Installation](#installation)), you
 
 This file allows you to fine-tune cache behavior, such as:
 - Enabling or disabling Lada Cache globally  
-- Choosing the cache driver (Redis by default)  
 - Setting key prefixes and expiration times  
 - Defining which tables to include or exclude from caching  
 - Enabling Debugbar integration for cache inspection  
