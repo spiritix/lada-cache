@@ -20,14 +20,6 @@ use Spiritix\LadaCache\LadaCacheServiceProvider;
  */
 abstract class Command extends BaseCommand
 {
-    /**
-     * Update a single lada-cache configuration value, publishing the config
-     * first if it does not yet exist.
-     *
-     * The method performs a targeted, regex-based replacement of the specified
-     * `$key` within the package config file. If the key does not exist, it will
-     * be added just before the closing `);`.
-     */
     protected function writeConfig(string $key, string|bool|int|float|null $value): bool
     {
         $configFile = config_path(LadaCacheServiceProvider::CONFIG_FILE);

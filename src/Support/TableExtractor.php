@@ -10,6 +10,7 @@ use Illuminate\Database\Query\JoinClause;
 
 /**
  * Utility to extract table names (as strings) from a Laravel Query Builder.
+ *
  * Handles FROM, JOINs, EXISTS subqueries, and UNION branches.
  */
 final class TableExtractor

@@ -8,7 +8,7 @@ namespace Spiritix\LadaCache\Console;
  * Enable the Lada Cache database cache.
  *
  * This command updates the package configuration to set `active` to true
- * and reports the outcome via the console. Compatible with Laravel 12.
+ * and reports the outcome via the console.
  */
 final class EnableCommand extends Command
 {

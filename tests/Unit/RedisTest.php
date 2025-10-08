@@ -4,15 +4,13 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Unit;
 
-use Illuminate\Redis\Connections\PredisConnection as RedisConnection;
-use PHPUnit\Framework\MockObject\MockObject;
+use Illuminate\Support\Facades\Redis as RedisFacade;
+use Illuminate\Redis\Connections\Connection;
 use Spiritix\LadaCache\Redis;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class RedisTest extends TestCase
 {
-    /** @var RedisConnection&MockObject */
-    private RedisConnection $connection;
     private Redis $redis;
 
     protected function setUp(): void
@@ -21,12 +19,7 @@ class RedisTest extends TestCase
 
         config(['lada-cache.prefix' => 'lada:']);
 
-        $this->connection = $this->getMockBuilder(RedisConnection::class)
-            ->disableOriginalConstructor()
-            ->addMethods(['set', 'get'])
-            ->getMock();
-
-        $this->redis = new Redis($this->connection);
+        $this->redis = new Redis();
     }
 
     public function testPrefixConcatenatesConfiguredPrefixAndKey(): void
@@ -37,26 +30,16 @@ class RedisTest extends TestCase
 
     public function testGetConnectionReturnsInjectedConnection(): void
     {
-        $this->assertSame($this->connection, $this->redis->getConnection());
+        $expected = RedisFacade::connection((string) config('lada-cache.redis_connection', 'cache'));
+        $this->assertSame($expected, $this->redis->getConnection());
+        $this->assertInstanceOf(Connection::class, $this->redis->getConnection());
     }
 
     public function testDynamicCallsAreForwardedToUnderlyingConnection(): void
     {
-        // Forward a typical Redis command
-        $this->connection->expects($this->once())
-            ->method('set')
-            ->with('key', 'value')
-            ->willReturn('OK');
-
-        $result = $this->redis->set('key', 'value');
-        $this->assertSame('OK', $result);
-
-        // And another dynamic call
-        $this->connection->expects($this->once())
-            ->method('get')
-            ->with('key')
-            ->willReturn('value');
-
-        $this->assertSame('value', $this->redis->get('key'));
+        // Forward a typical Redis command via proxy and assert round-trip
+        $key = 'lada:test:key';
+        $this->redis->set($key, 'value');
+        $this->assertSame('value', $this->redis->get($key));
     }
 }

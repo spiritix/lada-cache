@@ -13,8 +13,7 @@ use Spiritix\LadaCache\QueryHandler;
  *
  * Include this trait on models to route all base queries through the
  * Lada Cache-aware query builder, enabling transparent caching and
- * invalidation. The overridden methods mirror Laravel 12 signatures
- * to ensure forward compatibility with framework internals.
+ * invalidation.
  */
 trait LadaCacheTrait
 {

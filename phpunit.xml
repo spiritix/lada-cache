@@ -6,19 +6,26 @@
          stopOnFailure="false"
          failOnWarning="true"
          failOnRisky="true"
+         failOnDeprecation="false"
          executionOrder="depends,defects"
-         beStrictAboutCoversAnnotation="false">
-
+         displayDetailsOnTestsThatTriggerDeprecations="true"
+         displayDetailsOnTestsThatTriggerWarnings="true"
+         displayDetailsOnTestsThatTriggerErrors="true"
+         displayDetailsOnPhpunitDeprecations="true"
+>
     <testsuites>
         <testsuite name="Unit">
             <directory suffix="Test.php">tests</directory>
         </testsuite>
     </testsuites>
 
-    <coverage>
+    <source>
         <include>
             <directory suffix=".php">src</directory>
         </include>
+    </source>
+
+    <coverage>
         <report>
             <clover outputFile="coverage.xml"/>
         </report>

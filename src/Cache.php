@@ -32,11 +32,6 @@ final class Cache
         return (bool) $this->redis->exists($this->redis->prefix($key));
     }
 
-    /**
-     * Store the encoded value under the prefixed key and attach tag memberships.
-     *
-     * @param  array<string>  $tags
-     */
     public function set(string $key, array $tags, mixed $data): void
     {
         $key = $this->redis->prefix($key);

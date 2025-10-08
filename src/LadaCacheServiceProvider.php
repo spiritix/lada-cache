@@ -17,7 +17,7 @@ use Spiritix\LadaCache\Database\Connection as LadaConnection;
 use Spiritix\LadaCache\Debug\CacheCollector;
 
 /**
- * Lada Cache service provider for Laravel 12.
+ * Lada Cache service provider for Laravel.
  *
  * Registers bindings, database connection integration (via DB::extend()),
  * artisan commands, and optional Debugbar integration. Configuration

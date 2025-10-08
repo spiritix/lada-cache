@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Database;
 
 use Spiritix\LadaCache\Database\QueryBuilder as LadaQueryBuilder;
+use Spiritix\LadaCache\QueryHandler as LadaQueryHandler;
 
 use function Illuminate\Support\enum_value;
 
@@ -18,15 +19,11 @@ use function Illuminate\Support\enum_value;
 final class Connection extends \Illuminate\Database\Connection
 {
     /**
-     * Get a new query builder instance.
-     *
-     * @return \Illuminate\Database\Query\Builder
-     *
      * {@inheritDoc}
      */
     public function query()
     {
-        /** @var \Spiritix\LadaCache\QueryHandler $handler */
+        /** @var LadaQueryHandler $handler */
         $handler = app('lada.handler');
 
         return new LadaQueryBuilder(
@@ -38,12 +35,6 @@ final class Connection extends \Illuminate\Database\Connection
     }
 
     /**
-     * Begin a fluent query against a database table.
-     *
-     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Contracts\Database\Query\Expression|\UnitEnum|string  $table
-     * @param  string|null  $as
-     * @return \Illuminate\Database\Query\Builder
-     *
      * {@inheritDoc}
      */
     public function table($table, $as = null)

@@ -29,11 +29,7 @@ final class QueryHandler
     /** @var string[] */
     private array $subQueryTags = [];
 
-    /**
-     * Queued invalidation tags per connection name for transaction-aware flushing.
-     *
-     * @var array<string, array<int, string>>
-     */
+    /** @var array<string, array<int, string>> */
     private array $queuedInvalidations = [];
 
     public function __construct(
@@ -48,9 +44,6 @@ final class QueryHandler
         return $this;
     }
 
-    /**
-     * Collect tags from subqueries for propagation to the main query.
-     */
     public function collectSubQueryTags(): void
     {
         if ($this->builder === null) {
@@ -77,8 +70,6 @@ final class QueryHandler
     }
 
     /**
-     * Invalidate cache entries affected by a modifying query.
-     *
      * @param string $statementType One of Reflector::QUERY_TYPE_*
      * @param array<string, mixed> $values Values used by the grammar to compile the SQL (e.g., update sets)
      */
@@ -131,8 +122,6 @@ final class QueryHandler
     }
 
     /**
-     * Execute and cache a query.
-     *
      * @param  Closure(): array<mixed>  $queryClosure
      * @return array<mixed>
      */
@@ -190,9 +179,6 @@ final class QueryHandler
         }
     }
 
-    /**
-     * Queue tags for invalidation for a specific connection (by name) during a transaction.
-     */
     public function queueInvalidationForConnection(ConnectionInterface $connection, array $tags): void
     {
         $name = (string) ($connection->getName() ?? 'default');
@@ -200,9 +186,6 @@ final class QueryHandler
         $this->queuedInvalidations[$name] = array_values(array_unique([...$existing, ...$tags]));
     }
 
-    /**
-     * Flush all queued invalidations for the given connection and clear the queue.
-     */
     public function flushQueuedInvalidationsForConnection(ConnectionInterface $connection): void
     {
         $name = (string) ($connection->getName() ?? 'default');
@@ -213,18 +196,12 @@ final class QueryHandler
         unset($this->queuedInvalidations[$name]);
     }
 
-    /**
-     * Clear queued invalidations for a connection (e.g., on rollback).
-     */
     public function clearQueuedInvalidationsForConnection(ConnectionInterface $connection): void
     {
         $name = (string) ($connection->getName() ?? 'default');
         unset($this->queuedInvalidations[$name]);
     }
 
-    /**
-     * Initialize Debugbar collector safely.
-     */
     private function startCollector(): void
     {
         try {
@@ -236,8 +213,6 @@ final class QueryHandler
     }
 
     /**
-     * Finalize the Debugbar measurement if the collector is available.
-     *
      * @param  array<string>  $tags
      * @param  array<string>|string  $hashes
      */

@@ -48,8 +48,9 @@
         }
     },
     "scripts": {
-        "test": "vendor/bin/phpunit",
-        "format": "vendor/bin/pint"
+        "test": "vendor/bin/phpunit --configuration phpunit.xml --coverage-clover coverage.xml",
+        "bugs": "vendor/bin/phpstan analyse --level=max src/",
+        "format": "vendor/bin/pint src/"
     },
     "minimum-stability": "stable",
     "prefer-stable": true,

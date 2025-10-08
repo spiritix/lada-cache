@@ -7,9 +7,7 @@ namespace Spiritix\LadaCache;
 use Illuminate\Support\Facades\Config;
 
 /**
- * Manager
- *
- * Decides whether the current query, as reflected by a `Reflector`, should be cached.
+ * Manager decides whether the current query, as reflected by a `Reflector`, should be cached.
  *
  * Architectural notes:
  * - This class is immutable and declared as readonly; configuration values are captured at construction.

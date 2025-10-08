@@ -9,7 +9,7 @@ use Illuminate\Console\Command;
 /**
  * Flush all entries from the Lada Cache database cache.
  *
- * Executes a full cache flush and reports the outcome. Compatible with Laravel 12.
+ * Executes a full cache flush and reports the outcome.
  */
 final class FlushCommand extends Command
 {

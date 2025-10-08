@@ -12,10 +12,6 @@ use DebugBar\DataCollector\TimeDataCollector;
  * Collects timing measures for Lada Cache operations and exposes them to
  * the DebugBar timeline and badge widgets. This class extends DebugBar's
  * TimeDataCollector to integrate seamlessly with the existing DebugBar UI.
- *
- * Notes:
- * - Method signatures overriding the parent mirror the parent's declarations
- *   (no return types) for compatibility across DebugBar versions and Laravel 12.
  */
 final class CacheCollector extends TimeDataCollector
 {
