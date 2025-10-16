@@ -19,8 +19,10 @@ class ConfigurationBehaviourTest extends TestCase
         config(['lada-cache.active' => false]);
 
         $builder = DB::table('cars');
-        $manager = new Manager(new Reflector($builder));
-        $this->assertFalse($manager->shouldCache());
+        
+        // When inactive, DB::table() returns Laravel's default builder, not Lada's
+        $this->assertInstanceOf(\Illuminate\Database\Query\Builder::class, $builder);
+        $this->assertNotInstanceOf(\Spiritix\LadaCache\Database\QueryBuilder::class, $builder);
     }
 
     public function testIncludeTablesOnlyCachesIncluded(): void

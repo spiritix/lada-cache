@@ -66,13 +66,18 @@ class ManagerTest extends TestCase
 
     public function testInactiveDisablesCachingRegardlessOfTables(): void
     {
+        // Temporarily enable to get a Lada query builder, then test Manager with inactive config
+        config(['lada-cache.active' => true]);
+        $reflector = $this->makeReflectorFromTables(['cars']);
+        
+        // Now set inactive and test that Manager respects it
         config([
             'lada-cache.active' => false,
             'lada-cache.include_tables' => ['cars'],
             'lada-cache.exclude_tables' => [],
         ]);
 
-        $manager = new Manager($this->makeReflectorFromTables(['cars']));
+        $manager = new Manager($reflector);
         $this->assertFalse($manager->shouldCache());
     }
 }

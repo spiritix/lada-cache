@@ -124,6 +124,9 @@ final class LadaCacheServiceProvider extends ServiceProvider
                     $base->getConfig(),
                 );
 
+                // Store the base connection for proxying driver-specific methods
+                $lada->setBaseConnection($base);
+
                 // Mirror read PDO and name to preserve behavior.
                 if (method_exists($lada, 'setReadPdo')) {
                     $lada->setReadPdo($base->getReadPdo());
