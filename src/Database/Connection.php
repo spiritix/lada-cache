@@ -7,8 +7,6 @@ namespace Spiritix\LadaCache\Database;
 use Spiritix\LadaCache\Database\QueryBuilder as LadaQueryBuilder;
 use Spiritix\LadaCache\QueryHandler as LadaQueryHandler;
 
-use function Illuminate\Support\enum_value;
-
 /**
  * Lada Cache database connection.
  *
@@ -32,13 +30,5 @@ final class Connection extends \Illuminate\Database\Connection
             $this->getQueryGrammar(),
             $this->getPostProcessor(),
         );
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function table($table, $as = null)
-    {
-        return $this->query()->from(enum_value($table), $as);
     }
 }
