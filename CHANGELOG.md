@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [6.0.1] - 2025-10-16
+### Fixed
+- Fixed connection driver delegation (see https://github.com/spiritix/lada-cache/issues/138)
+- Fixed service provider when disabled (see https://github.com/spiritix/lada-cache/issues/137)
+
 ## [6.0] - 2025-10-07
 ### Added
 - Laravel 12 and PHP 8.3 support
