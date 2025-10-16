@@ -73,11 +73,12 @@ final class LadaCacheServiceProvider extends ServiceProvider
             'lada-cache'
         );
 
-        // Only register Redis-backed singletons when active to avoid initializing Redis in disabled environments.
+        // Only register when active to avoid bootstrap overhead when disabled
         if ((bool) config('lada-cache.active', true)) {
             $this->registerSingletons();
             $this->registerDatabaseDecorator();
         }
+
         $this->registerCommands();
     }
 

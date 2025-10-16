@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Database;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\Pivot;
 use Spiritix\LadaCache\QueryHandler;
 
 /**
@@ -18,16 +16,13 @@ use Spiritix\LadaCache\QueryHandler;
 trait LadaCacheTrait
 {
     /** {@inheritDoc} */
-    public function newPivot(Model $parent, array $attributes, $table, $exists, $using = null)
-    {
-        return $using
-            ? $using::fromRawAttributes($parent, $attributes, $table, $exists)
-            : Pivot::fromAttributes($parent, $attributes, $table, $exists);
-    }
-
-    /** {@inheritDoc} */
     protected function newBaseQueryBuilder()
     {
+        // When Lada Cache is disabled, use Laravel's default query builder
+        if (! (bool) config('lada-cache.active', true)) {
+            return parent::newBaseQueryBuilder();
+        }
+
         $connection = $this->getConnection();
 
         /** @var QueryHandler $handler */
