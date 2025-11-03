@@ -88,6 +88,19 @@ class CreateUpdateDeleteTest extends TestCase
         Assert::assertSame(40, $u2->driver_id);
     }
 
+    public function test_new_model_save_populates_id(): void
+    {
+        $car = new Car(['name' => 'save-populates-id']);
+
+        Assert::assertFalse($car->exists);
+
+        $car->save();
+
+        Assert::assertTrue($car->exists);
+        Assert::assertNotNull($car->id);
+        Assert::assertSame('save-populates-id', Car::find($car->id)?->name);
+    }
+
     public function test_delete_and_destroy(): void
     {
         $car = $this->makeCar();

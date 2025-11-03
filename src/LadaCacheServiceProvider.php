@@ -13,7 +13,11 @@ use Illuminate\Support\ServiceProvider;
 use Spiritix\LadaCache\Console\DisableCommand;
 use Spiritix\LadaCache\Console\EnableCommand;
 use Spiritix\LadaCache\Console\FlushCommand;
-use Spiritix\LadaCache\Database\Connection as LadaConnection;
+use Spiritix\LadaCache\Database\MySqlConnection as LadaMySqlConnection;
+use Spiritix\LadaCache\Database\MariaDbConnection as LadaMariaDbConnection;
+use Spiritix\LadaCache\Database\PostgresConnection as LadaPostgresConnection;
+use Spiritix\LadaCache\Database\SqliteConnection as LadaSqliteConnection;
+use Spiritix\LadaCache\Database\SqlServerConnection as LadaSqlServerConnection;
 use Spiritix\LadaCache\Debug\CacheCollector;
 
 /**
@@ -109,46 +113,92 @@ final class LadaCacheServiceProvider extends ServiceProvider
         );
     }
 
+    /**
+     * Copy driver-specific state from the base connection to the Lada connection.
+     */
+    private function hydrateLadaConnection(\Illuminate\Database\Connection $base, \Illuminate\Database\Connection $lada, string $name): \Illuminate\Database\Connection
+    {
+        if (method_exists($lada, 'setReadPdo')) {
+            $lada->setReadPdo($base->getReadPdo());
+        }
+        if (method_exists($lada, 'setName')) {
+            $lada->setName($name);
+        }
+
+        $lada->setQueryGrammar($base->getQueryGrammar());
+        $lada->setPostProcessor($base->getPostProcessor());
+
+        // Initialize schema grammar on base, then mirror it
+        $base->getSchemaBuilder();
+        if (method_exists($lada, 'setSchemaGrammar') && $base->getSchemaGrammar() !== null) {
+            $lada->setSchemaGrammar($base->getSchemaGrammar());
+        }
+
+        return $lada;
+    }
+
     private function registerDatabaseDecorator(): void
     {
-        foreach (['mysql', 'pgsql', 'sqlite', 'sqlsrv'] as $driver) {
-            DB::extend($driver, static function (array $config, string $name): \Illuminate\Database\Connection {
-                /** @var \Illuminate\Database\Connection $base */
-                $base = app('db.factory')->make($config, $name);
+        DB::extend('mysql', function (array $config, string $name): \Illuminate\Database\Connection {
+            /** @var \Illuminate\Database\MySqlConnection $base */
+            $base = app('db.factory')->make($config, $name);
+            $lada = new LadaMySqlConnection(
+                $base->getPdo(),
+                $base->getDatabaseName(),
+                $base->getTablePrefix(),
+                $base->getConfig(),
+            );
+            return $this->hydrateLadaConnection($base, $lada, $name);
+        });
 
-                // Recreate a Lada-aware Connection using the base connection's resources.
-                $lada = new LadaConnection(
-                    $base->getPdo(),
-                    $base->getDatabaseName(),
-                    $base->getTablePrefix(),
-                    $base->getConfig(),
-                );
+        // Optional explicit MariaDB driver (alias of MySQL)
+        DB::extend('mariadb', function (array $config, string $name): \Illuminate\Database\Connection {
+            /** @var \Illuminate\Database\MySqlConnection $base */
+            $base = app('db.factory')->make($config, $name);
+            $lada = new LadaMariaDbConnection(
+                $base->getPdo(),
+                $base->getDatabaseName(),
+                $base->getTablePrefix(),
+                $base->getConfig(),
+            );
+            return $this->hydrateLadaConnection($base, $lada, $name);
+        });
 
-                // Store the base connection for proxying driver-specific methods
-                $lada->setBaseConnection($base);
+        DB::extend('pgsql', function (array $config, string $name): \Illuminate\Database\Connection {
+            /** @var \Illuminate\Database\PostgresConnection $base */
+            $base = app('db.factory')->make($config, $name);
+            $lada = new LadaPostgresConnection(
+                $base->getPdo(),
+                $base->getDatabaseName(),
+                $base->getTablePrefix(),
+                $base->getConfig(),
+            );
+            return $this->hydrateLadaConnection($base, $lada, $name);
+        });
 
-                // Mirror read PDO and name to preserve behavior.
-                if (method_exists($lada, 'setReadPdo')) {
-                    $lada->setReadPdo($base->getReadPdo());
-                }
-                if (method_exists($lada, 'setName')) {
-                    $lada->setName($name);
-                }
+        DB::extend('sqlite', function (array $config, string $name): \Illuminate\Database\Connection {
+            /** @var \Illuminate\Database\SqliteConnection $base */
+            $base = app('db.factory')->make($config, $name);
+            $lada = new LadaSqliteConnection(
+                $base->getPdo(),
+                $base->getDatabaseName(),
+                $base->getTablePrefix(),
+                $base->getConfig(),
+            );
+            return $this->hydrateLadaConnection($base, $lada, $name);
+        });
 
-                // Reuse the same grammar and processor to maintain driver-specific SQL.
-                $lada->setQueryGrammar($base->getQueryGrammar());
-                $lada->setPostProcessor($base->getPostProcessor());
-
-                // Ensure the schema grammar is present (driver-specific) and mirror it.
-                // Calling getSchemaBuilder() initializes the schema grammar on the base connection if needed.
-                $base->getSchemaBuilder();
-                if (method_exists($lada, 'setSchemaGrammar') && $base->getSchemaGrammar() !== null) {
-                    $lada->setSchemaGrammar($base->getSchemaGrammar());
-                }
-
-                return $lada;
-            });
-        }
+        DB::extend('sqlsrv', function (array $config, string $name): \Illuminate\Database\Connection {
+            /** @var \Illuminate\Database\SqlServerConnection $base */
+            $base = app('db.factory')->make($config, $name);
+            $lada = new LadaSqlServerConnection(
+                $base->getPdo(),
+                $base->getDatabaseName(),
+                $base->getTablePrefix(),
+                $base->getConfig(),
+            );
+            return $this->hydrateLadaConnection($base, $lada, $name);
+        });
     }
 
     private function registerCommands(): void

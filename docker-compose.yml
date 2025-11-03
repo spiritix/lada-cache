@@ -23,6 +23,47 @@ services:
     networks:
       - main
 
+  mysql:
+    image: mysql:8.0
+    container_name: lada-cache-mysql
+    environment:
+      MYSQL_DATABASE: test
+      MYSQL_ROOT_PASSWORD: secret
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -psecret --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - main
+
+  app-mysql:
+    build: .
+    image: lada-cache-app:latest
+    container_name: lada-cache-app-mysql
+    working_dir: /var/www
+    volumes:
+      - .:/var/www
+    environment:
+      - REDIS_HOST=redis
+      - DB_CONNECTION=mysql
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_DATABASE=test
+      - DB_USERNAME=root
+      - DB_PASSWORD=secret
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: >
+      bash -lc "set -e; vendor/bin/phpunit --configuration phpunit.xml --coverage-clover coverage-mysql.xml"
+    networks:
+      - main
+
 networks:
   main:
     driver: bridge

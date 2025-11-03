@@ -15,7 +15,8 @@ class ReflectorTest extends TestCase
         $builder = DB::table('cars');
         $reflector = new Reflector($builder);
 
-        $this->assertSame(':memory:', $reflector->getDatabase());
+        $expected = DB::connection()->getDatabaseName();
+        $this->assertSame($expected, $reflector->getDatabase());
     }
 
     public function testGetTablesFromSimpleFromAndJoins(): void

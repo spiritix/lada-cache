@@ -4,9 +4,9 @@ FROM php:8.3-cli AS base
 ## Install SQLite dev libs and build pdo_sqlite once in the image
 RUN set -e; \
     apt-get update && apt-get install -y --no-install-recommends \
-        build-essential pkg-config libsqlite3-dev sqlite3 git unzip \
+        build-essential pkg-config libsqlite3-dev sqlite3 default-mysql-client libonig-dev git unzip \
     && docker-php-ext-configure pdo_sqlite \
-    && docker-php-ext-install -j"$(nproc)" pdo_sqlite \
+    && docker-php-ext-install -j"$(nproc)" pdo_sqlite pdo_mysql \
     && git config --system --add safe.directory /var/www \
     && rm -rf /var/lib/apt/lists/*
 
