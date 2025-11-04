@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [6.0.2] - 2025-11-04
+### Fixed
+- Fixed row-level invalidation handling (see https://github.com/spiritix/lada-cache/issues/140)
+- Fixed returning created IDs (see https://github.com/spiritix/lada-cache/issues/139)
+
 ## [6.0.1] - 2025-10-16
 ### Fixed
 - Fixed connection driver delegation (see https://github.com/spiritix/lada-cache/issues/138)
