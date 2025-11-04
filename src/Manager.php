@@ -42,14 +42,10 @@ final readonly class Manager
         return $this->cacheActive && $this->tablesCacheable();
     }
 
-    /**
-     * Determine if we should process invalidation for the current query context.
-     *
-     * Unlike shouldCache(), this does not disable behavior inside transactions,
-     * because invalidations must be queued during a transaction and flushed on commit.
-     */
     public function shouldInvalidate(): bool
     {
+        // Unlike shouldCache(), this does not disable behavior inside transactions,
+        // because invalidations must be queued during a transaction and flushed on commit.
         return $this->cacheActive && $this->tablesCacheable();
     }
 
