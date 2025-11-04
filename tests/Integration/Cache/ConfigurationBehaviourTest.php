@@ -48,7 +48,7 @@ class ConfigurationBehaviourTest extends TestCase
         config(['lada-cache.consider_rows' => true]);
         $tagsWithRows = (new Tagger($reflector))->getTags();
         $this->assertContains("tags:database:{$dbName}:table_specific:cars", $tagsWithRows);
-        $this->assertContains("tags:database:{$dbName}:table_unspecific:cars", $tagsWithRows);
+        $this->assertNotContains("tags:database:{$dbName}:table_unspecific:cars", $tagsWithRows);
         $this->assertContains("tags:database:{$dbName}:table_specific:cars:row:777", $tagsWithRows);
 
         // Without rows considered

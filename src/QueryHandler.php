@@ -54,7 +54,7 @@ final class QueryHandler
             $reflector = new Reflector($this->builder);
             $manager = new Manager($reflector);
 
-            if (! $manager->shouldCache()) {
+            if (! $manager->shouldInvalidate()) {
                 return;
             }
 
@@ -85,7 +85,7 @@ final class QueryHandler
             $reflector = new Reflector($this->builder, $statementType, $values);
             $manager = new Manager($reflector);
 
-            if (! $manager->shouldCache()) {
+            if (! $manager->shouldInvalidate()) {
                 return;
             }
 

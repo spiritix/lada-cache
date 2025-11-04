@@ -122,7 +122,7 @@ class TaggerTest extends TestCase
         $tags = (new Tagger(new Reflector($b)))->getTags();
 
         $this->assertTrue($this->arrayHasStringContaining($tags, ':table_unspecific:materials'));
-        $this->assertTrue($this->arrayHasStringContaining($tags, ':table_unspecific:cars'));
+        $this->assertFalse($this->arrayHasStringContaining($tags, ':table_unspecific:cars'));
         $this->assertTrue($this->arrayHasStringContaining($tags, ':table_specific:cars'));
         $this->assertTrue($this->arrayHasStringContaining($tags, ':table_specific:cars:row:10'));
         $this->assertTrue($this->arrayHasStringContaining($tags, ':table_specific:cars:row:20'));

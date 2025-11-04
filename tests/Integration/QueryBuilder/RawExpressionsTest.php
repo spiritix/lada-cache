@@ -25,11 +25,11 @@ class RawExpressionsTest extends TestCase
             ->where('cars.id', 201)
             ->select('cars.*');
 
-        // Assert Tagger (main query) produces both cars and engines tags
+        // Assert Tagger (main query) produces specific for cars (row-scoped) and unspecific for engines (broad)
         $reflector = new Reflector($builder);
         $dbName = $reflector->getDatabase();
         $tags = (new Tagger($reflector))->getTags();
-        $this->assertContains("tags:database:{$dbName}:table_unspecific:cars", $tags);
+        $this->assertContains("tags:database:{$dbName}:table_specific:cars", $tags);
         $this->assertContains("tags:database:{$dbName}:table_unspecific:engines", $tags);
     }
 
@@ -45,11 +45,11 @@ class RawExpressionsTest extends TestCase
             ->select('cars.*')
             ->selectSub($sub, 'driver_id_sub');
 
-        // Assert Tagger (main query) produces cars tag. For selectSub, Tagger does not include
-        // subquery tables; subquery tag propagation happens during caching (outside transactions).
+        // Assert Tagger (main query) produces cars tag; since it's row-scoped it is specific.
+        // Subquery tags are propagated during caching, not by Tagger here.
         $reflector = new Reflector($builder);
         $dbName = $reflector->getDatabase();
         $tags = (new Tagger($reflector))->getTags();
-        $this->assertContains("tags:database:{$dbName}:table_unspecific:cars", $tags);
+        $this->assertContains("tags:database:{$dbName}:table_specific:cars", $tags);
     }
 }

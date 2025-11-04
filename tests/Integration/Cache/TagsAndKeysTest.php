@@ -33,7 +33,7 @@ class TagsAndKeysTest extends TestCase
 
         $tags = (new Tagger($reflector))->getTags();
         $this->assertContains("tags:database:{$dbName}:table_specific:cars", $tags);
-        $this->assertContains("tags:database:{$dbName}:table_unspecific:cars", $tags);
+        $this->assertNotContains("tags:database:{$dbName}:table_unspecific:cars", $tags);
         $this->assertContains("tags:database:{$dbName}:table_specific:cars:row:1717", $tags);
     }
 

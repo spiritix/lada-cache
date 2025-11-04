@@ -84,17 +84,23 @@ final readonly class Tagger
 
             if ($type === Reflector::QUERY_TYPE_SELECT) {
                 if ($hasSpecificRows) {
-                    // Add both specific and unspecific table tags so that broad invalidations
-                    // (e.g., UPDATE/DELETE) catch row-specific cached entries.
+                    // Specific reads: only table_specific (isolation preserved)
                     $tags[] = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
-                    $tags[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
                 } else {
+                    // Broad reads: table_unspecific
                     $tags[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
                 }
             }
 
             if (in_array($type, [Reflector::QUERY_TYPE_UPDATE, Reflector::QUERY_TYPE_DELETE], true)) {
-                $tags[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
+                if ($hasSpecificRows) {
+                    // Specific mutations: rely on row-level tags only (added later in getTags())
+                    // No table-level tag to avoid nuking other specific rows.
+                } else {
+                    // Broad mutations: invalidate both specific and unspecific caches for the table
+                    $tags[] = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
+                    $tags[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
+                }
             }
 
             if ($type === Reflector::QUERY_TYPE_INSERT) {
@@ -102,8 +108,7 @@ final readonly class Tagger
             }
 
             if ($type === Reflector::QUERY_TYPE_TRUNCATE) {
-                // Truncate should invalidate all cache entries linked to the table,
-                // both specific (row-aware) and unspecific (table-level) tags.
+                // Truncate: invalidate all cache entries linked to the table
                 $tags[] = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
                 $tags[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
             }
