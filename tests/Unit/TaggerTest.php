@@ -52,7 +52,7 @@ class TaggerTest extends TestCase
         $this->assertContains($this->dbTagPrefix() . ':table_specific:cars:row:2', $tags);
     }
 
-    public function testUpdateProducesUnspecificTableTag(): void
+    public function testUpdateWithoutRowsProducesBothTableTags(): void
     {
         config(['lada-cache.consider_rows' => true]);
 
@@ -60,7 +60,24 @@ class TaggerTest extends TestCase
         $r = new Reflector($b, Reflector::QUERY_TYPE_UPDATE, ['name' => 'x']);
         $tags = (new Tagger($r))->getTags();
 
+        $this->assertContains($this->dbTagPrefix() . ':table_specific:cars', $tags);
         $this->assertContains($this->dbTagPrefix() . ':table_unspecific:cars', $tags);
+    }
+
+    public function testUpdateWithSpecificRowsProducesUnspecificAndRowTags(): void
+    {
+        config(['lada-cache.consider_rows' => true]);
+
+        $b = DB::table('cars')->whereIn('id', [5, 10]);
+        $r = new Reflector($b, Reflector::QUERY_TYPE_UPDATE, ['name' => 'updated']);
+        $tags = (new Tagger($r))->getTags();
+
+        // Invalidates aggregates but preserves row isolation
+        $this->assertContains($this->dbTagPrefix() . ':table_unspecific:cars', $tags);
+        $this->assertContains($this->dbTagPrefix() . ':table_specific:cars:row:5', $tags);
+        $this->assertContains($this->dbTagPrefix() . ':table_specific:cars:row:10', $tags);
+        // Should NOT have table_specific without row suffix (preserves isolation)
+        $this->assertNotContains($this->dbTagPrefix() . ':table_specific:cars', $tags);
     }
 
     public function testInsertProducesUnspecificTableTag(): void
@@ -74,7 +91,7 @@ class TaggerTest extends TestCase
         $this->assertContains($this->dbTagPrefix() . ':table_unspecific:cars', $tags);
     }
 
-    public function testDeleteProducesUnspecificTableTag(): void
+    public function testDeleteWithoutRowsProducesBothTableTags(): void
     {
         config(['lada-cache.consider_rows' => true]);
 
@@ -82,6 +99,7 @@ class TaggerTest extends TestCase
         $r = new Reflector($b, Reflector::QUERY_TYPE_DELETE);
         $tags = (new Tagger($r))->getTags();
 
+        $this->assertContains($this->dbTagPrefix() . ':table_specific:cars', $tags);
         $this->assertContains($this->dbTagPrefix() . ':table_unspecific:cars', $tags);
     }
 

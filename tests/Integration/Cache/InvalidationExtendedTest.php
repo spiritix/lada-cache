@@ -113,4 +113,20 @@ final class InvalidationExtendedTest extends TestCase
         $this->assertCacheMissing($kb);
         $this->assertCacheMissing($ks);
     }
+
+    public function test_specific_row_delete_invalidates_broad_select(): void
+    {
+        DB::table('cars')->insert(['id' => 60, 'name' => 'ToDelete', 'engine_id' => null, 'driver_id' => null]);
+
+        // Prime broad cache (no filters)
+        $countBefore = DB::table('cars')->count();
+        $this->assertGreaterThanOrEqual(1, $countBefore);
+
+        // Delete specific row
+        DB::table('cars')->where('id', 60)->delete();
+
+        // Broad read should reflect deletion (not stale cache)
+        $countAfter = DB::table('cars')->count();
+        $this->assertSame($countBefore - 1, $countAfter);
+    }
 }

@@ -94,8 +94,9 @@ final readonly class Tagger
 
             if (in_array($type, [Reflector::QUERY_TYPE_UPDATE, Reflector::QUERY_TYPE_DELETE], true)) {
                 if ($hasSpecificRows) {
-                    // Specific mutations: rely on row-level tags only (added later in getTags())
-                    // No table-level tag to avoid nuking other specific rows.
+                    // Specific mutations: invalidate aggregate queries but preserve row isolation.
+                    // Row-level tags are added separately in getTags().
+                    $tags[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
                 } else {
                     // Broad mutations: invalidate both specific and unspecific caches for the table
                     $tags[] = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);

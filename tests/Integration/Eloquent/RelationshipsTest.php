@@ -25,6 +25,25 @@ class RelationshipsTest extends TestCase
         Assert::assertSame('d1', $loaded->driver->name);
     }
 
+    public function test_update_or_create_move_invalidates_counts(): void
+    {
+        $d1 = $this->makeDriver(['name' => 'd1']);
+        $d2 = $this->makeDriver(['name' => 'd2']);
+        $car = $this->makeCar(['name' => 'movable', 'driver_id' => $d1->id]);
+
+        // Prime caches
+        Assert::assertSame(1, (int) Driver::withCount('cars')->findOrFail($d1->id)->cars_count);
+        Assert::assertSame(0, (int) Driver::withCount('cars')->findOrFail($d2->id)->cars_count);
+
+        // Move child via updateOrCreate (specific UPDATE)
+        Car::updateOrCreate(['id' => $car->id], ['driver_id' => $d2->id]);
+
+        // Expect both parent counts to update
+        Assert::assertSame(0, (int) Driver::withCount('cars')->findOrFail($d1->id)->cars_count);
+        Assert::assertSame(1, (int) Driver::withCount('cars')->findOrFail($d2->id)->cars_count);
+    }
+
+
     public function test_has_one_engine(): void
     {
         $car = $this->makeCar(['name' => 'c-has-one']);
