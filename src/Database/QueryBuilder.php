@@ -50,6 +50,16 @@ class QueryBuilder extends Builder
         return $this->clone()->limit(1)->get(['*'])->isNotEmpty();
     }
 
+    public function getHandler(): QueryHandler
+    {
+        return $this->handler;
+    }
+
+    public function getModel(): ?Model
+    {
+        return $this->model;
+    }
+
     public function getPrimaryKeyName(): string
     {
         return $this->model?->getKeyName() ?? self::DEFAULT_PRIMARY_KEY_NAME;
@@ -65,6 +75,12 @@ class QueryBuilder extends Builder
             $this->processor,
             $this->model
         );
+    }
+
+    /** {@inheritDoc} */
+    protected function newJoinClause(Builder $parentQuery, $type, $table)
+    {
+        return new JoinClause($parentQuery, $type, $table);
     }
 
     /** {@inheritDoc} */

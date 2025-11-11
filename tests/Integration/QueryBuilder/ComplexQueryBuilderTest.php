@@ -1,8 +1,7 @@
 <?php
-
 declare(strict_types=1);
 
-namespace Integration\QueryBuilder;
+namespace Spiritix\LadaCache\Tests\Integration\QueryBuilder;
 
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Assert;
