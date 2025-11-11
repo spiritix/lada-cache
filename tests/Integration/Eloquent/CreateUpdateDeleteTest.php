@@ -25,6 +25,24 @@ class CreateUpdateDeleteTest extends TestCase
         Assert::assertSame('bravo', Car::find($carB->id)?->name);
     }
 
+    public function test_update_or_create_invalidates_parent_relation_count(): void
+    {
+        // Parent without related engine
+        $car = $this->makeCar(['name' => 'uo-parent']);
+
+        // Prime the cache: relation count is 0
+        $before = Car::where('id', $car->id)->withCount('engine')->firstOrFail();
+        Assert::assertSame(0, (int) $before->engine_count);
+
+        // Perform updateOrCreate on the hasOne relation
+        // This should INSERT a related engine and invalidate the cached count
+        $car->engine()->updateOrCreate(['car_id' => $car->id], ['name' => 'e-uo']);
+
+        // Expect the count to reflect the new related row (should be 1)
+        $after = Car::where('id', $car->id)->withCount('engine')->firstOrFail();
+        Assert::assertSame(1, (int) $after->engine_count);
+    }
+
     public function test_first_or_create_and_first_or_new(): void
     {
         $created = Car::firstOrCreate(['name' => 'unique-model']);
