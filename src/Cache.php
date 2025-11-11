@@ -8,12 +8,16 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Handles cache storage and retrieval for database query results.
+ * Persistence layer for Lada Cache backed by Redis.
  *
- * Provides a Redis-backed layer that:
- * - Prefixes keys to avoid collisions across applications.
- * - Supports tagging for granular invalidation.
- * - Uses SCAN-based iteration for non-blocking flush operations.
+ * This class stores and retrieves encoded query results under a package-specific
+ * key prefix and maintains tag membership used for invalidation.
+ *
+ * Architectural notes:
+ * - Keys are prefixed via `Redis::prefix()` to avoid collisions.
+ * - `flush()` removes all keys for the Lada prefix and safely handles
+ *   connection-level Redis prefixes (Predis/PhpRedis) by stripping the
+ *   connection prefix before deletion and batching deletes (preferring UNLINK).
  */
 final class Cache
 {
@@ -68,29 +72,31 @@ final class Cache
         }
     }
 
-    /**
-     * Flush all cache keys matching the configured prefix.
-     *
-     * Performs an incremental, non-blocking traversal using SCAN. Any failures
-     * are logged via the application logger and do not bubble exceptions.
-     */
     public function flush(): void
     {
         try {
-            $cursor = '0';
-            $pattern = $this->redis->prefix('*');
+            $connectionPrefix = (string) (config('database.redis.options.prefix') ?? '');
 
-            do {
-                [$cursor, $keys] = $this->redis->scan($cursor, 'MATCH', $pattern, 'COUNT', 1000);
-                if (! empty($keys)) {
-                    // Prefer non-blocking UNLINK when available; fall back to DEL.
+            // Fetch all Lada keys as returned by the connection (includes connection prefix if set)
+            $keys = $this->redis->keys($this->redis->prefix('*'));
+
+            if (! empty($keys)) {
+                // Strip the connection-level prefix so the driver applies it exactly once when deleting
+                $toDelete = $connectionPrefix !== ''
+                    ? array_map(
+                        static fn(string $k): string => str_starts_with($k, $connectionPrefix) ? substr($k, strlen($connectionPrefix)) : $k,
+                        $keys
+                    )
+                    : $keys;
+
+                foreach (array_chunk($toDelete, 1000) as $batch) {
                     try {
-                        $this->redis->unlink(...$keys);
+                        $this->redis->unlink(...$batch);
                     } catch (Throwable) {
-                        $this->redis->del(...$keys);
+                        $this->redis->del(...$batch);
                     }
                 }
-            } while ($cursor !== '0');
+            }
         } catch (Throwable $e) {
             Log::warning('[LadaCache] Redis flush failed: '.$e->getMessage());
         }

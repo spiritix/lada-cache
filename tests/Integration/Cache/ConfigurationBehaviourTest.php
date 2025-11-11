@@ -107,7 +107,6 @@ class ConfigurationBehaviourTest extends TestCase
         config(['lada-cache.enable_debugbar' => true]);
         // Bind a fake debugbar to avoid missing service
         $this->app->instance('debugbar', new class {
-            public array $collectors = [];
             public function addCollector($c): void { $this->collectors[] = $c; }
         });
 
