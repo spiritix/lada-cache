@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [6.0.3] - 2025-11-11
+### Fixed
+- Fixed nested join clause bug (see https://github.com/spiritix/lada-cache/issues/142)
+- Fixed bug in invalidation and row-level tagging (see https://github.com/spiritix/lada-cache/issues/141)
+
 ## [6.0.2] - 2025-11-04
 ### Fixed
 - Fixed row-level invalidation handling (see https://github.com/spiritix/lada-cache/issues/140)
