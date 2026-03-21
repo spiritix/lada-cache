@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Tests\Integration\QueryBuilder;
 
 use Illuminate\Support\Facades\DB;
+use Spiritix\LadaCache\Hasher;
+use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
 use Spiritix\LadaCache\Tests\TestCase;
 
@@ -32,7 +34,11 @@ class BasicQueriesTest extends TestCase
         DB::table('cars')->insert(['id' => 2, 'name' => 'B', 'engine_id' => null, 'driver_id' => null]);
 
         // Perform a locked select that must bypass cache
-        $locked = DB::table('cars')->where('id', 2)->lockForUpdate()->get();
+        $builder = DB::table('cars')->where('id', 2)->lockForUpdate();
+        $locked = $builder->get();
         $this->assertNotEmpty($locked);
+
+        $key = (new Hasher(new Reflector($builder)))->getHash();
+        $this->assertCacheMissing($key);
     }
 }

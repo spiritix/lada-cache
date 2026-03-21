@@ -8,7 +8,7 @@ A **Redis-based**, fully automated, and scalable query cache layer for Laravel.
 [![Version](https://poser.pugx.org/spiritix/lada-cache/v/stable.svg)](https://packagist.org/packages/spiritix/lada-cache)
 [![License](https://poser.pugx.org/spiritix/lada-cache/license.svg)](https://packagist.org/packages/spiritix/lada-cache)
 
-> **Lada Cache 6.x - a focused rewrite for Laravel 12 and PHP 8.3, addressing many long-standing issues and adding new features.**
+> **Lada Cache 6.x - a focused rewrite for Laravel 12 / 13 and PHP 8.3, addressing many long-standing issues and adding new features.**
 
 ## Table of Contents
 
@@ -47,6 +47,7 @@ A **Redis-based**, fully automated, and scalable query cache layer for Laravel.
 |   8.x    |  7.3+  |    5.x     |
 | 9.x-11.x |  8.0+  |    5.x     |
 |  12.x    |  8.3+  |    6.x     |
+|  13.x    |  8.3+  |    6.x     |
 
 ## Architecture
 

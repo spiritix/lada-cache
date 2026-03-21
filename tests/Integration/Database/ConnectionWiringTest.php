@@ -16,6 +16,22 @@ class ConnectionWiringTest extends TestCase
         $this->assertInstanceOf(LadaQueryBuilder::class, $builder);
     }
 
+    public function testQueryGrammarAndProcessorAreUsable(): void
+    {
+        $connection = DB::connection();
+
+        $grammar = $connection->getQueryGrammar();
+        $this->assertNotNull($grammar);
+
+        $processor = $connection->getPostProcessor();
+        $this->assertNotNull($processor);
+
+        // Smoke test: compile a simple select to ensure grammar is initialized.
+        $sql = $grammar->compileSelect(DB::table('cars'));
+        $this->assertIsString($sql);
+        $this->assertNotSame('', $sql);
+    }
+
     public function testSchemaGrammarIsMirroredAndUsable(): void
     {
         $schema = DB::connection()->getSchemaBuilder();

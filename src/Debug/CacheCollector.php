@@ -45,7 +45,7 @@ final class CacheCollector extends TimeDataCollector
 
     /** {@inheritDoc} */
     #[\Override]
-    public function collect()
+    public function collect(): array
     {
         $data = parent::collect();
         $data['lada-measures'] = count($data['measures'] ?? []);
@@ -55,14 +55,14 @@ final class CacheCollector extends TimeDataCollector
 
     /** {@inheritDoc} */
     #[\Override]
-    public function getName()
+    public function getName(): string
     {
         return 'lada';
     }
 
     /** {@inheritDoc} */
     #[\Override]
-    public function getWidgets()
+    public function getWidgets(): array
     {
         return [
             'Lada Cache' => [

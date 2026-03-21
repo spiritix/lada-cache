@@ -35,7 +35,22 @@ class CacheCollectorTest extends TestCase
         $this->assertArrayHasKey('label', $first);
         $this->assertStringContainsString('[Miss]', $first['label']);
         $this->assertArrayHasKey('params', $first);
-        $this->assertSame(['hash' => 'hash-abc', 'tags' => ['tag1', 'tag2'], 'parameters' => [1]], $first['params']);
+
+        $params = $first['params'];
+        $this->assertIsArray($params);
+        $this->assertArrayHasKey('hash', $params);
+        $this->assertArrayHasKey('tags', $params);
+        $this->assertArrayHasKey('parameters', $params);
+
+        $this->assertIsString($params['hash']);
+        $this->assertStringContainsString('hash-abc', $params['hash']);
+
+        $this->assertIsString($params['tags']);
+        $this->assertStringContainsString('tag1', $params['tags']);
+        $this->assertStringContainsString('tag2', $params['tags']);
+
+        $this->assertIsString($params['parameters']);
+        $this->assertStringContainsString('1', $params['parameters']);
     }
 
     public function testGetNameAndWidgets(): void

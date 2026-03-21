@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [6.1] - 2026-03-21
+### Added
+- Added support for Laravel 13
+- Increased test coverage for DB integration layer
+
+### Changed
+- Switched Laravel Debugbar integration to fruitcake/laravel-debugbar
+
 ## [6.0.3] - 2025-11-11
 ### Fixed
 - Fixed nested join clause bug (see https://github.com/spiritix/lada-cache/issues/142)
