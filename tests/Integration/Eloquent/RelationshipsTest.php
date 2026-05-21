@@ -43,7 +43,6 @@ class RelationshipsTest extends TestCase
         Assert::assertSame(1, (int) Driver::withCount('cars')->findOrFail($d2->id)->cars_count);
     }
 
-
     public function test_has_one_engine(): void
     {
         $car = $this->makeCar(['name' => 'c-has-one']);
@@ -53,6 +52,29 @@ class RelationshipsTest extends TestCase
         Assert::assertInstanceOf(Engine::class, $fresh->engine);
         Assert::assertSame('e1', $fresh->engine->name);
         Assert::assertSame($car->id, $fresh->engine->car_id);
+    }
+
+    public function test_latest_of_many_eager_loads_are_cached_with_their_final_query_constraints(): void
+    {
+        $carA = $this->makeCar(['name' => 'car-a']);
+        $carB = $this->makeCar(['name' => 'car-b']);
+
+        $carA->engine()->create(['name' => 'engine-a']);
+        $carB->engine()->create(['name' => 'engine-b']);
+
+        $loadedA = Car::query()
+            ->whereKey($carA->id)
+            ->with('latestEngine')
+            ->firstOrFail();
+
+        Assert::assertSame('engine-a', $loadedA->latestEngine?->name);
+
+        $loadedB = Car::query()
+            ->whereKey($carB->id)
+            ->with('latestEngine')
+            ->firstOrFail();
+
+        Assert::assertSame('engine-b', $loadedB->latestEngine?->name);
     }
 
     public function test_belongs_to_many_materials_attach_detach_sync(): void
