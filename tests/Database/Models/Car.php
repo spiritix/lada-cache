@@ -25,6 +25,11 @@ class Car extends Model
         return $this->hasOne(Engine::class);
     }
 
+    public function latestEngine(): HasOne
+    {
+        return $this->hasOne(Engine::class)->latestOfMany();
+    }
+
     public function driver(): BelongsTo
     {
         return $this->belongsTo(Driver::class);
