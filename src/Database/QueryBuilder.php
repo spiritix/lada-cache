@@ -92,6 +92,10 @@ class QueryBuilder extends Builder
             return parent::runSelect();
         }
 
+        // Laravel can defer query mutations until just before execution. Finalize
+        // those callbacks before reflecting SQL for cache keys and tags.
+        $this->applyBeforeQueryCallbacks();
+
         return $this->handler
             ->setBuilder($this)
             ->cacheQuery(function () {
