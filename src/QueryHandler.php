@@ -35,6 +35,7 @@ final class QueryHandler
     public function __construct(
         private readonly Cache $cache,
         private readonly Invalidator $invalidator,
+        private readonly TtlResolver $ttlResolver,
     ) {}
 
     public function setBuilder(QueryBuilder $builder): self
@@ -156,7 +157,8 @@ final class QueryHandler
 
             if ($cached === null) {
                 $cached = $queryClosure();
-                $this->cache->set($key, $tags, $cached);
+                $ttl = $this->ttlResolver->resolve($this->builder->getModel());
+                $this->cache->set($key, $tags, $cached, $ttl);
             } else {
                 // Self-heal tag membership inconsistencies by idempotently adding the key to each tag set.
                 $this->cache->repairTagMembership($key, $tags);

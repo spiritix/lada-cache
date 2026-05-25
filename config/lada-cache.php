@@ -67,6 +67,30 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Per-model TTL overrides
+    |--------------------------------------------------------------------------
+    |
+    | Map of model FQCN to TTL in seconds. Models listed here override the
+    | global expiration_time. Resolution order (first non-null wins):
+    |   1. $model->getLadaTtl() if model implements
+    |      Spiritix\LadaCache\Contracts\HasLadaTtl
+    |   2. config('lada-cache.model_ttls.<FQCN>')
+    |   3. config('lada-cache.expiration_time') (global)
+    |
+    | Examples:
+    |   App\Models\City::class       => 86400 * 30, // 30 days for rarely-changing data
+    |   App\Models\Tournament::class => 300,        // 5 minutes for hot state
+    |   App\Models\Order::class      => null,       // fall through to global
+    |
+    | 0 = persist forever (cache until tag-based invalidation).
+    |
+    */
+    'model_ttls' => [
+        // App\Models\City::class => 86400 * 30,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Cache Granularity
     |--------------------------------------------------------------------------
     |

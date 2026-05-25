@@ -36,13 +36,24 @@ final class Cache
         return (bool) $this->redis->exists($this->redis->prefix($key));
     }
 
-    public function set(string $key, array $tags, mixed $data): void
+    /**
+     * Persist a cached query result under the given key with optional per-call TTL.
+     *
+     * TTL resolution:
+     *   - $ttl > 0  : SET key value EX $ttl (expires after $ttl seconds)
+     *   - $ttl = 0  : SET key value (no expiration — persist forever, rely on tag invalidation)
+     *   - $ttl null : fall back to the global expirationTime (which itself follows the same > 0 / = 0 rule)
+     *
+     * @param array<string> $tags
+     */
+    public function set(string $key, array $tags, mixed $data, ?int $ttl = null): void
     {
         $key = $this->redis->prefix($key);
         $value = $this->encoder->encode($data);
+        $effectiveTtl = $ttl ?? $this->expirationTime;
 
-        if ($this->expirationTime > 0) {
-            $this->redis->set($key, $value, 'EX', $this->expirationTime);
+        if ($effectiveTtl > 0) {
+            $this->redis->set($key, $value, 'EX', $effectiveTtl);
         } else {
             $this->redis->set($key, $value);
         }

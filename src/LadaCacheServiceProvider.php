@@ -95,6 +95,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
             'lada.redis',
             'lada.cache',
             'lada.invalidator',
+            'lada.ttl_resolver',
             'lada.handler',
         ];
     }
@@ -109,8 +110,13 @@ final class LadaCacheServiceProvider extends ServiceProvider
         $this->app->singleton('lada.invalidator', static fn (Application $app) => new Invalidator($app->make('lada.redis'))
         );
 
-        $this->app->singleton('lada.handler', static fn (Application $app) => new QueryHandler($app->make('lada.cache'), $app->make('lada.invalidator'))
-        );
+        $this->app->singleton('lada.ttl_resolver', static fn () => new TtlResolver);
+
+        $this->app->singleton('lada.handler', static fn (Application $app) => new QueryHandler(
+            $app->make('lada.cache'),
+            $app->make('lada.invalidator'),
+            $app->make('lada.ttl_resolver'),
+        ));
     }
 
     /**
