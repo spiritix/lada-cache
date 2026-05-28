@@ -67,6 +67,33 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | TTL Jitter Percentage
+    |--------------------------------------------------------------------------
+    |
+    | When many cache entries are written within the same second, they expire
+    | in lockstep one TTL later, producing a synchronized DB miss wave
+    | (thundering herd). To mitigate this, each positive TTL is perturbed by
+    | ±N% before SET EX, spreading expirations uniformly over a window of
+    | roughly (2 × jitterPct)% of the configured TTL.
+    |
+    |   N = 0   : disabled (deterministic — legacy behavior).
+    |   N = 15  : default, ±15% (~30% spread; covers most use cases).
+    |   N = 100 : maximum spread (clamp ceiling).
+    |
+    | Notes:
+    |   - Jitter only applies to positive TTLs. A value of 0 / null
+    |     ("persist forever") is never perturbed.
+    |   - Values outside [0, 100] are clamped silently. Negative values
+    |     disable jitter; values above 100 cap at 100.
+    |   - Trade-off: a non-zero jitter means an entry's actual TTL may be up
+    |     to N% longer than configured. If you rely on exact TTL semantics
+    |     (e.g. distributed locks, OTPs), set this to 0.
+    |
+    */
+    'ttl_jitter_pct' => (int) env('LADA_CACHE_TTL_JITTER_PCT', 15),
+
+    /*
+    |--------------------------------------------------------------------------
     | Cache Granularity
     |--------------------------------------------------------------------------
     |

@@ -3,6 +3,7 @@
 ## [Unreleased]
 ### Added
 - Added `withoutCache()` for per-query bypass of read caching and write invalidation (see https://github.com/spiritix/lada-cache/pull/151)
+- TTL jitter: positive cache TTLs are perturbed by ±N% (default 15%) before `SET EX` to avoid synchronized expiration of co-cached keys and the resulting DB miss wave (thundering herd). Configurable via `lada-cache.ttl_jitter_pct` or `LADA_CACHE_TTL_JITTER_PCT`. Set to `0` to disable (legacy behavior, exact TTLs).
 
 ## [6.1.1] - 2026-05-22
 ### Fixed

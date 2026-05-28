@@ -18,17 +18,25 @@ use Throwable;
  * - `flush()` removes all keys for the Lada prefix and safely handles
  *   connection-level Redis prefixes (Predis/PhpRedis) by stripping the
  *   connection prefix before deletion and batching deletes (preferring UNLINK).
+ * - Positive TTLs receive ±N% random jitter (default ±15%) before SET EX so
+ *   that keys cached within the same second do not expire in lockstep,
+ *   avoiding a synchronized DB miss wave (thundering-herd guard).
  */
 final class Cache
 {
     private readonly int $expirationTime;
+    private readonly int $jitterPct;
 
     public function __construct(
         private readonly Redis $redis,
         private readonly Encoder $encoder,
         ?int $expirationTime = null,
+        ?int $jitterPct = null,
     ) {
         $this->expirationTime = $expirationTime ?? (int) config('lada-cache.expiration_time', 0);
+        $rawJitter = $jitterPct ?? (int) config('lada-cache.ttl_jitter_pct', 15);
+        // Clamp to [0, 100]; negative or excessive values would produce invalid TTLs.
+        $this->jitterPct = max(0, min(100, $rawJitter));
     }
 
     public function has(string $key): bool
@@ -40,9 +48,10 @@ final class Cache
     {
         $key = $this->redis->prefix($key);
         $value = $this->encoder->encode($data);
+        $effectiveTtl = $this->applyJitter($this->expirationTime);
 
-        if ($this->expirationTime > 0) {
-            $this->redis->set($key, $value, 'EX', $this->expirationTime);
+        if ($effectiveTtl > 0) {
+            $this->redis->set($key, $value, 'EX', $effectiveTtl);
         } else {
             $this->redis->set($key, $value);
         }
@@ -70,6 +79,32 @@ final class Cache
                 Log::warning('[LadaCache] Tag repair failed: '.$e->getMessage());
             }
         }
+    }
+
+    /**
+     * Apply ±jitterPct random jitter to a positive TTL.
+     *
+     * Edge cases:
+     *   - TTL <= 0          : returned unchanged (0/null mean "persist forever").
+     *   - jitterPct = 0     : returned unchanged (deterministic / disabled).
+     *   - delta rounds to 0 : returned unchanged (TTL too small to be perturbed).
+     *   - Result is clamped to at least 1 second so jitter never produces a
+     *     non-positive TTL that would silently downgrade SET EX into
+     *     "persist forever".
+     */
+    private function applyJitter(int $ttl): int
+    {
+        if ($ttl <= 0 || $this->jitterPct === 0) {
+            return $ttl;
+        }
+
+        $delta = (int) round($ttl * ($this->jitterPct / 100));
+
+        if ($delta <= 0) {
+            return $ttl;
+        }
+
+        return max(1, $ttl + random_int(-$delta, $delta));
     }
 
     public function flush(): void
