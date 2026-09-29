@@ -9,6 +9,7 @@ use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\App;
 use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Debug\CacheCollector;
+use Spiritix\LadaCache\Events\LadaCacheActivity;
 use Throwable;
 
 /**
@@ -32,10 +33,20 @@ final class QueryHandler
     /** @var array<string, array<int, string>> */
     private array $queuedInvalidations = [];
 
+    /**
+     * Cached calibration flag. Resolved once at construction (QueryHandler is
+     * a singleton, so this happens once per worker) instead of paying for
+     * `config()` lookups on every cache hit / miss / invalidate.
+     */
+    private readonly bool $calibrationEnabled;
+
     public function __construct(
         private readonly Cache $cache,
         private readonly Invalidator $invalidator,
-    ) {}
+        private readonly TtlResolver $ttlResolver,
+    ) {
+        $this->calibrationEnabled = (bool) config('lada-cache.calibration.enabled', false);
+    }
 
     public function setBuilder(QueryBuilder $builder): self
     {
@@ -105,12 +116,14 @@ final class QueryHandler
 
                 // We can't know hashes before flushing; record action only.
                 $this->stopCollector($reflector, $tags, [], "Invalidation queued ({$statementType})");
+                $this->dispatchActivity('invalidate', '', $tags, $reflector);
 
                 return;
             }
 
             $hashes = $this->invalidator->invalidate($tags);
             $this->stopCollector($reflector, $tags, $hashes, "Invalidation ({$statementType})");
+            $this->dispatchActivity('invalidate', '', $tags, $reflector);
         } catch (Throwable) {
             // On any reflection/type/tagging error during invalidation, skip invalidation silently.
             try {
@@ -156,11 +169,15 @@ final class QueryHandler
 
             if ($cached === null) {
                 $cached = $queryClosure();
-                $this->cache->set($key, $tags, $cached);
+                $ttl = $this->ttlResolver->resolve($this->builder->getModel());
+                $this->cache->set($key, $tags, $cached, $ttl);
             } else {
                 // Self-heal tag membership inconsistencies by idempotently adding the key to each tag set.
                 $this->cache->repairTagMembership($key, $tags);
             }
+
+            // Monitoring hook — opt-in via config to keep hot-path overhead zero by default.
+            $this->dispatchActivity($action === 'Hit' ? 'hit' : 'miss', $key, $tags, $reflector);
 
             $this->stopCollector($reflector, $tags, $key, $action);
 
@@ -230,5 +247,38 @@ final class QueryHandler
             $reflector->getSql(),
             $reflector->getParameters()
         );
+    }
+
+    /**
+     * Dispatch a {@see LadaCacheActivity} event for the given action.
+     *
+     * Enabled only while calibration is enabled. The flag is captured at
+     * construction so this check is a single bool comparison rather than a
+     * `config()` lookup per cache operation.
+     *
+     * The dispatch is wrapped in try/catch so a misbehaving listener cannot
+     * break the query path (cache read or invalidation).
+     *
+     * @param  array<string>  $tags
+     */
+    private function dispatchActivity(string $action, string $key, array $tags, Reflector $reflector): void
+    {
+        if (! $this->calibrationEnabled) {
+            return;
+        }
+
+        try {
+            $tables = $reflector->getTables();
+            $table = $tables[0] ?? null;
+
+            event(new LadaCacheActivity(
+                action: $action,
+                key: $key,
+                tags: $tags,
+                table: $table,
+            ));
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache;
 
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -28,7 +29,7 @@ final class Cache
         private readonly Encoder $encoder,
         ?int $expirationTime = null,
     ) {
-        $this->expirationTime = $expirationTime ?? (int) config('lada-cache.expiration_time', 0);
+        $this->expirationTime = $expirationTime ?? Config::integer('lada-cache.expiration_time', 0);
     }
 
     public function has(string $key): bool
@@ -36,13 +37,24 @@ final class Cache
         return (bool) $this->redis->exists($this->redis->prefix($key));
     }
 
-    public function set(string $key, array $tags, mixed $data): void
+    /**
+     * Persist a cached query result under the given key with optional per-call TTL.
+     *
+     * TTL resolution:
+     *   - $ttl > 0  : SET key value EX $ttl (expires after $ttl seconds)
+     *   - $ttl = 0  : SET key value (no expiration — persist forever, rely on tag invalidation)
+     *   - $ttl null : fall back to the global expirationTime (which itself follows the same > 0 / = 0 rule)
+     *
+     * @param  array<string>  $tags
+     */
+    public function set(string $key, array $tags, mixed $data, ?int $ttl = null): void
     {
         $key = $this->redis->prefix($key);
         $value = $this->encoder->encode($data);
+        $effectiveTtl = $ttl ?? $this->expirationTime;
 
-        if ($this->expirationTime > 0) {
-            $this->redis->set($key, $value, 'EX', $this->expirationTime);
+        if ($effectiveTtl > 0) {
+            $this->redis->set($key, $value, 'EX', $effectiveTtl);
         } else {
             $this->redis->set($key, $value);
         }
@@ -59,6 +71,9 @@ final class Cache
         return $encoded === null ? null : $this->encoder->decode($encoded);
     }
 
+    /**
+     * @param  array<string>  $tags
+     */
     public function repairTagMembership(string $key, array $tags): void
     {
         $prefixedKey = $this->redis->prefix($key);
@@ -75,7 +90,10 @@ final class Cache
     public function flush(): void
     {
         try {
-            $connectionPrefix = (string) (config('database.redis.options.prefix') ?? '');
+            // `database.redis.options.prefix` may be `false` (legacy "no prefix") in addition to
+            // null / empty string / string — `Config::string()` is too strict here.
+            $rawPrefix = config('database.redis.options.prefix');
+            $connectionPrefix = is_string($rawPrefix) ? $rawPrefix : '';
 
             // Fetch all Lada keys as returned by the connection (includes connection prefix if set)
             $keys = $this->redis->keys($this->redis->prefix('*'));
@@ -84,7 +102,7 @@ final class Cache
                 // Strip the connection-level prefix so the driver applies it exactly once when deleting
                 $toDelete = $connectionPrefix !== ''
                     ? array_map(
-                        static fn(string $k): string => str_starts_with($k, $connectionPrefix) ? substr($k, strlen($connectionPrefix)) : $k,
+                        static fn (string $k): string => str_starts_with($k, $connectionPrefix) ? substr($k, strlen($connectionPrefix)) : $k,
                         $keys
                     )
                     : $keys;

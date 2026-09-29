@@ -167,7 +167,106 @@ php artisan lada-cache:disable
 
 # Re-enable cache
 php artisan lada-cache:enable
+
+# Auto-calibrate per-model TTLs from Redis OBJECT IDLETIME (see Auto-calibration below)
+php artisan lada-cache:calibrate              # dry-run
+php artisan lada-cache:calibrate --apply      # persist results
 ```
+
+## Auto-calibration
+
+Picking the right TTL per model is a guessing game without production data.
+`lada-cache:calibrate` removes the guesswork: it samples Redis `OBJECT IDLETIME`
+for cached keys belonging to each Lada-cached model, combines that with recent
+cache activity, and derives a per-model TTL via:
+
+```
+calibrated_ttl = max(ceil(P95 * safety_factor), floor(previous_ttl / 2))
+```
+
+The floor term protects against survivor bias — `OBJECT IDLETIME` can only
+sample keys that haven't yet been evicted, so successive runs would otherwise
+shrink TTLs monotonically toward zero.
+
+Results are stored in the `lada_cache_calibrations` table (shipped via package
+migration) and consumed by `TtlResolver` between the `HasLadaTtl` interface
+and the static `model_ttls` config map.
+
+### Enable
+
+```env
+LADA_CACHE_CALIBRATION_ENABLED=true        # default: false
+LADA_CACHE_CALIBRATION_SAFETY_FACTOR=2.0   # P95 multiplier
+LADA_CACHE_CALIBRATION_MIN_SAMPLES=50      # skip models with fewer samples
+LADA_CACHE_CALIBRATION_CACHE_TTL=300       # in-memory map cache, seconds
+LADA_CACHE_CALIBRATION_SCHEDULE_INTERVAL=7 # run once every 7 days; 0 = no auto-schedule
+```
+
+Then publish & run the package migration:
+
+```bash
+php artisan vendor:publish --tag=migrations
+php artisan migrate
+```
+
+### Auto-scheduled run
+
+The package auto-registers the calibration cron via
+`callAfterResolving(Schedule::class)` when calibration is enabled and
+`schedule_interval` is greater than zero. The default is **once every 7 days**
+at 03:00 — long enough for TTLs to converge on real access patterns without
+bombing Redis with daily scans.
+
+To customise, set `LADA_CACHE_CALIBRATION_SCHEDULE_INTERVAL` to the number of
+days between runs, or set it to `0` and register the command yourself:
+
+```php
+// routes/console.php (Laravel 11+) or app/Console/Kernel.php
+Schedule::command('lada-cache:calibrate --apply')->weekly();
+```
+
+The auto-registered job runs with `->onOneServer()`, `->withoutOverlapping()`,
+and `->runInBackground()` — safe under multi-server Horizon deployments.
+
+### Safety
+
+- Refuses to run when Redis `maxmemory-policy` is `*-lfu` (IDLETIME is
+  unsupported under LFU eviction — using it would calibrate every TTL
+  toward zero).
+- Dry-run by default; `--apply` is required to mutate `lada_cache_calibrations`.
+- Skips models with fewer than `min_samples` data points (including 0).
+- Pipelined `OBJECT IDLETIME` calls and cursor-driven `SSCAN`/`SCAN` keep
+  the command non-blocking even against millions of cached keys. The tag
+  keyspace is scanned once per run, not once per model.
+
+### Activity-aware calibration
+
+While calibration is enabled, Lada records lightweight per-table activity and
+uses it on the next `lada-cache:calibrate` run. Each model is labeled with a
+signal source:
+
+| Signal | When | Effect |
+|--------|------|--------|
+| `idletime_only` | Activity read unavailable or Redis lookup failed | Original IDLETIME-only TTL |
+| `no_activity` | reads + writes below `min_reads_for_signal` | Original IDLETIME-only TTL |
+| `write_heavy` | invalidates / (hits+misses) ≥ `write_heavy_ratio` | Skip survivor-bias floor (writes were going to invalidate anyway) |
+| `read_heavy` | otherwise | Hit-ratio proportional control toward `target_hit_ratio` |
+
+Tuning knobs (all `LADA_CACHE_CALIBRATION_*` env vars):
+
+```env
+LADA_CACHE_CALIBRATION_ACTIVITY_LOOKBACK_HOURS=168      # 7 days
+LADA_CACHE_CALIBRATION_MIN_READS_FOR_SIGNAL=10
+LADA_CACHE_CALIBRATION_WRITE_HEAVY_RATIO=0.5
+LADA_CACHE_CALIBRATION_TARGET_HIT_RATIO=0.80
+LADA_CACHE_CALIBRATION_HIT_RATIO_DEADBAND=0.05
+LADA_CACHE_CALIBRATION_HIT_RATIO_LEARNING_RATE=0.30
+LADA_CACHE_CALIBRATION_HIT_RATIO_MAX_STEP=0.20
+LADA_CACHE_CALIBRATION_ACTIVITY_BUCKET_TTL_SECONDS=604800
+```
+
+The calibration log line includes per-signal counters so you can graph the
+distribution of read-heavy vs write-heavy models across runs.
 
 ## Known Issues and Limitations
 

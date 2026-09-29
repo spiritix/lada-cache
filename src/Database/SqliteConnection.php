@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Database;
 
-use Illuminate\Database\SqliteConnection as BaseSqliteConnection;
+use Illuminate\Database\SQLiteConnection as BaseSqliteConnection;
 use Spiritix\LadaCache\QueryHandler as LadaQueryHandler;
 
 /**
