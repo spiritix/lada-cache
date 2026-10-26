@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Database;
 
+use Closure;
 use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Query\Grammars\Grammar;
 use Illuminate\Database\Query\Processors\Processor;
@@ -144,6 +147,30 @@ class QueryBuilder extends Builder
         }
 
         return parent::joinSub($query, $as, $first, $operator, $second, $type, $where);
+    }
+
+    /** {@inheritDoc} */
+    public function whereIn($column, $values, $boolean = 'and', $not = false)
+    {
+        if (! $this->isQueryable($values)) {
+            return parent::whereIn($column, $values, $boolean, $not);
+        }
+
+        if ($values instanceof Closure) {
+            $callback = $values;
+            $callback($values = $this->forSubQuery());
+        }
+
+        parent::whereIn($column, $values, $boolean, $not);
+
+        // Laravel compiles the subquery to a raw expression. Keep its builder on the where,
+        // as whereSub() does, so TableExtractor can see the tables the subquery reads.
+        $query = $values instanceof EloquentBuilder || $values instanceof Relation ? $values->toBase() : $values;
+        if ($query instanceof Builder) {
+            $this->wheres[array_key_last($this->wheres)]['query'] = $query;
+        }
+
+        return $this;
     }
 
     /** {@inheritDoc} */
