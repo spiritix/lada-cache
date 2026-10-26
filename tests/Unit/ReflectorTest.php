@@ -81,8 +81,8 @@ class ReflectorTest extends TestCase
         // Base table cars with unqualified id and qualified id
         $b = DB::table('cars')
             ->where('id', '=', 7)
-            ->orWhere('cars.id', '=', 5)
-            ->orWhereIn('drivers.id', [1, 2]);
+            ->where('cars.id', '=', 5)
+            ->whereIn('drivers.id', [1, 2]);
 
         $rows = (new Reflector($b))->getRows();
 
