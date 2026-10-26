@@ -60,7 +60,8 @@ final class RowExtractor
                 && (($where['operator'] ?? '=') === '=')
                 && is_scalar($where['value'] ?? null)) {
                 $rows[$table][] = $where['value'];
-            } elseif (($where['type'] ?? null) === 'In' && isset($where['values']) && is_array($where['values'])) {
+            } elseif (in_array($where['type'] ?? null, ['In', 'InRaw'], true) && isset($where['values']) && is_array($where['values'])) {
+                // InRaw is what whereKey()/findMany() and BelongsTo eager loads emit for integer keys.
                 foreach ($where['values'] as $v) {
                     if (is_scalar($v)) {
                         $rows[$table][] = $v;

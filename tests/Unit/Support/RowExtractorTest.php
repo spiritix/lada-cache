@@ -22,6 +22,19 @@ class RowExtractorTest extends TestCase
         $this->assertEqualsCanonicalizing([3, 7, 9], $rows['cars']);
     }
 
+    public function testExtractRowsFromIntegerInRawWheres(): void
+    {
+        // whereKey()/findMany() and BelongsTo eager loads compile to whereIntegerInRaw on integer keys.
+        $b = DB::table('cars')->whereIntegerInRaw('id', [3, '5']);
+
+        $this->assertSame('InRaw', $b->wheres[0]['type']);
+
+        $rows = RowExtractor::extractRows($b);
+
+        $this->assertArrayHasKey('cars', $rows);
+        $this->assertEqualsCanonicalizing([3, 5], $rows['cars']);
+    }
+
     public function testExtractRowsResolvesAliasForBaseTable(): void
     {
         $b = DB::table('cars as c')->where('c.id', '=', 11);
