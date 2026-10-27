@@ -28,10 +28,18 @@ final readonly class Tagger
 
     private bool $considerRows;
 
-    public function __construct(Reflector $reflector)
+    /** @var array<string, array<int, int|string>> */
+    private array $extraRows;
+
+    /**
+     * @param  array<string, array<int, int|string>>  $extraRows  Row ids the query affects but that cannot be
+     *                                                            derived from its WHERE clause
+     */
+    public function __construct(Reflector $reflector, array $extraRows = [])
     {
         $this->reflector = $reflector;
         $this->considerRows = (bool) config('lada-cache.consider_rows', true);
+        $this->extraRows = $extraRows;
     }
 
     public function getTags(): array
@@ -57,14 +65,16 @@ final readonly class Tagger
         $tags = $this->getTableTags($tables, $rows);
 
         foreach ($tables as $table) {
-            if (empty($rows[$table])) {
+            $tableRows = array_merge($rows[$table] ?? [], $this->extraRows[$table] ?? []);
+
+            if ($tableRows === []) {
                 continue;
             }
 
             $tablePrefix = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
             $rowPrefix = $this->prefix(self::PREFIX_ROW, $tablePrefix);
 
-            $tags = array_merge($tags, $this->prefix($rows[$table], $rowPrefix));
+            $tags = array_merge($tags, $this->prefix(array_unique($tableRows), $rowPrefix));
         }
 
         return $this->prefix($tags, $databaseTag);

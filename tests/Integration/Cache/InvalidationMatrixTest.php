@@ -23,6 +23,33 @@ class InvalidationMatrixTest extends TestCase
         $this->assertSame($before + 1, $after);
     }
 
+    public function testInsertGetIdInvalidatesCachedMissingRow(): void
+    {
+        $missingId = ((int) DB::table('cars')->max('id')) + 1;
+
+        $this->assertNull(DB::table('cars')->where('id', $missingId)->first());
+
+        $id = DB::table('cars')->insertGetId([
+            'name' => 'Created after cached miss',
+            'engine_id' => null,
+            'driver_id' => null,
+        ]);
+
+        $this->assertSame($missingId, (int) $id);
+        $this->assertNotNull(DB::table('cars')->where('id', $id)->first());
+    }
+
+    public function testInsertWithExplicitIdInvalidatesCachedMissingRow(): void
+    {
+        $missingId = ((int) DB::table('cars')->max('id')) + 1;
+
+        $this->assertNull(DB::table('cars')->where('id', $missingId)->first());
+
+        DB::table('cars')->insert(['id' => $missingId, 'name' => 'Inserted after cached miss', 'engine_id' => null, 'driver_id' => null]);
+
+        $this->assertNotNull(DB::table('cars')->where('id', $missingId)->first());
+    }
+
     public function testUpdateInvalidatesCachedSelect(): void
     {
         DB::table('cars')->insert(['id' => 1002, 'name' => 'Z', 'engine_id' => null, 'driver_id' => null]);
