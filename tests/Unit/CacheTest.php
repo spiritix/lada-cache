@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Unit;
 
+use Illuminate\Redis\Connections\PhpRedisClusterConnection;
+use Illuminate\Redis\Connections\PredisConnection;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Redis as RedisFacade;
+use RuntimeException;
 use Spiritix\LadaCache\Cache;
 use Spiritix\LadaCache\Encoder;
 use Spiritix\LadaCache\Redis;
@@ -83,6 +88,81 @@ class CacheTest extends TestCase
         $cache->set($key, $tags, $value);
         $this->assertSame($encoded, $this->redis->get($prefixedKey));
         $this->assertSame(1, (int) $this->redis->sismember($prefixedTag, $prefixedKey));
+    }
+
+    public function testSetAndRepairWriteAllTagMembershipsInOneRoundTrip(): void
+    {
+        $connection = new class (RedisFacade::connection('cache')->client()) extends PredisConnection {
+            /** @var list<string> */
+            public array $commands = [];
+
+            public function command($method, array $parameters = [])
+            {
+                $this->commands[] = $method;
+
+                return parent::command($method, $parameters);
+            }
+        };
+
+        $tags = ['t1', 't2', 't3'];
+        $cache = new Cache(new Redis($connection), $this->encoder, 60);
+
+        $cache->set('k3', $tags, 'value');
+
+        $this->assertSame(['set', 'pipeline'], $connection->commands);
+
+        foreach ($tags as $tag) {
+            $this->assertSame(1, (int) $this->redis->sismember('p:'.$tag, 'p:k3'));
+        }
+
+        $this->redis->srem('p:t2', 'p:k3');
+        $connection->commands = [];
+
+        $cache->repairTagMembership('k3', $tags);
+
+        $this->assertSame(['pipeline'], $connection->commands);
+        $this->assertSame(1, (int) $this->redis->sismember('p:t2', 'p:k3'));
+    }
+
+    public function testRepairTagMembershipOnPhpRedisClusterSendsOneSaddPerTag(): void
+    {
+        // RedisCluster has no pipeline(); forward the commands to Predis so the sets really change.
+        $connection = new class (RedisFacade::connection('cache')) extends PhpRedisClusterConnection {
+            /** @var list<string> */
+            public array $commands = [];
+
+            public function command($method, array $parameters = [])
+            {
+                $this->commands[] = $method;
+
+                return $this->client->command($method, $parameters);
+            }
+        };
+
+        $tags = ['t1', 't2'];
+        $cache = new Cache(new Redis($connection), $this->encoder, 60);
+
+        $cache->repairTagMembership('k4', $tags);
+
+        $this->assertSame(['sadd', 'sadd'], $connection->commands);
+
+        foreach ($tags as $tag) {
+            $this->assertSame(1, (int) $this->redis->sismember('p:'.$tag, 'p:k4'));
+        }
+    }
+
+    public function testRepairTagMembershipLogsAndSwallowsRedisFailure(): void
+    {
+        $connection = new class (RedisFacade::connection('cache')->client()) extends PredisConnection {
+            public function command($method, array $parameters = [])
+            {
+                throw new RuntimeException('connection lost');
+            }
+        };
+
+        Log::shouldReceive('warning')->once()->with('[LadaCache] Tag repair failed: connection lost');
+
+        (new Cache(new Redis($connection), $this->encoder, 60))->repairTagMembership('k5', ['t1']);
     }
 
     public function testGetReturnsNullWhenKeyMissing(): void

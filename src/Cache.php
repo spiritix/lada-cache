@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache;
 
+use Illuminate\Redis\Connections\PhpRedisClusterConnection;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -47,9 +48,7 @@ final class Cache
             $this->redis->set($key, $value);
         }
 
-        foreach ($tags as $tag) {
-            $this->redis->sadd($this->redis->prefix($tag), $key);
-        }
+        $this->addToTags($key, $tags);
     }
 
     public function get(string $key): mixed
@@ -61,15 +60,37 @@ final class Cache
 
     public function repairTagMembership(string $key, array $tags): void
     {
-        $prefixedKey = $this->redis->prefix($key);
-
-        foreach ($tags as $tag) {
-            try {
-                $this->redis->sadd($this->redis->prefix($tag), $prefixedKey);
-            } catch (Throwable $e) {
-                Log::warning('[LadaCache] Tag repair failed: '.$e->getMessage());
-            }
+        try {
+            $this->addToTags($this->redis->prefix($key), $tags);
+        } catch (Throwable $e) {
+            Log::warning('[LadaCache] Tag repair failed: '.$e->getMessage());
         }
+    }
+
+    /**
+     * Add the key to every tag set in one round trip instead of one SADD per tag.
+     *
+     * The callback only queues commands: Laravel calls exec() after it returns, so an exception
+     * thrown inside it would leave a PhpRedis client in pipeline mode. PhpRedis' RedisCluster
+     * has no pipeline(), so cluster connections keep one SADD per tag.
+     */
+    private function addToTags(string $prefixedKey, array $tags): void
+    {
+        $tagKeys = array_map($this->redis->prefix(...), $tags);
+
+        if ($this->redis->getConnection() instanceof PhpRedisClusterConnection) {
+            foreach ($tagKeys as $tagKey) {
+                $this->redis->sadd($tagKey, $prefixedKey);
+            }
+
+            return;
+        }
+
+        $this->redis->pipeline(static function ($pipe) use ($tagKeys, $prefixedKey): void {
+            foreach ($tagKeys as $tagKey) {
+                $pipe->sadd($tagKey, $prefixedKey);
+            }
+        });
     }
 
     public function flush(): void
