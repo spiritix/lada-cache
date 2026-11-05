@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Database;
 
+use Closure;
 use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Query\Grammars\Grammar;
 use Illuminate\Database\Query\Processors\Processor;
 use Spiritix\LadaCache\QueryHandler;
 use Spiritix\LadaCache\Reflector;
+use Spiritix\LadaCache\Support\TableExtractor;
 
 /**
  * LadaCache Query Builder for Laravel 12+
@@ -26,6 +30,13 @@ class QueryBuilder extends Builder
     private readonly ?Model $model;
 
     private bool $cacheBypassed = false;
+
+    /**
+     * Tables read by the FROM subquery (see fromSub()).
+     *
+     * @var array<int, string>
+     */
+    private array $fromSubTables = [];
 
     public function __construct(
         ConnectionInterface $connection,
@@ -123,6 +134,37 @@ class QueryBuilder extends Builder
                     ! $this->useWritePdo
                 );
             });
+    }
+
+    /**
+     * Tables read by the FROM subquery, if the query selects from one.
+     *
+     * @return array<int, string>
+     */
+    public function getFromSubTables(): array
+    {
+        return $this->fromSubTables;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @param  Closure|Builder|EloquentBuilder<*>|Relation<*, *, *>|string  $query
+     */
+    public function fromSub($query, $as)
+    {
+        if ($query instanceof Closure) {
+            $callback = $query;
+            $callback($query = $this->forSubQuery());
+        }
+
+        // Laravel compiles the subquery to a raw expression, so TableExtractor would only see
+        // its alias. Keep the tables it reads on this builder, not in the shared handler like
+        // selectSub() and joinSub() do: the query may run later, after other queries.
+        $subQuery = $query instanceof EloquentBuilder || $query instanceof Relation ? $query->toBase() : $query;
+        $this->fromSubTables = $subQuery instanceof Builder ? TableExtractor::extractTables($subQuery) : [];
+
+        return parent::fromSub($subQuery, $as);
     }
 
     /** {@inheritDoc} */
