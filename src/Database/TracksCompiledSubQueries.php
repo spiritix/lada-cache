@@ -23,29 +23,7 @@ trait TracksCompiledSubQueries
     }
 
     /** {@inheritDoc} */
-    public function where($column, $operator = null, $value = null, $boolean = 'and')
-    {
-        $arguments = func_get_args();
-        [, $comparisonOperator] = $this->prepareValueAndOperator($value, $operator, func_num_args() === 2);
-
-        if ($this->isQueryable($column) && $comparisonOperator !== null) {
-            $arguments[0] = $this->trackCompiledSubQuery($column);
-        }
-
-        return parent::where(...$arguments);
-    }
-
-    /** {@inheritDoc} */
-    public function whereIn($column, $values, $boolean = 'and', $not = false)
-    {
-        if ($this->isQueryable($values)) {
-            $values = $this->trackCompiledSubQuery($values);
-        }
-
-        return parent::whereIn($column, $values, $boolean, $not);
-    }
-
-    private function trackCompiledSubQuery(mixed $query): mixed
+    protected function createSub($query)
     {
         if ($query instanceof Closure) {
             $callback = $query;
@@ -60,6 +38,23 @@ trait TracksCompiledSubQueries
             $this->compiledSubQueries[] = $query;
         }
 
-        return $query;
+        return parent::createSub($query);
+    }
+
+    /**
+     * @template TResult
+     *
+     * @param  Closure(): TResult  $callback
+     * @return TResult
+     */
+    private function withoutTrackingCompiledSubQueries(Closure $callback): mixed
+    {
+        $tracked = $this->compiledSubQueries;
+
+        try {
+            return $callback();
+        } finally {
+            $this->compiledSubQueries = $tracked;
+        }
     }
 }

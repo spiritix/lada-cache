@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Support;
 
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as BaseBuilder;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Query\JoinClause;
@@ -55,6 +56,9 @@ final class TableExtractor
 
         foreach (($builder->unions ?? []) as $union) {
             $sub = $union['query'] ?? null;
+            if ($sub instanceof EloquentBuilder) {
+                $sub = $sub->toBase();
+            }
             if ($sub instanceof BaseBuilder) {
                 $tables = array_merge($tables, self::extractTables($sub));
             }

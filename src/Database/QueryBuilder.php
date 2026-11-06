@@ -4,11 +4,8 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Database;
 
-use Closure;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Query\Grammars\Grammar;
 use Illuminate\Database\Query\Processors\Processor;
@@ -132,44 +129,6 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
             });
     }
 
-    /**
-     * {@inheritDoc}
-     *
-     * @param  Closure|Builder|EloquentBuilder<*>|Relation<*, *, *>|string  $query
-     */
-    public function fromSub($query, $as)
-    {
-        return parent::fromSub($this->trackCompiledSubQuery($query), $as);
-    }
-
-    /** {@inheritDoc} */
-    public function selectSub($query, $as)
-    {
-        return parent::selectSub($this->trackCompiledSubQuery($query), $as);
-    }
-
-    /** {@inheritDoc} */
-    public function joinSub($query, $as, $first, $operator = null, $second = null, $type = 'inner', $where = false)
-    {
-        return parent::joinSub($this->trackCompiledSubQuery($query), $as, $first, $operator, $second, $type, $where);
-    }
-
-    /** {@inheritDoc} */
-    public function joinLateral($query, string $as, string $type = 'inner')
-    {
-        return parent::joinLateral($this->trackCompiledSubQuery($query), $as, $type);
-    }
-
-    /** {@inheritDoc} */
-    public function orderBy($column, $direction = 'asc')
-    {
-        if ($this->isQueryable($column)) {
-            $column = $this->trackCompiledSubQuery($column);
-        }
-
-        return parent::orderBy($column, $direction);
-    }
-
     /** {@inheritDoc} */
     public function insert(array $values)
     {
@@ -182,7 +141,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     /** {@inheritDoc} */
     public function insertUsing(array $columns, $query)
     {
-        $result = parent::insertUsing($columns, $query);
+        $result = $this->withoutTrackingCompiledSubQueries(fn () => parent::insertUsing($columns, $query));
         $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, [], AssignedRows::unknown());
 
         return $result;
@@ -191,7 +150,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     /** {@inheritDoc} */
     public function insertOrIgnoreUsing(array $columns, $query)
     {
-        $result = parent::insertOrIgnoreUsing($columns, $query);
+        $result = $this->withoutTrackingCompiledSubQueries(fn () => parent::insertOrIgnoreUsing($columns, $query));
         $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, [], AssignedRows::unknown());
 
         return $result;

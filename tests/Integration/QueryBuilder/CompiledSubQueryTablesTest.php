@@ -127,4 +127,57 @@ final class CompiledSubQueryTablesTest extends TestCase
 
         $this->assertSame(1, $carsWithEngines());
     }
+
+    public function testCrossJoinSubIsRefreshedByInsertIntoSubQueryTable(): void
+    {
+        DB::table('drivers')->insert(['id' => 1, 'name' => 'd']);
+        $pairs = fn (): int => DB::table('drivers')->crossJoinSub(DB::table('cars')->select('id as car_id'), 'all_cars')->count();
+        $this->assertSame(0, $pairs());
+
+        DB::table('cars')->insert(['name' => 'c', 'engine_id' => null, 'driver_id' => null]);
+
+        $this->assertSame(1, $pairs());
+    }
+
+    public function testSubQueryColumnInWhereBetweenIsRefreshedByInsertIntoSubQueryTable(): void
+    {
+        DB::table('drivers')->insert(['id' => 1, 'name' => 'd']);
+        $driversWithOneCar = fn (): int => DB::table('drivers')
+            ->whereBetween(DB::table('cars')->selectRaw('count(*)')->whereColumn('cars.driver_id', 'drivers.id'), [1, 1])
+            ->count();
+        $this->assertSame(0, $driversWithOneCar());
+
+        DB::table('cars')->insert(['name' => 'c', 'engine_id' => null, 'driver_id' => 1]);
+
+        $this->assertSame(1, $driversWithOneCar());
+    }
+
+    public function testEloquentUnionIsRefreshedByWritesToTheUnionedTable(): void
+    {
+        DB::table('drivers')->insert(['id' => 1, 'name' => 'driver']);
+        $names = fn (): array => DB::table('drivers')->select('name')
+            ->union(Car::query()->select('name'))
+            ->orderBy('name')
+            ->pluck('name')
+            ->all();
+        $this->assertSame(['driver'], $names());
+
+        Car::query()->create(['name' => 'car']);
+
+        $this->assertSame(['car', 'driver'], $names());
+    }
+
+    public function testInsertUsingKeepsRowLookupsOfItsSourceTableCached(): void
+    {
+        DB::table('drivers')->insert(['id' => 1, 'name' => 'source']);
+        DB::table('drivers')->where('id', 1)->first();
+
+        DB::table('cars')->insertUsing(['name'], DB::table('drivers')->select('name'));
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        DB::table('drivers')->where('id', 1)->first();
+        DB::disableQueryLog();
+
+        $this->assertSame([], DB::getQueryLog());
+    }
 }
