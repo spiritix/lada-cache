@@ -73,8 +73,9 @@ final class QueryHandler
     /**
      * @param  string  $statementType  One of Reflector::QUERY_TYPE_*
      * @param  array<string, mixed>  $values  Values used by the grammar to compile the SQL (e.g., update sets)
+     * @param  array<string, array<int, int|string>>  $extraRows
      */
-    public function invalidateQuery(string $statementType, array $values = []): void
+    public function invalidateQuery(string $statementType, array $values = [], array $extraRows = []): void
     {
         $this->startCollector();
 
@@ -89,7 +90,7 @@ final class QueryHandler
                 return;
             }
 
-            $tags = (new Tagger($reflector))->getTags();
+            $tags = (new Tagger($reflector, $extraRows))->getTags();
         } catch (Throwable $exception) {
             FailureReporter::report(CacheOperation::Invalidate, $exception, ['statement' => $statementType]);
             $this->retireGeneration();

@@ -14,6 +14,7 @@ use Illuminate\Database\Query\Grammars\Grammar;
 use Illuminate\Database\Query\Processors\Processor;
 use Spiritix\LadaCache\QueryHandler;
 use Spiritix\LadaCache\Reflector;
+use Spiritix\LadaCache\Support\SqlAliasParser;
 use Spiritix\LadaCache\Support\TableExtractor;
 
 /**
@@ -246,7 +247,14 @@ class QueryBuilder extends Builder
     public function insertGetId(array $values, $sequence = null)
     {
         $id = parent::insertGetId($values, $sequence);
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, $values);
+
+        $extraRows = [];
+
+        if (is_string($this->from) && (is_int($id) || is_string($id)) && $id !== '') {
+            $extraRows = [SqlAliasParser::stripAlias($this->from) => [$id]];
+        }
+
+        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, $values, $extraRows);
 
         return $id;
     }
@@ -306,12 +314,40 @@ class QueryBuilder extends Builder
         $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_TRUNCATE);
     }
 
-    private function invalidateUnlessBypassed(string $queryType, array $values = []): void
+    private function invalidateUnlessBypassed(string $queryType, array $values = [], array $extraRows = []): void
     {
         if ($this->cacheBypassed) {
             return;
         }
 
-        $this->handler->setBuilder($this)->invalidateQuery($queryType, $values);
+        if ($queryType === Reflector::QUERY_TYPE_INSERT) {
+            $extraRows = array_merge_recursive($extraRows, $this->rowsAssignedBy($values));
+        }
+
+        $this->handler->setBuilder($this)->invalidateQuery($queryType, $values, $extraRows);
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $values
+     * @return array<string, array<int, int|string>>
+     */
+    private function rowsAssignedBy(array $values): array
+    {
+        if (! is_string($this->from)) {
+            return [];
+        }
+
+        $primaryKey = $this->getPrimaryKeyName();
+        $ids = [];
+
+        foreach (is_array(reset($values)) ? $values : [$values] as $row) {
+            $id = is_array($row) ? ($row[$primaryKey] ?? null) : null;
+
+            if ((is_int($id) || is_string($id)) && $id !== '') {
+                $ids[] = $id;
+            }
+        }
+
+        return $ids === [] ? [] : [SqlAliasParser::stripAlias($this->from) => $ids];
     }
 }
