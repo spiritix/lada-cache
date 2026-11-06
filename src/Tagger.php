@@ -104,6 +104,27 @@ final readonly class Tagger
     }
 
     /**
+     * Tags invalidating every cached read of the query's tables, a superset of what getTags()
+     * invalidates for any write to them.
+     *
+     * @return list<string>
+     */
+    public function tableWideTags(): array
+    {
+        $tags = [];
+
+        foreach (array_filter($this->reflector->getTables(), 'is_string') as $table) {
+            [$database, $name] = $this->locate($table);
+
+            foreach (self::tableWideTagPrefixes($database) as $prefix) {
+                $tags[$prefix.$name] = true;
+            }
+        }
+
+        return array_map('strval', array_keys($tags));
+    }
+
+    /**
      * @param  list<string>|null  $pinned  rows the query's conditions restrict it to; null when unrepresentable
      * @param  list<string>|null  $assigned  rows the write assigns keys to; null when unknown or unrepresentable
      * @return list<string>

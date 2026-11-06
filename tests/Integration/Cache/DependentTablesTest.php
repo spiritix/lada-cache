@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Integration\Cache;
 
+use Illuminate\Redis\Events\CommandExecuted;
 use Illuminate\Support\Facades\DB;
 use Spiritix\LadaCache\Support\DependentTables;
+use Spiritix\LadaCache\Support\Invalidation;
 use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
 use Spiritix\LadaCache\Tests\Concerns\RecordsRedisCommands;
 use Spiritix\LadaCache\Tests\TestCase;
@@ -124,6 +126,21 @@ final class DependentTablesTest extends TestCase
         DB::delete('delete from owners where id = ?', [1]);
 
         $this->assertSame(1, DB::table('pets')->count());
+    }
+
+    public function testLargeTransactionsInvalidateWithABoundedScript(): void
+    {
+        $this->assertNull(DB::table('pets')->where('id', 100)->value('name'));
+
+        $commands = $this->recordRedisCommandEvents(fn () => DB::transaction(function (): void {
+            foreach (range(100, 100 + Invalidation::MAX_TAGS) as $id) {
+                DB::table('pets')->insert(['id' => $id, 'owner_id' => 1, 'name' => "pet {$id}"]);
+            }
+        }));
+
+        $this->assertSame('pet 100', DB::table('pets')->where('id', 100)->value('name'));
+        $largestCommand = max(array_map(static fn (CommandExecuted $command): int => count($command->parameters, COUNT_RECURSIVE), $commands));
+        $this->assertLessThan(100, $largestCommand);
     }
 
     public function testDeletingInsideATransactionRefreshesCascadedChildrenAtCommit(): void

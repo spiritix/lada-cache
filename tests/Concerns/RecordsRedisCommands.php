@@ -14,11 +14,22 @@ trait RecordsRedisCommands
      */
     protected function recordRedisCommands(callable $callback): array
     {
-        $commands = [];
+        return array_map(
+            static fn (CommandExecuted $event): string => strtolower($event->command),
+            $this->recordRedisCommandEvents($callback),
+        );
+    }
+
+    /**
+     * @return list<CommandExecuted>
+     */
+    protected function recordRedisCommandEvents(callable $callback): array
+    {
+        $events = [];
         $connection = RedisFacade::connection((string) config('lada-cache.redis_connection'));
         $connection->setEventDispatcher(app('events'));
-        app('events')->listen(CommandExecuted::class, function (CommandExecuted $event) use (&$commands): void {
-            $commands[] = strtolower($event->command);
+        app('events')->listen(CommandExecuted::class, function (CommandExecuted $event) use (&$events): void {
+            $events[] = $event;
         });
 
         try {
@@ -27,6 +38,6 @@ trait RecordsRedisCommands
             $connection->unsetEventDispatcher();
         }
 
-        return $commands;
+        return $events;
     }
 }

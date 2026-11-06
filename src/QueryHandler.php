@@ -71,8 +71,9 @@ final class QueryHandler
                 return;
             }
 
-            $tags = (new Tagger($reflector, $assignedRows))->getTags();
-            $invalidation = Invalidation::of($tags, ReplicaReads::lagSeconds($connection))->withChangesOf(
+            $tagger = new Tagger($reflector, $assignedRows);
+            $tags = $tagger->getTags();
+            $invalidation = Invalidation::ofWrite($tags, $tagger->tableWideTags(), ReplicaReads::lagSeconds($connection))->withChangesOf(
                 $reflector->getDatabase(),
                 (string) $connection->getName(),
                 $reflector->getType() === Reflector::QUERY_TYPE_INSERT ? WriteKind::Insert : WriteKind::Modify,
