@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use Illuminate\Support\Facades\Config;
+use Spiritix\LadaCache\Support\NonDeterministicSql;
 
 /**
  * Manager decides whether the current query, as reflected by a `Reflector`, should be cached.
@@ -46,7 +47,11 @@ final readonly class Manager
             return false;
         }
 
-        return $this->cacheActive && $this->tablesCacheable();
+        if (! $this->cacheActive || ! $this->tablesCacheable()) {
+            return false;
+        }
+
+        return ! NonDeterministicSql::isNonDeterministic($this->reflector->getSql());
     }
 
     public function shouldInvalidate(): bool

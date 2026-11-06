@@ -18,10 +18,10 @@ use Spiritix\LadaCache\Support\TableExtractor;
  * - Compile the SQL and parameters for cache key construction and debugging.
  *
  * Architectural notes:
- * - This class is marked `readonly` as its state is fully defined at construction.
+ * - Compiled SQL is memoized, since hashing and determinism checks both need it.
  * - Method signatures and grammar calls are aligned with Laravel 12's query grammars.
  */
-final readonly class Reflector
+final class Reflector
 {
     public const string QUERY_TYPE_SELECT = 'select';
 
@@ -33,12 +33,14 @@ final readonly class Reflector
 
     public const string QUERY_TYPE_TRUNCATE = 'truncate';
 
-    private string $sqlOperation;
+    private readonly string $sqlOperation;
+
+    private ?string $sql = null;
 
     public function __construct(
-        private QueryBuilder $queryBuilder,
+        private readonly QueryBuilder $queryBuilder,
         string $sqlOperation = self::QUERY_TYPE_SELECT,
-        private array $values = [],
+        private readonly array $values = [],
     ) {
         $this->sqlOperation = strtolower($sqlOperation);
     }
@@ -90,6 +92,11 @@ final readonly class Reflector
     }
 
     public function getSql(): string
+    {
+        return $this->sql ??= $this->compileSql();
+    }
+
+    private function compileSql(): string
     {
         $grammar = $this->queryBuilder->getGrammar();
 
