@@ -13,7 +13,12 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis as RedisFacade;
 use Random\Engine\Mt19937;
 use Random\Randomizer;
+use Spiritix\LadaCache\Cache;
+use Spiritix\LadaCache\Encoder;
+use Spiritix\LadaCache\QueryHandler;
 use Spiritix\LadaCache\Redis;
+use Spiritix\LadaCache\Support\FailedInvalidations;
+use Spiritix\LadaCache\Support\RedisAvailability;
 use Spiritix\LadaCache\Tests\Database\Models\Car;
 use Spiritix\LadaCache\Tests\Database\Models\Driver;
 use Spiritix\LadaCache\Tests\Database\Models\License;
@@ -37,6 +42,8 @@ final class Workload
 
     private const string ALIAS_CONNECTION = 'fuzz_alias';
 
+    private const string UNCONFIGURED_REDIS_CONNECTION = 'fuzz_outage';
+
     private const array LICENSE_CODES = ['ab-1', 'Cd-2', 'EF_3', 'gh-4', 'ij-5', 'Kl-6', 'MN_7', 'op-8'];
 
     private readonly Randomizer $random;
@@ -56,18 +63,30 @@ final class Workload
     /** @var list<string> */
     private array $connections;
 
+    private ?QueryHandler $healthyHandler = null;
+
+    private readonly FailedInvalidations $failedInvalidations;
+
+    private int $outageStepsLeft = 0;
+
     public function __construct(
         public readonly int $seed,
         private readonly string $driver,
         private readonly bool $allowCacheDisturbances = true,
     ) {
         $this->random = new Randomizer(new Mt19937($seed));
+        $this->failedInvalidations = FailedInvalidations::processLocal();
         $this->primaryConnection = (string) config('database.default');
         $this->connections = [$this->primaryConnection];
 
         if ($driver !== 'sqlite') {
             config(['database.connections.'.self::ALIAS_CONNECTION => config('database.connections.'.$this->primaryConnection)]);
             $this->connections[] = self::ALIAS_CONNECTION;
+        }
+
+        if ($allowCacheDisturbances) {
+            $this->healthyHandler = new QueryHandler(app('lada.cache'), $this->failedInvalidations);
+            app()->instance('lada.handler', $this->healthyHandler);
         }
     }
 
@@ -150,6 +169,7 @@ final class Workload
      */
     public function step(bool $compareReads = true): void
     {
+        $this->advanceOutage();
         $this->maybeSwitchConnection();
         $roll = $this->random->getInt(1, 100);
 
@@ -206,6 +226,7 @@ final class Workload
         }
 
         DB::setDefaultConnection($this->primaryConnection);
+        $this->endOutage();
     }
 
     /**
@@ -437,14 +458,8 @@ final class Workload
      */
     private function maybeSwitchConnection(): void
     {
-        if (count($this->connections) < 2 || $this->random->getInt(1, 4) !== 1) {
+        if (count($this->connections) < 2 || $this->random->getInt(1, 4) !== 1 || $this->inAnyTransaction()) {
             return;
-        }
-
-        foreach ($this->connections as $connection) {
-            if (DB::connection($connection)->transactionLevel() > 0) {
-                return;
-            }
         }
 
         $connection = $this->pick($this->connections);
@@ -487,7 +502,8 @@ final class Workload
         assert($redis instanceof Redis);
         $connection = RedisFacade::connection((string) config('lada-cache.redis_connection'));
 
-        match ($this->random->getInt(1, 3)) {
+        match ($this->random->getInt(1, 4)) {
+            4 => $this->startOutage(),
             1 => (function (): void {
                 $this->log('flush cache');
                 app('lada.cache')->flush();
@@ -506,6 +522,61 @@ final class Workload
                 }
             })(),
         };
+    }
+
+    /**
+     * Sends the following writes and reads to a Redis connection that fails every command, as
+     * in an outage, sharing the healthy handler's record of failed invalidations so they are
+     * replayed once Redis answers again. Only between transactions, since an open transaction
+     * keeps its pending invalidations in the handler that saw its writes.
+     */
+    private function startOutage(): void
+    {
+        if ($this->healthyHandler === null || $this->outageStepsLeft > 0 || $this->inAnyTransaction()) {
+            return;
+        }
+
+        $this->outageStepsLeft = $this->random->getInt(3, 15);
+        $this->log("redis outage for {$this->outageStepsLeft} steps");
+        $configured = config('lada-cache.redis_connection');
+        config(['lada-cache.redis_connection' => self::UNCONFIGURED_REDIS_CONNECTION]);
+        $unreachable = new Cache(new Redis(null, RedisAvailability::processLocal()), new Encoder);
+        config(['lada-cache.redis_connection' => $configured]);
+        app()->instance('lada.handler', new QueryHandler($unreachable, $this->failedInvalidations));
+    }
+
+    private function advanceOutage(): void
+    {
+        if ($this->outageStepsLeft > 0 && --$this->outageStepsLeft === 0) {
+            $this->endOutage();
+        }
+    }
+
+    private function endOutage(): void
+    {
+        if ($this->healthyHandler === null || $this->inAnyTransaction()) {
+            $this->outageStepsLeft = max($this->outageStepsLeft, 1);
+
+            return;
+        }
+
+        if (app('lada.handler') !== $this->healthyHandler) {
+            $this->log('redis back');
+        }
+
+        $this->outageStepsLeft = 0;
+        app()->instance('lada.handler', $this->healthyHandler);
+    }
+
+    private function inAnyTransaction(): bool
+    {
+        foreach ($this->connections as $connection) {
+            if (DB::connection($connection)->transactionLevel() > 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
