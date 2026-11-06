@@ -24,7 +24,6 @@ class RowExtractorTest extends TestCase
 
     public function testExtractRowsFromIntegerInRawWheres(): void
     {
-        // whereKey()/findMany() and BelongsTo eager loads compile to whereIntegerInRaw on integer keys.
         $b = DB::table('cars')->whereIntegerInRaw('id', [3, '5']);
 
         $this->assertSame('InRaw', $b->wheres[0]['type']);
@@ -33,6 +32,37 @@ class RowExtractorTest extends TestCase
 
         $this->assertArrayHasKey('cars', $rows);
         $this->assertEqualsCanonicalizing([3, 5], $rows['cars']);
+    }
+
+    public function testExtractRowsIgnoresOrWithNonPrimaryKeyBranch(): void
+    {
+        $b = DB::table('cars')->where('id', '=', 3)->orWhere('name', '=', 'x');
+
+        $this->assertSame([], RowExtractor::extractRows($b));
+    }
+
+    public function testExtractRowsTreatsUpperCaseOrAsOr(): void
+    {
+        $b = DB::table('cars')->where('id', '=', 3)->where('name', '=', 'x', 'OR');
+
+        $this->assertSame([], RowExtractor::extractRows($b));
+    }
+
+    public function testExtractRowsIgnoresOrAcrossTables(): void
+    {
+        $b = DB::table('cars')
+            ->join('drivers', 'drivers.id', '=', 'cars.driver_id')
+            ->where('cars.id', '=', 3)
+            ->orWhere('drivers.id', '=', 5);
+
+        $this->assertSame([], RowExtractor::extractRows($b));
+    }
+
+    public function testExtractRowsIgnoresNegatedPrimaryKey(): void
+    {
+        $b = DB::table('cars')->where('id', '=', 4)->whereNot('id', 3);
+
+        $this->assertSame(['cars' => [4]], RowExtractor::extractRows($b));
     }
 
     public function testExtractRowsResolvesAliasForBaseTable(): void
