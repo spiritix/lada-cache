@@ -57,13 +57,13 @@ return [
     | Expiration Time
     |--------------------------------------------------------------------------
     |
-    | The number of seconds after which cached items should expire.
-    | Setting this value to null will store cached items indefinitely
-    | (until manually invalidated). If you want automatic cleanup or
-    | to avoid stale data, set this to something like 604800 (7 days).
+    | The number of seconds after which cached entries and tag versions
+    | expire. Invalidated entries are never served, but they only leave
+    | Redis once they expire, so this bounds memory usage. Set to 0 to
+    | keep entries until the cache generation is retired.
     |
     */
-    'expiration_time' => env('LADA_CACHE_EXPIRATION', 0),
+    'expiration_time' => env('LADA_CACHE_EXPIRATION', 604800),
 
     /*
     |--------------------------------------------------------------------------

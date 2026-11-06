@@ -6,6 +6,8 @@ namespace Spiritix\LadaCache\Tests\Integration\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis as RedisFacade;
 use Spiritix\LadaCache\Cache;
+use Spiritix\LadaCache\CacheMiss;
+use Spiritix\LadaCache\Encoder;
 use Spiritix\LadaCache\Manager;
 use Spiritix\LadaCache\Redis as LadaRedis;
 use Spiritix\LadaCache\Reflector;
@@ -65,22 +67,29 @@ class ConfigurationBehaviourTest extends TestCase
         $this->assertSame('test:foo', $redis->prefix('foo'));
     }
 
-    public function testExpirationTimeControlsTTL(): void
+    public function testExpirationTimeControlsEntryAndVersionTtl(): void
     {
-        config(['lada-cache.expiration_time' => 60, 'lada-cache.prefix' => 'cfg:']);
+        config(['lada-cache.prefix' => 'cfg:']);
         $redis = new LadaRedis();
-        /** @var Cache $cache */
-        $cache = app('lada.cache');
+        $cache = new Cache($redis, new Encoder(), 60);
 
-        $key = 'expire-key';
-        $tags = [];
-        $generation = $cache->currentGeneration();
-        $cache->set($generation, $key, $tags, ['x' => 1]);
+        $miss = $cache->lookup('expire-key', ['tag']);
+        $this->assertInstanceOf(CacheMiss::class, $miss);
+        $cache->store($miss, ['x' => 1]);
 
-        // TTL should be >=0 (exists) and <= 60
-        $ttl = $redis->ttl($redis->prefix($generation->scope($key)));
-        $this->assertIsInt($ttl);
-        $this->assertTrue($ttl === -1 || $ttl <= 60, 'TTL should be -1 (no expire) or <= configured expiration');
+        $entryTtl = (int) $redis->ttl($redis->prefix($miss->generation->id.':e:expire-key'));
+        $versionTtl = (int) $redis->ttl($redis->prefix($miss->generation->id.':v:tag'));
+        $this->assertGreaterThan(0, $entryTtl);
+        $this->assertLessThanOrEqual(60, $entryTtl);
+        $this->assertGreaterThan(0, $versionTtl);
+        $this->assertLessThanOrEqual(60, $versionTtl);
+    }
+
+    public function testPackageExpirationTimeDefaultsToSevenDays(): void
+    {
+        $packageConfig = require dirname(__DIR__, 3).'/config/lada-cache.php';
+
+        $this->assertSame(604800, $packageConfig['expiration_time']);
     }
 
     public function testRedisConnectionRespected(): void

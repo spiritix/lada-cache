@@ -166,7 +166,13 @@ LADA_CACHE_SCOPE=models
 
 ### Rolling deployments
 
-Cache entries and tags are stored under a random generation id kept in Redis. Every completed migration (and `lada-cache:flush`) replaces that id, which retires every entry for all hosts sharing the Redis instance in one atomic step; retired entries are pruned when the migration batch finishes. A query that started before the switch can never store a result that is served afterwards, so pods still running while a migration job executes cannot reintroduce pre-migration results, even when a batch fails midway. Because ids are random, an emptied or restarted Redis simply starts a new generation and never revives entries written under an earlier one. No configuration or deploy version is involved.
+Cache entries are stored under a random generation id kept in Redis. Every completed migration (and `lada-cache:flush`) replaces that id, which retires every entry for all hosts sharing the Redis instance in one atomic step; retired entries are pruned in bounded `SCAN` batches when the migration batch finishes. A query that started before the switch can never store a result that is served afterwards, so pods still running while a migration job executes cannot reintroduce pre-migration results, even when a batch fails midway. Because ids are random, an emptied or restarted Redis simply starts a new generation and never revives entries written under an earlier one. No configuration or deploy version is involved.
+
+### Consistency and failure handling
+
+Every tag carries a random version token. A read captures the tokens of its tags before querying the database and stores its result under their fingerprint; a write replaces the tokens of the tags it touches. A result read before a concurrent write therefore becomes unreachable instead of stale, and an evicted token only causes a miss. Each cache read, store and invalidation is a single atomic Lua script, so a cache hit costs one Redis round trip.
+
+Lada Cache never breaks database access. If Redis is unreachable or a cache operation fails, the failure is logged and the query runs against the database as if Lada Cache were not installed. After a failure, Redis is skipped for 30 seconds per process, so an outage costs at most one connection attempt per process in that window; set short `timeout` and `read_timeout` values on the Redis connection Lada Cache uses to bound that attempt. Failed invalidations are logged as errors because other hosts may serve the previous results until they expire (`LADA_CACHE_EXPIRATION`, 7 days by default).
 
 ## Console Commands
 

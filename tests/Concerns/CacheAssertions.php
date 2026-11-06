@@ -3,31 +3,65 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Concerns;
 
+use Illuminate\Database\Query\Builder;
 use PHPUnit\Framework\Assert;
-use Spiritix\LadaCache\Redis as LadaRedis;
+use Spiritix\LadaCache\Cache;
+use Spiritix\LadaCache\CacheHit;
+use Spiritix\LadaCache\CacheMiss;
+use Spiritix\LadaCache\Database\QueryBuilder;
+use Spiritix\LadaCache\Hasher;
+use Spiritix\LadaCache\Reflector;
+use Spiritix\LadaCache\Tagger;
 
 trait CacheAssertions
 {
-    protected function assertCacheHas(string $key, string $message = ''): void
+    /**
+     * @param  array<string>  $tags
+     */
+    protected function seedCache(string $key, array $tags, mixed $data): void
     {
-        $redis = new LadaRedis();
-        $exists = (bool) $redis->exists($redis->prefix($redis->currentGeneration()->scope($key)));
-        Assert::assertTrue($exists, $message !== '' ? $message : "Failed asserting that cache has key '{$key}'");
+        $lookup = $this->ladaCache()->lookup($key, $tags);
+        Assert::assertInstanceOf(CacheMiss::class, $lookup, "Expected no valid entry for '{$key}' before seeding");
+        $this->ladaCache()->store($lookup, $data);
     }
 
-    protected function assertCacheMissing(string $key, string $message = ''): void
+    /**
+     * @param  array<string>  $tags
+     */
+    protected function assertCacheHas(string $key, array $tags, string $message = ''): void
     {
-        $redis = new LadaRedis();
-        $exists = (bool) $redis->exists($redis->prefix($redis->currentGeneration()->scope($key)));
-        Assert::assertFalse($exists, $message !== '' ? $message : "Failed asserting that cache is missing key '{$key}'");
+        Assert::assertInstanceOf(
+            CacheHit::class,
+            $this->ladaCache()->lookup($key, $tags),
+            $message !== '' ? $message : "Failed asserting that cache has a valid entry for '{$key}'"
+        );
     }
 
-    protected function assertTagHasKey(string $tag, string $key, string $message = ''): void
+    /**
+     * @param  array<string>  $tags
+     */
+    protected function assertCacheMissing(string $key, array $tags, string $message = ''): void
     {
-        $redis = new LadaRedis();
-        $generation = $redis->currentGeneration();
-        $isMember = (bool) $redis->sismember($redis->prefix($generation->scope($tag)), $redis->prefix($generation->scope($key)));
-        Assert::assertTrue($isMember, $message !== '' ? $message : "Failed asserting that tag '{$tag}' contains key '{$key}'");
+        Assert::assertInstanceOf(
+            CacheMiss::class,
+            $this->ladaCache()->lookup($key, $tags),
+            $message !== '' ? $message : "Failed asserting that cache has no valid entry for '{$key}'"
+        );
+    }
+
+    /**
+     * @return array{0: string, 1: array<string>}
+     */
+    protected function cacheKeyAndTags(Builder $builder): array
+    {
+        Assert::assertInstanceOf(QueryBuilder::class, $builder);
+        $reflector = new Reflector($builder);
+
+        return [(new Hasher($reflector))->getHash(), (new Tagger($reflector))->getTags()];
+    }
+
+    private function ladaCache(): Cache
+    {
+        return app('lada.cache');
     }
 }
-

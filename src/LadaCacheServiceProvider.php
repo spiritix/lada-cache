@@ -11,7 +11,9 @@ use Illuminate\Database\Events\MigrationsEnded;
 use Illuminate\Database\Events\TransactionCommitted;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
+use InvalidArgumentException;
 use Spiritix\LadaCache\Console\DisableCommand;
 use Spiritix\LadaCache\Console\EnableCommand;
 use Spiritix\LadaCache\Console\FlushCommand;
@@ -22,6 +24,9 @@ use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Database\SqliteConnection as LadaSqliteConnection;
 use Spiritix\LadaCache\Database\SqlServerConnection as LadaSqlServerConnection;
 use Spiritix\LadaCache\Debug\CacheCollector;
+use Spiritix\LadaCache\Support\CacheOperation;
+use Spiritix\LadaCache\Support\FailureReporter;
+use Throwable;
 
 /**
  * Lada Cache service provider for Laravel.
@@ -76,14 +81,18 @@ final class LadaCacheServiceProvider extends ServiceProvider
         });
 
         $events->listen(MigrationEnded::class, function (): void {
-            /** @var Cache $cache */
-            $cache = $this->app->make('lada.cache');
-            $cache->retireCurrentGeneration();
+            try {
+                $this->app->make('lada.cache')->retireCurrentGeneration();
+            } catch (Throwable $exception) {
+                FailureReporter::report(CacheOperation::Retire, $exception);
+            }
         });
         $events->listen(MigrationsEnded::class, function (): void {
-            /** @var Cache $cache */
-            $cache = $this->app->make('lada.cache');
-            $cache->pruneRetiredGenerations();
+            try {
+                $this->app->make('lada.cache')->pruneRetiredGenerations();
+            } catch (Throwable $exception) {
+                FailureReporter::report(CacheOperation::Prune, $exception);
+            }
         });
     }
 
@@ -98,13 +107,26 @@ final class LadaCacheServiceProvider extends ServiceProvider
         );
 
         // Only register when active to avoid bootstrap overhead when disabled
-        if ((bool) config('lada-cache.active', true)) {
-            CacheScope::fromConfig(config('lada-cache.scope', CacheScope::All->value));
+        if ((bool) config('lada-cache.active', true) && $this->hasValidScope()) {
             $this->registerSingletons();
             $this->registerDatabaseDecorator();
         }
 
         $this->registerCommands();
+    }
+
+    private function hasValidScope(): bool
+    {
+        try {
+            CacheScope::fromConfig(config('lada-cache.scope', CacheScope::All->value));
+
+            return true;
+        } catch (InvalidArgumentException $exception) {
+            Log::error('[LadaCache] Disabled because of invalid configuration: '.$exception->getMessage());
+            config(['lada-cache.active' => false]);
+
+            return false;
+        }
     }
 
     /**
@@ -115,7 +137,6 @@ final class LadaCacheServiceProvider extends ServiceProvider
         return [
             'lada.redis',
             'lada.cache',
-            'lada.invalidator',
             'lada.handler',
         ];
     }
@@ -127,10 +148,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
         $this->app->singleton('lada.cache', static fn (Application $app) => new Cache($app->make('lada.redis'), new Encoder)
         );
 
-        $this->app->singleton('lada.invalidator', static fn (Application $app) => new Invalidator($app->make('lada.redis'))
-        );
-
-        $this->app->singleton('lada.handler', static fn (Application $app) => new QueryHandler($app->make('lada.cache'), $app->make('lada.invalidator'))
+        $this->app->singleton('lada.handler', static fn (Application $app) => new QueryHandler($app->make('lada.cache'))
         );
     }
 

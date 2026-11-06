@@ -4,22 +4,32 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Unit;
 
+use Illuminate\Database\QueryException;
+use Illuminate\Redis\Events\CommandExecuted;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Redis as RedisFacade;
 use Spiritix\LadaCache\Cache;
 use Spiritix\LadaCache\Encoder;
-use Spiritix\LadaCache\Hasher;
-use Spiritix\LadaCache\Invalidator;
 use Spiritix\LadaCache\QueryHandler;
 use Spiritix\LadaCache\Redis;
-use Spiritix\LadaCache\Reflector;
-use Spiritix\LadaCache\Tagger;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class QueryHandlerTest extends TestCase
 {
-    private Redis $redis;
     private Cache $cache;
-    private Invalidator $invalidator;
+
+    protected function getEnvironmentSetUp($app): void
+    {
+        parent::getEnvironmentSetUp($app);
+
+        $app['config']->set('database.redis.unreachable', [
+            'host' => '127.0.0.1',
+            'port' => 1,
+            'timeout' => 0.2,
+            'read_write_timeout' => 0.2,
+        ]);
+    }
 
     protected function setUp(): void
     {
@@ -27,40 +37,54 @@ class QueryHandlerTest extends TestCase
 
         config(['lada-cache.prefix' => 'p:']);
 
-        $this->redis = new Redis();
-        $this->cache = new Cache($this->redis, new Encoder(), 0);
-        $this->invalidator = new Invalidator($this->redis);
+        $this->cache = new Cache(new Redis(), new Encoder(), 0);
     }
 
-    public function testCacheQueryMissStoresResultAndTags(): void
+    public function testMissRunsQueryOnceAndHitServesStoredRows(): void
     {
-        $handler = new QueryHandler($this->cache, $this->invalidator);
+        $handler = new QueryHandler($this->cache);
         $builder = DB::table('cars');
-        $handler->setBuilder($builder);
-
         $executions = 0;
-        $result = $handler->cacheQuery(function () use (&$executions): array {
+        $query = function () use (&$executions): array {
             $executions++;
+
             return [['id' => 1, 'name' => 'car']];
-        });
+        };
+
+        $first = $handler->setBuilder($builder)->cacheQuery($query);
+        $second = $handler->setBuilder($builder)->cacheQuery($query);
 
         $this->assertSame(1, $executions);
-        $this->assertSame([['id' => 1, 'name' => 'car']], $result);
-
-        // Assert cache key and tags present
-        $reflector = new Reflector($builder);
-        $generation = $this->redis->currentGeneration();
-        $storedKey = $this->redis->prefix($generation->scope((new Hasher($reflector))->getHash()));
-        $tags = (new Tagger($reflector))->getTags();
-        $this->assertSame(1, (int) $this->redis->exists($storedKey));
-        foreach ($generation->scopeAll($tags) as $tag) {
-            $this->assertSame(1, (int) $this->redis->sismember($this->redis->prefix($tag), $storedKey));
-        }
+        $this->assertSame([['id' => 1, 'name' => 'car']], $first);
+        $this->assertSame($first, $second);
     }
 
-    public function testCacheQueryMissesAfterFlushAdvancesTheGeneration(): void
+    public function testCacheHitCostsExactlyOneRedisCommand(): void
     {
-        $handler = new QueryHandler($this->cache, $this->invalidator);
+        $handler = new QueryHandler($this->cache);
+        $builder = DB::table('cars')->where('id', 1);
+        $handler->setBuilder($builder)->cacheQuery(fn (): array => [['id' => 1]]);
+
+        $commands = $this->recordRedisCommands(fn () => $handler->setBuilder($builder)->cacheQuery(fn (): array => [['id' => 1]]));
+
+        $this->assertSame(['eval'], $commands);
+    }
+
+    public function testCacheMissCostsTwoRedisCommandsAndInvalidationOne(): void
+    {
+        $handler = new QueryHandler($this->cache);
+        $builder = DB::table('cars')->where('id', 1);
+
+        $missCommands = $this->recordRedisCommands(fn () => $handler->setBuilder($builder)->cacheQuery(fn (): array => [['id' => 1]]));
+        $invalidationCommands = $this->recordRedisCommands(fn () => $handler->setBuilder(DB::table('cars')->where('id', 1))->invalidateQuery('update', ['name' => 'x']));
+
+        $this->assertSame(['eval', 'eval'], $missCommands);
+        $this->assertSame(['eval'], $invalidationCommands);
+    }
+
+    public function testCacheQueryMissesAfterFlushRetiresTheGeneration(): void
+    {
+        $handler = new QueryHandler($this->cache);
         $builder = DB::table('cars');
 
         $handler->setBuilder($builder)->cacheQuery(fn (): array => [['id' => 1, 'name' => 'stale-schema']]);
@@ -70,9 +94,9 @@ class QueryHandlerTest extends TestCase
         $this->assertSame([['id' => 1, 'name' => 'fresh-schema']], $result);
     }
 
-    public function testWriteCapturedBeforeFlushIsNeverServedAfterIt(): void
+    public function testResultCapturedBeforeFlushIsNeverServedAfterIt(): void
     {
-        $handler = new QueryHandler($this->cache, $this->invalidator);
+        $handler = new QueryHandler($this->cache);
         $builder = DB::table('cars');
 
         $staleResult = $handler->setBuilder($builder)->cacheQuery(function (): array {
@@ -86,36 +110,105 @@ class QueryHandlerTest extends TestCase
         $this->assertSame([['id' => 1, 'name' => 'read-after-migration']], $result);
     }
 
-    public function testCacheQueryHitReadsCachedValueAndRepairsTags(): void
+    public function testResultCapturedBeforeConcurrentInvalidationIsNeverServed(): void
     {
-        $handler = new QueryHandler($this->cache, $this->invalidator);
-        $builder = DB::table('cars');
-        $handler->setBuilder($builder);
+        $handler = new QueryHandler($this->cache);
+        $builder = DB::table('cars')->where('id', 1);
 
-        // Pre-seed cache value and remove tag membership to test repair
-        $reflector = new Reflector($builder);
-        $key = (new Hasher($reflector))->getHash();
-        $tags = (new Tagger($reflector))->getTags();
-        $encoded = (new Encoder())->encode([['id' => 2]]);
-        $generation = $this->redis->currentGeneration();
-        $storedKey = $this->redis->prefix($generation->scope($key));
-        $this->redis->set($storedKey, $encoded);
-        foreach ($generation->scopeAll($tags) as $tag) {
-            $this->redis->srem($this->redis->prefix($tag), $storedKey);
+        $handler->setBuilder($builder)->cacheQuery(function () use ($handler): array {
+            $handler->setBuilder(DB::table('cars')->where('id', 1))->invalidateQuery('update', ['name' => 'after']);
+
+            return [['id' => 1, 'name' => 'before']];
+        });
+        $result = $handler->setBuilder($builder)->cacheQuery(fn (): array => [['id' => 1, 'name' => 'after']]);
+
+        $this->assertSame([['id' => 1, 'name' => 'after']], $result);
+    }
+
+    public function testFailingSqlRunsExactlyOnceAndPropagates(): void
+    {
+        $handler = new QueryHandler($this->cache);
+        $attempts = 0;
+
+        try {
+            $handler->setBuilder(DB::table('cars'))->cacheQuery(function () use (&$attempts): array {
+                $attempts++;
+
+                return DB::select('select * from table_that_does_not_exist');
+            });
+            $this->fail('Expected the SQL error to propagate');
+        } catch (QueryException) {
+            $this->assertSame(1, $attempts);
         }
+    }
 
+    public function testUnreachableRedisFallsBackToTheDatabaseWithoutThrowing(): void
+    {
+        Log::spy();
+        $handler = $this->handlerWithUnreachableRedis();
         $executions = 0;
-        $result = $handler->cacheQuery(function () use (&$executions): array {
+        $query = function () use (&$executions): array {
             $executions++;
-            return [['id' => 99]]; // should not be used on hit
+
+            return [['id' => 1]];
+        };
+
+        $first = $handler->setBuilder(DB::table('cars'))->cacheQuery($query);
+        $second = $handler->setBuilder(DB::table('cars'))->cacheQuery($query);
+
+        $this->assertSame([['id' => 1]], $first);
+        $this->assertSame([['id' => 1]], $second);
+        $this->assertSame(2, $executions);
+        Log::shouldHaveReceived('warning')->once();
+    }
+
+    public function testUnreachableRedisIsSkippedAfterTheFirstFailure(): void
+    {
+        Log::spy();
+        $handler = $this->handlerWithUnreachableRedis();
+
+        for ($query = 0; $query < 5; $query++) {
+            $handler->setBuilder(DB::table('cars'))->cacheQuery(fn (): array => []);
+        }
+        $handler->setBuilder(DB::table('cars')->where('id', 1))->invalidateQuery('update', ['name' => 'x']);
+
+        Log::shouldHaveReceived('warning')->once()->withArgs(fn (string $message): bool => ! str_contains($message, 'cooldown'));
+        Log::shouldHaveReceived('error')->once()->withArgs(fn (string $message): bool => str_contains($message, 'cooldown'));
+    }
+
+    public function testUnreachableRedisDuringInvalidationLogsAnErrorWithoutThrowing(): void
+    {
+        Log::spy();
+        $handler = $this->handlerWithUnreachableRedis();
+
+        $handler->setBuilder(DB::table('cars')->where('id', 1))->invalidateQuery('update', ['name' => 'x']);
+        $handler->setBuilder(DB::table('cars')->where('id', 1))->invalidateQuery('update', ['name' => 'y']);
+
+        Log::shouldHaveReceived('error')->twice();
+    }
+
+    private function handlerWithUnreachableRedis(): QueryHandler
+    {
+        config(['lada-cache.redis_connection' => 'unreachable']);
+
+        return new QueryHandler(new Cache(new Redis(), new Encoder(), 0));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function recordRedisCommands(callable $callback): array
+    {
+        $commands = [];
+        $connection = RedisFacade::connection((string) config('lada-cache.redis_connection'));
+        $connection->setEventDispatcher(app('events'));
+        app('events')->listen(CommandExecuted::class, function (CommandExecuted $event) use (&$commands): void {
+            $commands[] = strtolower($event->command);
         });
 
-        $this->assertSame(0, $executions, 'Query closure should not run on cache hit');
-        $this->assertSame([['id' => 2]], $result);
+        $callback();
+        $connection->unsetEventDispatcher();
 
-        // Assert tag membership repaired
-        foreach ($generation->scopeAll($tags) as $tag) {
-            $this->assertSame(1, (int) $this->redis->sismember($this->redis->prefix($tag), $storedKey));
-        }
+        return $commands;
     }
 }

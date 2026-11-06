@@ -4,25 +4,24 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache;
 
-use Illuminate\Support\Facades\Log;
-use Throwable;
+use UnexpectedValueException;
 
 /**
  * Persistence layer for Lada Cache backed by Redis.
  *
- * This class stores and retrieves encoded query results under a package-specific
- * key prefix and maintains tag membership used for invalidation.
- *
  * Architectural notes:
- * - Keys and tags are scoped by the current `Generation` and prefixed via `Redis::prefix()`.
- * - `retireCurrentGeneration()` advances the generation, which atomically retires every
- *   entry on all hosts. `pruneRetiredGenerations()` deletes keys of older generations
- *   and `flush()` does both. Pruning safely handles
- *   connection-level Redis prefixes (Predis/PhpRedis) by stripping the
- *   connection prefix before deletion and batching deletes (preferring UNLINK).
+ * - Every operation is a single atomic Lua script, see `LuaScripts` for the key layout.
+ * - `lookup()` captures the generation and the fingerprint of the tags' version tokens
+ *   before the query runs; `store()` saves the result under that fingerprint, so any
+ *   invalidation in between makes the stored entry unreachable instead of stale.
+ * - `retireCurrentGeneration()` replaces the generation id, retiring every entry on all
+ *   hosts at once; `pruneRetiredGenerations()` deletes leftovers in bounded SCAN batches.
+ * - Methods throw on Redis failures; callers decide how to degrade.
  */
 final class Cache
 {
+    private const int PRUNE_BATCH_SIZE = 1000;
+
     private readonly int $expirationTime;
 
     public function __construct(
@@ -30,48 +29,61 @@ final class Cache
         private readonly Encoder $encoder,
         ?int $expirationTime = null,
     ) {
-        $this->expirationTime = $expirationTime ?? (int) config('lada-cache.expiration_time', 0);
+        $this->expirationTime = $expirationTime ?? (int) config('lada-cache.expiration_time');
     }
 
-    public function currentGeneration(): Generation
+    /**
+     * @param  array<string>  $tags
+     */
+    public function lookup(string $key, array $tags): CacheHit|CacheMiss
     {
-        return $this->redis->currentGeneration();
-    }
+        $reply = $this->redis->evaluate(LuaScripts::LOOKUP, [
+            $key,
+            self::freshToken(),
+            $this->expirationTime,
+            ...self::canonicalTags($tags),
+        ]);
 
-    public function set(Generation $generation, string $key, array $tags, mixed $data): void
-    {
-        $key = $this->redis->prefix($generation->scope($key));
-        $value = $this->encoder->encode($data);
-
-        if ($this->expirationTime > 0) {
-            $this->redis->set($key, $value, 'EX', $this->expirationTime);
-        } else {
-            $this->redis->set($key, $value);
+        if (! is_array($reply) || ! isset($reply[0], $reply[1])) {
+            throw new UnexpectedValueException('Malformed Lada Cache lookup reply for key '.$key);
         }
 
-        foreach ($generation->scopeAll($tags) as $tag) {
-            $this->redis->sadd($this->redis->prefix($tag), $key);
-        }
-    }
+        if (isset($reply[2])) {
+            $value = $this->encoder->decode((string) $reply[2]);
 
-    public function get(Generation $generation, string $key): mixed
-    {
-        $encoded = $this->redis->get($this->redis->prefix($generation->scope($key)));
-
-        return $encoded === null ? null : $this->encoder->decode($encoded);
-    }
-
-    public function repairTagMembership(Generation $generation, string $key, array $tags): void
-    {
-        $prefixedKey = $this->redis->prefix($generation->scope($key));
-
-        foreach ($generation->scopeAll($tags) as $tag) {
-            try {
-                $this->redis->sadd($this->redis->prefix($tag), $prefixedKey);
-            } catch (Throwable $e) {
-                Log::warning('[LadaCache] Tag repair failed: '.$e->getMessage());
+            if ($value !== null) {
+                return new CacheHit($value);
             }
         }
+
+        return new CacheMiss(new Generation((string) $reply[0]), $key, (string) $reply[1]);
+    }
+
+    public function store(CacheMiss $miss, mixed $data): void
+    {
+        $this->redis->evaluate(LuaScripts::STORE, [
+            $miss->generation->id,
+            $miss->key,
+            $miss->fingerprint,
+            $this->expirationTime,
+            $this->encoder->encode($data),
+        ]);
+    }
+
+    /**
+     * @param  array<string>  $tags
+     */
+    public function invalidate(array $tags): void
+    {
+        if ($tags === []) {
+            return;
+        }
+
+        $this->redis->evaluate(LuaScripts::INVALIDATE, [
+            self::freshToken(),
+            $this->expirationTime,
+            ...self::canonicalTags($tags),
+        ]);
     }
 
     public function flush(): void
@@ -80,44 +92,44 @@ final class Cache
         $this->pruneRetiredGenerations();
     }
 
-    public function retireCurrentGeneration(): Generation
+    public function retireCurrentGeneration(): void
     {
-        return $this->redis->advanceGeneration();
+        $this->redis->evaluate(LuaScripts::RETIRE, [self::freshToken()]);
     }
 
-    public function pruneRetiredGenerations(): void
+    public function pruneRetiredGenerations(): int
     {
-        $current = $this->redis->currentGeneration();
+        $cursor = '0';
+        $deleted = 0;
 
-        try {
-            $connectionPrefix = (string) (config('database.redis.options.prefix') ?? '');
-            $ladaPrefix = $this->redis->prefix('');
-            $generationKey = $this->redis->generationKey();
+        do {
+            $reply = $this->redis->evaluate(LuaScripts::PRUNE_BATCH, [$cursor, self::PRUNE_BATCH_SIZE]);
 
-            $keys = array_map(
-                static fn (string $key): string => $connectionPrefix !== '' && str_starts_with($key, $connectionPrefix)
-                    ? substr($key, strlen($connectionPrefix))
-                    : $key,
-                $this->redis->keys($this->redis->prefix('*')) ?: []
-            );
-
-            $staleKeys = array_values(array_filter(
-                $keys,
-                static fn (string $key): bool => $key !== $generationKey
-                    && ! $current->retains(substr($key, strlen($ladaPrefix)))
-            ));
-
-            if ($staleKeys !== []) {
-                foreach (array_chunk($staleKeys, 1000) as $batch) {
-                    try {
-                        $this->redis->unlink(...$batch);
-                    } catch (Throwable) {
-                        $this->redis->del(...$batch);
-                    }
-                }
+            if (! is_array($reply) || ! isset($reply[0], $reply[1])) {
+                throw new UnexpectedValueException('Malformed Lada Cache prune reply at cursor '.$cursor);
             }
-        } catch (Throwable $e) {
-            Log::warning('[LadaCache] Pruning retired generations failed: '.$e->getMessage());
-        }
+
+            $cursor = (string) $reply[0];
+            $deleted += (int) $reply[1];
+        } while ($cursor !== '0');
+
+        return $deleted;
+    }
+
+    /**
+     * @param  array<string>  $tags
+     * @return list<string>
+     */
+    private static function canonicalTags(array $tags): array
+    {
+        $unique = array_values(array_unique($tags));
+        sort($unique, SORT_STRING);
+
+        return $unique;
+    }
+
+    private static function freshToken(): string
+    {
+        return bin2hex(random_bytes(16));
     }
 }

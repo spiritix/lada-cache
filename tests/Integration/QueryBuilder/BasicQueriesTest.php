@@ -4,8 +4,6 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Tests\Integration\QueryBuilder;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Hasher;
-use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
 use Spiritix\LadaCache\Tests\TestCase;
 
@@ -38,7 +36,7 @@ class BasicQueriesTest extends TestCase
         $locked = $builder->get();
         $this->assertNotEmpty($locked);
 
-        $key = (new Hasher(new Reflector($builder)))->getHash();
-        $this->assertCacheMissing($key);
+        [$key, $tags] = $this->cacheKeyAndTags($builder);
+        $this->assertCacheMissing($key, $tags);
     }
 }

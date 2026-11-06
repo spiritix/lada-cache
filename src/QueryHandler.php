@@ -9,6 +9,8 @@ use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\App;
 use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Debug\CacheCollector;
+use Spiritix\LadaCache\Support\CacheOperation;
+use Spiritix\LadaCache\Support\FailureReporter;
 use Throwable;
 
 /**
@@ -17,8 +19,11 @@ use Throwable;
  * Responsibilities:
  * - Decide whether a query should be cached using `Manager`.
  * - Compute cache keys with `Hasher` and tags with `Tagger`.
- * - Store/fetch cached results via `Cache` and invalidate via `Invalidator`.
+ * - Look up, store and invalidate results via `Cache`.
  * - Integrate with the debug collector when available.
+ *
+ * Every cache failure is reported and degrades to plain database access: a query runs
+ * exactly once and its own exceptions propagate unchanged.
  */
 final class QueryHandler
 {
@@ -34,7 +39,6 @@ final class QueryHandler
 
     public function __construct(
         private readonly Cache $cache,
-        private readonly Invalidator $invalidator,
     ) {}
 
     public function setBuilder(QueryBuilder $builder): self
@@ -52,20 +56,17 @@ final class QueryHandler
 
         try {
             $reflector = new Reflector($this->builder);
-            $manager = new Manager($reflector);
 
-            if (! $manager->shouldCache()) {
+            if (! (new Manager($reflector))->shouldCache()) {
                 return;
             }
 
-            $tagger = new Tagger($reflector);
             $this->subQueryTags = array_values(array_unique([
                 ...$this->subQueryTags,
-                ...$tagger->getTags(),
+                ...(new Tagger($reflector))->getTags(),
             ]));
-        } catch (Throwable) {
-            // On any reflection/type error, skip collecting subquery tags.
-            return;
+        } catch (Throwable $exception) {
+            FailureReporter::report(CacheOperation::Analyze, $exception);
         }
     }
 
@@ -83,43 +84,36 @@ final class QueryHandler
 
         try {
             $reflector = new Reflector($this->builder, $statementType, $values);
-            $manager = new Manager($reflector);
 
-            if (! $manager->shouldInvalidate()) {
+            if (! (new Manager($reflector))->shouldInvalidate()) {
                 return;
             }
 
-            $tagger = new Tagger($reflector);
-            $tags = $tagger->getTags();
+            $tags = (new Tagger($reflector))->getTags();
+        } catch (Throwable $exception) {
+            FailureReporter::report(CacheOperation::Invalidate, $exception, ['statement' => $statementType]);
+            $this->retireGeneration();
 
-            // If in a transaction, queue invalidation until commit; otherwise, execute immediately.
-            $connection = $this->builder->getConnection();
-            if (method_exists($connection, 'transactionLevel') && $connection->transactionLevel() > 0) {
-                $this->queueInvalidationForConnection($connection, $tags);
-
-                if (method_exists($connection, 'afterCommit')) {
-                    $connection->afterCommit(function () use ($connection): void {
-                        $this->flushQueuedInvalidationsForConnection($connection);
-                    });
-                }
-
-                // We can't know hashes before flushing; record action only.
-                $this->stopCollector($reflector, $tags, [], "Invalidation queued ({$statementType})");
-
-                return;
-            }
-
-            $hashes = $this->invalidator->invalidate($tags);
-            $this->stopCollector($reflector, $tags, $hashes, "Invalidation ({$statementType})");
-        } catch (Throwable) {
-            // On any reflection/type/tagging error during invalidation, skip invalidation silently.
-            try {
-                $reflector = new Reflector($this->builder, $statementType, $values);
-                $this->stopCollector($reflector, [], [], 'Invalidation skipped (error)');
-            } catch (Throwable) {
-                // ignore
-            }
+            return;
         }
+
+        $connection = $this->builder->getConnection();
+        if (method_exists($connection, 'transactionLevel') && $connection->transactionLevel() > 0) {
+            $this->queueInvalidationForConnection($connection, $tags);
+
+            if (method_exists($connection, 'afterCommit')) {
+                $connection->afterCommit(function () use ($connection): void {
+                    $this->flushQueuedInvalidationsForConnection($connection);
+                });
+            }
+
+            $this->stopCollector($reflector, $tags, [], "Invalidation queued ({$statementType})");
+
+            return;
+        }
+
+        $this->invalidateTags($tags);
+        $this->stopCollector($reflector, $tags, [], "Invalidation ({$statementType})");
     }
 
     /**
@@ -139,46 +133,36 @@ final class QueryHandler
 
         try {
             $reflector = new Reflector($this->builder);
-            $manager = new Manager($reflector);
+            $cacheable = (new Manager($reflector))->shouldCache();
+            $key = $cacheable ? (new Hasher($reflector))->getHash() : '';
+            $tags = $cacheable ? array_values(array_unique([...(new Tagger($reflector))->getTags(), ...$subQueryTags])) : [];
+        } catch (Throwable $exception) {
+            FailureReporter::report(CacheOperation::Analyze, $exception);
 
-            if (! $manager->shouldCache()) {
-                return $queryClosure();
-            }
-
-            $hasher = new Hasher($reflector);
-            $tagger = new Tagger($reflector);
-
-            $generation = $this->cache->currentGeneration();
-            $key = $hasher->getHash();
-            $tags = array_values(array_unique([...$tagger->getTags(), ...$subQueryTags]));
-
-            $cached = $this->cache->get($generation, $key);
-            $action = $cached === null ? 'Miss' : 'Hit';
-
-            if ($cached === null) {
-                $cached = $queryClosure();
-                $this->cache->set($generation, $key, $tags, $cached);
-            } else {
-                // Self-heal tag membership inconsistencies by idempotently adding the key to each tag set.
-                $this->cache->repairTagMembership($generation, $key, $tags);
-            }
-
-            $this->stopCollector($reflector, $tags, $key, $action);
-
-            return $cached;
-        } catch (Throwable) {
-            // On any reflection/type/tagging error, do not cache; run the query directly.
-            $result = $queryClosure();
-            // Best effort to stop collector with bypass info.
-            try {
-                $reflector = new Reflector($this->builder);
-                $this->stopCollector($reflector, [], '', 'Bypass (error)');
-            } catch (Throwable) {
-                // ignore
-            }
-
-            return $result;
+            return $queryClosure();
         }
+
+        if (! $cacheable) {
+            return $queryClosure();
+        }
+
+        $lookup = $this->lookup($key, $tags);
+
+        if ($lookup instanceof CacheHit && is_array($lookup->value)) {
+            $this->stopCollector($reflector, $tags, $key, 'Hit');
+
+            return $lookup->value;
+        }
+
+        $rows = $queryClosure();
+
+        if ($lookup instanceof CacheMiss) {
+            $this->store($lookup, $rows);
+        }
+
+        $this->stopCollector($reflector, $tags, $key, $lookup instanceof CacheMiss ? 'Miss' : 'Bypass (cache unavailable)');
+
+        return $rows;
     }
 
     public function queueInvalidationForConnection(ConnectionInterface $connection, array $tags): void
@@ -192,10 +176,58 @@ final class QueryHandler
     {
         $name = (string) ($connection->getName() ?? 'default');
         $tags = $this->queuedInvalidations[$name] ?? [];
-        if ($tags !== []) {
-            $this->invalidator->invalidate($tags);
-        }
         unset($this->queuedInvalidations[$name]);
+
+        if ($tags !== []) {
+            $this->invalidateTags($tags);
+        }
+    }
+
+    /**
+     * @param  array<string>  $tags
+     */
+    private function lookup(string $key, array $tags): CacheHit|CacheMiss|null
+    {
+        try {
+            return $this->cache->lookup($key, $tags);
+        } catch (Throwable $exception) {
+            FailureReporter::report(CacheOperation::Read, $exception, ['key' => $key]);
+
+            return null;
+        }
+    }
+
+    /**
+     * @param  array<mixed>  $rows
+     */
+    private function store(CacheMiss $miss, array $rows): void
+    {
+        try {
+            $this->cache->store($miss, $rows);
+        } catch (Throwable $exception) {
+            FailureReporter::report(CacheOperation::Store, $exception, ['key' => $miss->key]);
+        }
+    }
+
+    /**
+     * @param  array<string>  $tags
+     */
+    private function invalidateTags(array $tags): void
+    {
+        try {
+            $this->cache->invalidate($tags);
+        } catch (Throwable $exception) {
+            FailureReporter::report(CacheOperation::Invalidate, $exception, ['tags' => $tags]);
+        }
+    }
+
+    private function retireGeneration(): void
+    {
+        try {
+            $this->cache->retireCurrentGeneration();
+        } catch (Throwable $exception) {
+            FailureReporter::report(CacheOperation::Retire, $exception);
+        }
     }
 
     public function clearQueuedInvalidationsForConnection(ConnectionInterface $connection): void

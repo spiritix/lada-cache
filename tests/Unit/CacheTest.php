@@ -6,19 +6,17 @@ namespace Spiritix\LadaCache\Tests\Unit;
 
 use InvalidArgumentException;
 use Spiritix\LadaCache\Cache;
+use Spiritix\LadaCache\CacheHit;
+use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\Encoder;
-use Spiritix\LadaCache\Generation;
 use Spiritix\LadaCache\Redis;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class CacheTest extends TestCase
 {
-    private const string GENERATION_A = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-
-    private const string GENERATION_B = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
-
     private Redis $redis;
-    private Encoder $encoder;
+
+    private Cache $cache;
 
     protected function setUp(): void
     {
@@ -27,176 +25,184 @@ class CacheTest extends TestCase
         config(['lada-cache.prefix' => 'p:']);
 
         $this->redis = new Redis();
-        $this->encoder = new Encoder();
+        $this->cache = new Cache($this->redis, new Encoder(), 0);
     }
 
-    public function testCurrentGenerationIsCreatedOnceAndStaysStable(): void
+    public function testFirstLookupCreatesAStableGeneration(): void
     {
-        $cache = new Cache($this->redis, $this->encoder, 0);
+        $first = $this->miss('k', ['t']);
+        $second = $this->miss('k', ['t']);
 
-        $first = $cache->currentGeneration();
-
-        $this->assertSame($first->id, $cache->currentGeneration()->id);
-        $this->assertSame($first->id, $this->redis->get('p:generation'));
+        $this->assertSame($first->generation->id, $second->generation->id);
+        $this->assertSame($first->generation->id, $this->redis->get('p:generation'));
     }
 
-    public function testCurrentGenerationAdoptsTheStoredId(): void
+    public function testStoredEntryIsServedUntilOneOfItsTagsIsInvalidated(): void
     {
-        $this->redis->set('p:generation', self::GENERATION_A);
-        $cache = new Cache($this->redis, $this->encoder, 0);
+        $this->cache->store($this->miss('k', ['t1', 't2']), ['row']);
 
-        $this->assertSame(self::GENERATION_A, $cache->currentGeneration()->id);
+        $hit = $this->cache->lookup('k', ['t1', 't2']);
+        $this->cache->invalidate(['unrelated']);
+        $stillHit = $this->cache->lookup('k', ['t1', 't2']);
+        $this->cache->invalidate(['t2']);
+
+        $this->assertInstanceOf(CacheHit::class, $hit);
+        $this->assertSame(['row'], $hit->value);
+        $this->assertInstanceOf(CacheHit::class, $stillHit);
+        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t1', 't2']));
+    }
+
+    public function testTagOrderAndDuplicatesDoNotChangeTheFingerprint(): void
+    {
+        $this->cache->store($this->miss('k', ['b', 'a']), ['row']);
+
+        $this->assertInstanceOf(CacheHit::class, $this->cache->lookup('k', ['a', 'b', 'a']));
+    }
+
+    public function testStoreAfterConcurrentInvalidationIsNeverServed(): void
+    {
+        $capturedBeforeWrite = $this->miss('k', ['t']);
+
+        $this->cache->invalidate(['t']);
+        $this->cache->store($capturedBeforeWrite, ['stale']);
+
+        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t']));
+    }
+
+    public function testStoreAfterRetireIsDiscarded(): void
+    {
+        $capturedBeforeMigration = $this->miss('k', ['t']);
+
+        $this->cache->retireCurrentGeneration();
+        $this->cache->store($capturedBeforeMigration, ['pre-migration-schema']);
+
+        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t']));
+        $this->assertSame(0, (int) $this->redis->exists('p:'.$capturedBeforeMigration->generation->id.':e:k'));
+    }
+
+    public function testEntryWithoutValidFingerprintIsAMiss(): void
+    {
+        $miss = $this->miss('k', ['t']);
+        $this->redis->set('p:'.$miss->generation->id.':e:k', 'legacy-unfingerprinted-payload');
+
+        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t']));
+    }
+
+    public function testEmptiedRedisNeverRevivesEntriesWrittenWithAnEarlierGeneration(): void
+    {
+        $capturedBeforeWipe = $this->miss('k', ['t']);
+
+        $this->redis->flushdb();
+        $afterWipe = $this->miss('k', ['t']);
+        $this->cache->store($capturedBeforeWipe, ['written-by-pod-mid-query']);
+
+        $this->assertNotSame($capturedBeforeWipe->generation->id, $afterWipe->generation->id);
+        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t']));
     }
 
     public function testCorruptStoredGenerationFailsLoudly(): void
     {
         $this->redis->set('p:generation', '7');
-        $cache = new Cache($this->redis, $this->encoder, 0);
 
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('Invalid Lada Cache generation id "7"');
 
-        $cache->currentGeneration();
+        $this->cache->lookup('k', ['t']);
     }
 
-    public function testSetStoresValueWithPrefixAndTagsWithExpiration(): void
+    public function testRetireMakesEntriesUnreachable(): void
     {
-        $tags = ['t1', 't2'];
-        $value = ['a' => 1];
-        $encoded = $this->encoder->encode($value);
-        $storedKey = 'p:'.self::GENERATION_A.':k';
+        $this->cache->store($this->miss('k', ['t']), ['row']);
 
-        $cache = new Cache($this->redis, $this->encoder, 60);
-        $cache->set(new Generation(self::GENERATION_A), 'k', $tags, $value);
+        $this->cache->retireCurrentGeneration();
 
-        $this->assertSame($encoded, $this->redis->get($storedKey));
-        $this->assertGreaterThan(0, (int) $this->redis->ttl($storedKey));
-        $this->assertSame(1, (int) $this->redis->sismember('p:'.self::GENERATION_A.':t1', $storedKey));
-        $this->assertSame(1, (int) $this->redis->sismember('p:'.self::GENERATION_A.':t2', $storedKey));
+        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t']));
     }
 
-    public function testSetStoresValueWithoutExpirationWhenZero(): void
+    public function testPruneKeepsCurrentEntriesAndDeletesEverythingElse(): void
     {
-        $value = 'string-value';
-        $encoded = $this->encoder->encode($value);
-        $storedKey = 'p:'.self::GENERATION_A.':k2';
-
-        $cache = new Cache($this->redis, $this->encoder, 0);
-        $cache->set(new Generation(self::GENERATION_A), 'k2', ['t'], $value);
-
-        $this->assertSame($encoded, $this->redis->get($storedKey));
-        $this->assertSame(-1, (int) $this->redis->ttl($storedKey));
-        $this->assertSame(1, (int) $this->redis->sismember('p:'.self::GENERATION_A.':t', $storedKey));
-    }
-
-    public function testGetReturnsNullWhenKeyMissing(): void
-    {
-        $cache = new Cache($this->redis, $this->encoder, 0);
-
-        $this->assertNull($cache->get(new Generation(self::GENERATION_A), 'missing'));
-    }
-
-    public function testGetDecodesEncodedPayload(): void
-    {
-        $original = ['x' => 10, 'y' => [1, 2]];
-        $this->redis->set('p:'.self::GENERATION_A.':payload', $this->encoder->encode($original));
-
-        $cache = new Cache($this->redis, $this->encoder, 0);
-
-        $this->assertSame($original, $cache->get(new Generation(self::GENERATION_A), 'payload'));
-    }
-
-    public function testGetDoesNotReadEntriesOfAnotherGeneration(): void
-    {
-        $cache = new Cache($this->redis, $this->encoder, 0);
-        $cache->set(new Generation(self::GENERATION_A), 'k', [], ['stale']);
-
-        $this->assertNull($cache->get(new Generation(self::GENERATION_B), 'k'));
-    }
-
-    public function testFlushScansAndDeletesAllPrefixedKeys(): void
-    {
-        $this->redis->set('p:k1', '1');
-        $this->redis->set('p:k2', '1');
-        $this->redis->set('p:k3', '1');
-
-        $cache = new Cache($this->redis, $this->encoder, 0);
-        $cache->flush();
-
-        $this->assertSame(0, (int) $this->redis->exists('p:k1'));
-        $this->assertSame(0, (int) $this->redis->exists('p:k2'));
-        $this->assertSame(0, (int) $this->redis->exists('p:k3'));
-    }
-
-    public function testFlushAdvancesGenerationSoPreviousEntriesAreNeverServed(): void
-    {
-        $cache = new Cache($this->redis, $this->encoder, 0);
-        $before = $cache->currentGeneration();
-        $cache->set($before, 'k', ['t'], ['stale']);
-
-        $cache->flush();
-        $after = $cache->currentGeneration();
-
-        $this->assertNotSame($before->id, $after->id);
-        $this->assertNull($cache->get($after, 'k'));
-        $this->assertSame(0, (int) $this->redis->exists('p:'.$before->scope('k')));
-        $this->assertSame(0, (int) $this->redis->exists('p:'.$before->scope('t')));
-    }
-
-    public function testRetireMakesEntriesUnreachableWithoutDeletingThem(): void
-    {
-        $cache = new Cache($this->redis, $this->encoder, 0);
-        $before = $cache->currentGeneration();
-        $cache->set($before, 'k', ['t'], ['stale']);
-
-        $cache->retireCurrentGeneration();
-
-        $this->assertNull($cache->get($cache->currentGeneration(), 'k'));
-        $this->assertSame(1, (int) $this->redis->exists('p:'.$before->scope('k')));
-    }
-
-    public function testPruneKeepsGenerationKeyAndCurrentEntriesAndDeletesTheRest(): void
-    {
-        $this->redis->set('p:generation', self::GENERATION_B);
-        $this->redis->set('p:'.self::GENERATION_A.':k', $this->encoder->encode(['retired']));
-        $this->redis->set('p:'.self::GENERATION_B.':k', $this->encoder->encode(['current']));
-        $this->redis->sadd('p:'.self::GENERATION_B.':t', 'p:'.self::GENERATION_B.':k');
+        $retired = $this->miss('old', ['t']);
+        $this->cache->store($retired, ['retired']);
+        $this->cache->retireCurrentGeneration();
+        $this->cache->store($this->miss('k', ['t']), ['current']);
         $this->redis->set('p:legacy-key', '1');
-        $cache = new Cache($this->redis, $this->encoder, 0);
+
+        $deleted = $this->cache->pruneRetiredGenerations();
+
+        $this->assertSame(3, $deleted);
+        $this->assertSame(0, (int) $this->redis->exists('p:'.$retired->generation->id.':e:old'));
+        $this->assertSame(0, (int) $this->redis->exists('p:legacy-key'));
+        $hit = $this->cache->lookup('k', ['t']);
+        $this->assertInstanceOf(CacheHit::class, $hit);
+        $this->assertSame(['current'], $hit->value);
+    }
+
+    public function testPruneWalksPastASingleScanBatch(): void
+    {
+        $retired = $this->miss('k', ['t']);
+        $this->cache->retireCurrentGeneration();
+        for ($index = 0; $index < 2500; $index++) {
+            $this->redis->set('p:'.$retired->generation->id.':e:'.$index, '1');
+        }
+
+        $this->cache->pruneRetiredGenerations();
+
+        $this->assertSame([], $this->redis->keys('p:'.$retired->generation->id.':*'));
+    }
+
+    public function testPruneTreatsGlobCharactersInThePrefixLiterally(): void
+    {
+        config(['lada-cache.prefix' => 'g[1]*:']);
+        $redis = new Redis();
+        $cache = new Cache($redis, new Encoder(), 0);
+        $cache->retireCurrentGeneration();
+        $redis->set('g1:foreign-application-key', 'keep');
+        $redis->set('g[1]*:legacy-key', 'drop');
 
         $cache->pruneRetiredGenerations();
 
-        $this->assertSame(self::GENERATION_B, $this->redis->get('p:generation'));
-        $this->assertSame(['current'], $cache->get(new Generation(self::GENERATION_B), 'k'));
-        $this->assertSame(1, (int) $this->redis->sismember('p:'.self::GENERATION_B.':t', 'p:'.self::GENERATION_B.':k'));
-        $this->assertSame(0, (int) $this->redis->exists('p:'.self::GENERATION_A.':k'));
-        $this->assertSame(0, (int) $this->redis->exists('p:legacy-key'));
+        $this->assertSame('keep', $redis->get('g1:foreign-application-key'));
+        $this->assertSame(0, (int) $redis->exists('g[1]*:legacy-key'));
     }
 
-    public function testEntryWrittenWithRetiredGenerationAfterFlushIsUnreachable(): void
+    public function testFlushRetiresAndPrunes(): void
     {
-        $cache = new Cache($this->redis, $this->encoder, 0);
-        $capturedBeforeMigration = $cache->currentGeneration();
+        $before = $this->miss('k', ['t']);
+        $this->cache->store($before, ['stale']);
 
-        $cache->flush();
-        $cache->set($capturedBeforeMigration, 'k', ['t'], ['pre-migration-schema']);
+        $this->cache->flush();
 
-        $this->assertNull($cache->get($cache->currentGeneration(), 'k'));
+        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t']));
+        $this->assertSame([], $this->redis->keys('p:'.$before->generation->id.':*'));
     }
 
-    public function testEmptiedRedisNeverRevivesEntriesWrittenWithAnEarlierGeneration(): void
+    public function testEntriesAndVersionsExpireWithTheConfiguredTtl(): void
     {
-        $cache = new Cache($this->redis, $this->encoder, 0);
-        $capturedBeforeWipe = $cache->currentGeneration();
+        $cache = new Cache($this->redis, new Encoder(), 60);
+        $miss = $cache->lookup('k', ['t']);
+        $this->assertInstanceOf(CacheMiss::class, $miss);
+        $cache->store($miss, ['row']);
 
-        $this->redis->flushdb();
-        $afterWipe = $cache->currentGeneration();
-        $cache->set($capturedBeforeWipe, 'k', ['t'], ['written-by-pod-mid-query']);
-        $cache->retireCurrentGeneration();
-        $cache->retireCurrentGeneration();
+        $this->assertGreaterThan(0, (int) $this->redis->ttl('p:'.$miss->generation->id.':e:k'));
+        $this->assertGreaterThan(0, (int) $this->redis->ttl('p:'.$miss->generation->id.':v:t'));
+    }
 
-        $this->assertNotSame($capturedBeforeWipe->id, $afterWipe->id);
-        $this->assertNull($cache->get($afterWipe, 'k'));
-        $this->assertNull($cache->get($cache->currentGeneration(), 'k'));
+    public function testZeroTtlKeepsEntriesWithoutExpiry(): void
+    {
+        $miss = $this->miss('k', ['t']);
+        $this->cache->store($miss, ['row']);
+
+        $this->assertSame(-1, (int) $this->redis->ttl('p:'.$miss->generation->id.':e:k'));
+    }
+
+    /**
+     * @param  array<string>  $tags
+     */
+    private function miss(string $key, array $tags): CacheMiss
+    {
+        $lookup = $this->cache->lookup($key, $tags);
+        $this->assertInstanceOf(CacheMiss::class, $lookup);
+
+        return $lookup;
     }
 }

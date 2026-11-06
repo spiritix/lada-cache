@@ -5,37 +5,33 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use Illuminate\Redis\Connections\Connection;
+use Illuminate\Redis\Connections\PhpRedisConnection;
+use Illuminate\Redis\Connections\PredisConnection;
 use Illuminate\Support\Facades\Redis as RedisFacade;
+use Redis as PhpRedisClient;
+use RuntimeException;
+use Throwable;
 
 /**
- * Thin Redis proxy providing custom Lada Cache prefixing and raw command passthrough.
- *
- * This class centralizes access to the framework Redis connection used by Lada Cache
- * while applying a package-specific key prefix. All methods invoked on this proxy
- * are forwarded to the underlying `Illuminate\Redis\Connections\Connection` instance
- * via `__call`, keeping behavior consistent with Laravel's Redis API.
+ * Lazy Redis access for Lada Cache with a per-process circuit breaker.
  *
  * Architectural notes:
- * - Keys should be prefixed using `prefix()` before being written to Redis to avoid
- *   collisions with application keys.
- * - The class is marked `readonly` as its state is fully defined at construction.
+ * - The connection is resolved on first use, so building query builders never touches Redis.
+ * - After any failed script the proxy refuses further scripts for a cooldown period, so an
+ *   unreachable Redis costs at most one timeout per cooldown instead of one per query.
+ * - `__call` forwards raw commands to the underlying connection.
  */
-final readonly class Redis
+final class Redis
 {
-    private const string GENERATION_KEY = 'generation';
+    private const int UNAVAILABLE_COOLDOWN_NANOSECONDS = 30_000_000_000;
 
-    private string $prefix;
+    private readonly string $prefix;
 
-    private Connection $connection;
+    private ?int $unavailableUntil = null;
 
-    public function __construct(?Connection $connection = null)
-    {
-        if ($connection !== null) {
-            $this->connection = $connection;
-        } else {
-            $connectionName = (string) config('lada-cache.redis_connection', 'cache');
-            $this->connection = RedisFacade::connection($connectionName);
-        }
+    public function __construct(
+        private ?Connection $connection = null,
+    ) {
         $this->prefix = (string) config('lada-cache.prefix', 'lada:');
     }
 
@@ -44,38 +40,71 @@ final readonly class Redis
         return $this->prefix.$key;
     }
 
-    public function generationKey(): string
+    private function keyBase(): string
     {
-        return $this->prefix(self::GENERATION_KEY);
+        return $this->connectionPrefix().$this->prefix;
     }
 
-    public function currentGeneration(): Generation
+    /**
+     * Runs a script from `LuaScripts`, passing the key base as ARGV[1] ahead of the arguments.
+     *
+     * @param  list<string|int>  $arguments
+     */
+    public function evaluate(string $script, array $arguments): mixed
     {
-        $stored = $this->connection->get($this->generationKey());
-
-        if ($stored === null || $stored === false) {
-            $this->connection->setnx($this->generationKey(), Generation::fresh()->id);
-            $stored = $this->connection->get($this->generationKey());
+        if ($this->unavailableUntil !== null && hrtime(true) < $this->unavailableUntil) {
+            throw new CacheUnavailableException('Redis is skipped for a cooldown period after a previous failure');
         }
 
-        return new Generation((string) $stored);
-    }
+        try {
+            $result = $this->getConnection()->eval($script, 0, $this->keyBase(), ...$arguments);
+        } catch (Throwable $exception) {
+            $this->markUnavailable();
 
-    public function advanceGeneration(): Generation
-    {
-        $generation = Generation::fresh();
-        $this->connection->set($this->generationKey(), $generation->id);
+            throw $exception;
+        }
 
-        return $generation;
+        if ($result === false) {
+            $this->markUnavailable();
+
+            throw new RuntimeException('Redis rejected a Lada Cache script: '.$this->lastClientError());
+        }
+
+        $this->unavailableUntil = null;
+
+        return $result;
     }
 
     public function __call(string $name, array $arguments): mixed
     {
-        return $this->connection->{$name}(...$arguments);
+        return $this->getConnection()->{$name}(...$arguments);
     }
 
     public function getConnection(): Connection
     {
-        return $this->connection;
+        return $this->connection ??= RedisFacade::connection((string) config('lada-cache.redis_connection', 'cache'));
+    }
+
+    private function connectionPrefix(): string
+    {
+        $connection = $this->getConnection();
+
+        return match (true) {
+            $connection instanceof PhpRedisConnection => (string) $connection->client()->getOption(PhpRedisClient::OPT_PREFIX),
+            $connection instanceof PredisConnection => (string) ($connection->client()->getOptions()->prefix?->getPrefix() ?? ''),
+            default => throw new RuntimeException('Unsupported Redis connection for Lada Cache: '.$connection::class),
+        };
+    }
+
+    private function lastClientError(): string
+    {
+        $client = $this->connection?->client();
+
+        return $client instanceof PhpRedisClient ? (string) $client->getLastError() : 'no error reported';
+    }
+
+    private function markUnavailable(): void
+    {
+        $this->unavailableUntil = hrtime(true) + self::UNAVAILABLE_COOLDOWN_NANOSECONDS;
     }
 }

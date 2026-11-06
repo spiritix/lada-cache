@@ -23,22 +23,19 @@ final class TransactionInvalidationTest extends TestCase
         $r = new Reflector($b);
         $k = (new Hasher($r))->getHash();
         $t = (new Tagger($r))->getTags();
-
-        /** @var \Spiritix\LadaCache\Cache $cache */
-        $cache = app('lada.cache');
-        $cache->set($cache->currentGeneration(), $k, $t, [['id' => 601, 'name' => 'TX']]);
-        $this->assertCacheHas($k);
+        $this->seedCache($k, $t, [['id' => 601, 'name' => 'TX']]);
+        $this->assertCacheHas($k, $t);
 
         DB::beginTransaction();
         DB::table('cars')->where('id', 601)->update(['name' => 'TX2']);
         // Should still be present before commit
-        $this->assertCacheHas($k);
+        $this->assertCacheHas($k, $t);
         DB::commit();
 
         // After commit, ensure queued invalidations are flushed
         /** @var \Spiritix\LadaCache\QueryHandler $handler */
         $handler = $this->app->make('lada.handler');
         $handler->flushQueuedInvalidationsForConnection(DB::connection());
-        $this->assertCacheMissing($k);
+        $this->assertCacheMissing($k, $t);
     }
 }

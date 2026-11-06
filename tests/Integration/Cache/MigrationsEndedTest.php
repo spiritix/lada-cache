@@ -16,12 +16,12 @@ final class MigrationsEndedTest extends TestCase
     public function testCompletedMigrationRetiresCacheEvenWhenTheBatchNeverFinishes(): void
     {
         $this->seedCachedName('pre-migration');
-        $generationBefore = (new Redis())->currentGeneration();
+        $generationBefore = $this->currentGenerationId();
 
         $this->renameOutsideLada('post-migration');
         event(new MigrationEnded(new class extends Migration {}, 'up'));
 
-        $this->assertNotSame($generationBefore->id, (new Redis())->currentGeneration()->id);
+        $this->assertNotSame($generationBefore, $this->currentGenerationId());
         $this->assertSame('post-migration', DB::table('cars')->where('id', 1)->value('name'));
     }
 
@@ -29,14 +29,21 @@ final class MigrationsEndedTest extends TestCase
     {
         $this->seedCachedName('pre-migration');
         $redis = new Redis();
-        $retired = $redis->currentGeneration();
+        $retired = $this->currentGenerationId();
         event(new MigrationEnded(new class extends Migration {}, 'up'));
-        $current = $redis->currentGeneration();
+        $current = $this->currentGenerationId();
 
         event(new MigrationsEnded('up'));
 
-        $this->assertSame($current->id, $redis->currentGeneration()->id);
-        $this->assertSame([], $redis->keys($redis->prefix($retired->scope('*'))));
+        $this->assertSame($current, $this->currentGenerationId());
+        $this->assertSame([], $redis->keys($redis->prefix($retired.':*')));
+    }
+
+    private function currentGenerationId(): string
+    {
+        $redis = new Redis();
+
+        return (string) $redis->get($redis->prefix('generation'));
     }
 
     private function seedCachedName(string $name): void

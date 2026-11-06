@@ -6,6 +6,8 @@ namespace Spiritix\LadaCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\Redis as RedisFacade;
 use Spiritix\LadaCache\Cache;
+use Spiritix\LadaCache\CacheHit;
+use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\Encoder;
 use Spiritix\LadaCache\Redis;
 use Spiritix\LadaCache\Tests\TestCase;
@@ -16,28 +18,60 @@ class FlushWithConnectionPrefixTest extends TestCase
     {
         parent::getEnvironmentSetUp($app);
 
-        // Enable connection-level prefix to reproduce the bug
         $app['config']->set('database.redis.options.prefix', 'app_');
         $app['config']->set('lada-cache.prefix', 'lada:');
     }
 
-    public function testFlushDeletesAllEntriesAndKeepsOnlyTheGenerationCounter(): void
+    public function testEntriesRoundTripUnderConnectionPrefix(): void
     {
-        RedisFacade::purge('cache');
+        $cache = $this->freshCache();
 
-        $redis = new Redis();
-        $encoder = new Encoder();
-        $cache = new Cache($redis, $encoder, 0);
+        $miss = $cache->lookup('k1', ['t1']);
+        $this->assertInstanceOf(CacheMiss::class, $miss);
+        $cache->store($miss, ['row']);
 
-        $cache->set($cache->currentGeneration(), 'k1', ['t1'], '1');
-        $cache->set($cache->currentGeneration(), 'k2', ['t2'], '2');
+        $hit = $cache->lookup('k1', ['t1']);
+        $this->assertInstanceOf(CacheHit::class, $hit);
+        $this->assertSame(['row'], $hit->value);
+        $this->assertContains('app_lada:generation', RedisFacade::connection('cache')->keys('lada:*'));
+    }
 
-        $keysBefore = RedisFacade::connection('cache')->keys('*lada:*');
-        $this->assertGreaterThanOrEqual(4, count($keysBefore));
+    public function testInvalidationHonoursConnectionPrefix(): void
+    {
+        $cache = $this->freshCache();
+        $this->seedEntry($cache, 'k1', ['t1'], ['row']);
+
+        $cache->invalidate(['t1']);
+
+        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k1', ['t1']));
+    }
+
+    public function testFlushDeletesAllEntriesAndKeepsOnlyTheGenerationKey(): void
+    {
+        $cache = $this->freshCache();
+        $this->seedEntry($cache, 'k1', ['t1'], '1');
+        $this->seedEntry($cache, 'k2', ['t2'], '2');
+        $this->assertGreaterThanOrEqual(5, count(RedisFacade::connection('cache')->keys('lada:*')));
 
         $cache->flush();
 
-        $keysAfter = RedisFacade::connection('cache')->keys('*lada:*');
-        $this->assertSame(['app_lada:generation'], $keysAfter);
+        $this->assertSame(['app_lada:generation'], RedisFacade::connection('cache')->keys('lada:*'));
+    }
+
+    private function freshCache(): Cache
+    {
+        RedisFacade::purge('cache');
+
+        return new Cache(new Redis(), new Encoder(), 0);
+    }
+
+    /**
+     * @param  array<string>  $tags
+     */
+    private function seedEntry(Cache $cache, string $key, array $tags, mixed $data): void
+    {
+        $miss = $cache->lookup($key, $tags);
+        $this->assertInstanceOf(CacheMiss::class, $miss);
+        $cache->store($miss, $data);
     }
 }

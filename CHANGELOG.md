@@ -6,7 +6,15 @@
 - Added `lada-cache.scope` (`LADA_CACHE_SCOPE`): `models` caches only reads from models using `LadaCacheTrait`, while writes from any builder still invalidate
 
 ### Changed
-- Cache entries and tags are scoped by a random generation id stored in Redis. Each completed migration and every flush replace it atomically, so results read before a schema change are never served afterwards, even if the migration batch fails midway or Redis is emptied. Retired generations are pruned when a migration batch finishes. Existing entries from earlier versions are ignored and removed on the next prune
+- Cache entries are scoped by a random generation id stored in Redis. Each completed migration and every flush replace it atomically, so results read before a schema change are never served afterwards, even if the migration batch fails midway or Redis is emptied. Retired generations are pruned in bounded `SCAN` batches when a migration batch finishes instead of a blocking `KEYS` scan. Existing entries from earlier versions are ignored and removed on the next prune
+- Replaced tag sets with per-tag version tokens checked atomically in Lua: a result read before a concurrent write is never served, a cache hit costs one Redis round trip instead of one plus one per tag, and an invalidation costs one round trip instead of five per tag
+- Cache failures never affect database access: they are logged (errors for failed invalidations) and the query runs uncached; after a failure Redis is skipped for 30 seconds per process. Redis is no longer contacted when query builders are created
+- `expiration_time` defaults to 7 days so invalidated entries leave Redis
+- Removed `Invalidator` and the `lada.invalidator` binding; invalidation is part of `Cache`
+- An invalid `lada-cache.scope` disables Lada Cache with a logged error instead of failing the application boot
+
+### Fixed
+- A failing SQL query was executed twice, and a successful query ran again when storing its result failed
 
 ## [6.1.1] - 2026-05-22
 ### Fixed

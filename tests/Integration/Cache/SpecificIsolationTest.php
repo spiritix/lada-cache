@@ -35,21 +35,18 @@ final class SpecificIsolationTest extends TestCase
         $t10 = (new Tagger($r10))->getTags();
         $t11 = (new Tagger($r11))->getTags();
 
-        /** @var \Spiritix\LadaCache\Cache $cache */
-        $cache = app('lada.cache');
-
         // Seed cache entries for both queries
-        $cache->set($cache->currentGeneration(), $k10, $t10, [['id' => 10, 'name' => 'A']]);
-        $cache->set($cache->currentGeneration(), $k11, $t11, [['id' => 11, 'name' => 'B']]);
+        $this->seedCache($k10, $t10, [['id' => 10, 'name' => 'A']]);
+        $this->seedCache($k11, $t11, [['id' => 11, 'name' => 'B']]);
 
-        $this->assertCacheHas($k10, 'Expected specific cache for id=10 to be present before update');
-        $this->assertCacheHas($k11, 'Expected specific cache for id=11 to be present before update');
+        $this->assertCacheHas($k10, $t10, 'Expected specific cache for id=10 to be present before update');
+        $this->assertCacheHas($k11, $t11, 'Expected specific cache for id=11 to be present before update');
 
         // Act: update only the second row
         DB::table('cars')->where('id', 11)->update(['name' => 'B2']);
 
         // Assert: cache for id=11 should be invalidated, but id=10 should remain
-        $this->assertCacheMissing($k11, 'Expected specific cache for id=11 to be invalidated');
-        $this->assertCacheHas($k10, 'Updating a specific row should not invalidate another specific row');
+        $this->assertCacheMissing($k11, $t11, 'Expected specific cache for id=11 to be invalidated');
+        $this->assertCacheHas($k10, $t10, 'Updating a specific row should not invalidate another specific row');
     }
 }
