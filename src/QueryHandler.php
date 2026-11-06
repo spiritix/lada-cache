@@ -242,13 +242,8 @@ final class QueryHandler
             return;
         }
 
-        if (! $this->replayFailedInvalidations()) {
-            $this->failed->record($invalidation);
-
-            return;
-        }
-
         try {
+            $this->replayPendingInvalidations();
             $this->apply($invalidation);
         } catch (Throwable $exception) {
             $this->failed->record($invalidation);
@@ -265,14 +260,8 @@ final class QueryHandler
      */
     private function replayFailedInvalidations(): bool
     {
-        if (! $this->failed->hasPending()) {
-            return true;
-        }
-
         try {
-            $this->failed->replay(function (Invalidation $invalidation): void {
-                $this->apply($invalidation->size() > self::MAX_REPLAYED_INVALIDATION_SIZE ? Invalidation::everything() : $invalidation);
-            });
+            $this->replayPendingInvalidations();
 
             return true;
         } catch (Throwable $exception) {
@@ -280,6 +269,17 @@ final class QueryHandler
 
             return false;
         }
+    }
+
+    private function replayPendingInvalidations(): void
+    {
+        if (! $this->failed->hasPending()) {
+            return;
+        }
+
+        $this->failed->replay(function (Invalidation $invalidation): void {
+            $this->apply($invalidation->size() > self::MAX_REPLAYED_INVALIDATION_SIZE ? Invalidation::everything() : $invalidation);
+        });
     }
 
     private function apply(Invalidation $invalidation): void
