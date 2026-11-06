@@ -31,7 +31,7 @@ A **Redis-based**, fully automated, and scalable query cache layer for Laravel.
 - 🚀 **Fully automated query caching** - no code changes required after setup  
 - 🧩 **Granular invalidation** - automatically invalidates only affected rows or tables  
 - 🧠 **Transparent integration** with Eloquent and Query Builder  
-- ⚡ **Redis-backed** - in-memory speed, cluster-ready, horizontally scalable  
+- ⚡ **Redis-backed** - in-memory speed, one round trip per cache hit  
 - 🧰 **Laravel Debugbar integration** - visualize cache hits, misses, and invalidations  
 - 🎛️ **Fine-grained control** - include or exclude tables from caching  
 - 🧱 **Connection integration** - DB queries pass through a Lada-aware connection subclass transparently
@@ -214,6 +214,9 @@ php artisan lada-cache:enable
 - Complex SQL constructs such as `UNION`/`INTERSECT`/advanced expressions may not be fully reflected for row-level tagging; invalidation falls back to table-level tags.
 - Raw SQL executed directly via the connection (e.g., `DB::select()`, `DB::statement()`) is not cached by design.
 - Row-level tagging relies on standard single-column primary keys. Composite or unconventional primary keys fall back to table-level invalidation.
+- Redis Cluster is not supported, because each cache operation is one Lua script touching keys of several tags. Use a standalone Redis, optionally with replicas and Sentinel.
+- Give Redis an eviction policy such as `allkeys-lru` or `volatile-lru`. Evicted entries and version tokens only cause misses, but under `noeviction` a full Redis rejects invalidations, and `volatile-ttl` evicts the short-lived replica lag markers first.
+- Writes that bypass Laravel's connection (other applications, database consoles, `DB::connection()->getPdo()`) are not seen; flush with `php artisan lada-cache:flush` after such changes.
 
 ## Contributing
 
