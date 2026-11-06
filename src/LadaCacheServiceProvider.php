@@ -29,6 +29,7 @@ use Spiritix\LadaCache\Debug\CacheCollector;
 use Spiritix\LadaCache\Support\CacheOperation;
 use Spiritix\LadaCache\Support\FailedInvalidations;
 use Spiritix\LadaCache\Support\FailureReporter;
+use Spiritix\LadaCache\Support\FrameworkTables;
 use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\ReplicaReads;
 use Throwable;
@@ -67,6 +68,11 @@ final class LadaCacheServiceProvider extends ServiceProvider
         if (! (bool) config('lada-cache.active', true)) {
             return;
         }
+
+        config(['lada-cache.exclude_tables' => array_values(array_unique([
+            ...(array) config('lada-cache.exclude_tables', []),
+            ...FrameworkTables::volatile(),
+        ]))]);
 
         if (config('lada-cache.enable_debugbar') && $this->app->bound('debugbar')) {
             $this->registerDebugbarCollector();
