@@ -5,6 +5,10 @@
 - Added `withoutCache()` for per-query bypass of read caching and write invalidation (see https://github.com/spiritix/lada-cache/pull/151)
 - Added `lada-cache.scope` (`LADA_CACHE_SCOPE`): `models` caches only reads from models using `LadaCacheTrait`, while writes from any builder still invalidate
 - Added `lada-cache.expiration_jitter` (`LADA_CACHE_EXPIRATION_JITTER`, default 15): spreads each expiration by up to that percentage so entries cached together do not expire together (based on https://github.com/spiritix/lada-cache/pull/154)
+- Writes invalidate the tables the database changes through foreign keys with cascading or nulling actions, read from the schema once per cache generation; `lada-cache.dependent_tables` adds undeclared dependencies such as triggers
+- Added `lada-cache.replica_lag` (`LADA_CACHE_REPLICA_LAG`, default 2): on connections with read replicas, replica reads of recently written tables are not cached
+- Invalidations Redis rejects are kept, shared through APCu under PHP-FPM, and replayed before the cache is used again; reads bypass the cache until then
+- Fuzz and multi-process test suites, and a test matrix over SQLite, MySQL and PostgreSQL with both Redis clients
 
 ### Changed
 - Cache entries are scoped by a random generation id stored in Redis. Each completed migration and every flush replace it atomically, so results read before a schema change are never served afterwards, even if the migration batch fails midway or Redis is emptied. Retired generations are pruned in bounded `SCAN` batches when a migration batch finishes instead of a blocking `KEYS` scan. Existing entries from earlier versions are ignored and removed on the next prune
@@ -18,6 +22,9 @@
 - The failure cooldown is shared across PHP-FPM requests and processes through APCu when available; under FrankenPHP worker mode and Octane it lasts for the worker. Pending transaction invalidations are held per connection object, so purged connections in long-lived workers leave nothing behind
 - Lua scripts run by SHA (`EVALSHA`, falling back to `EVAL` after `SCRIPT FLUSH`), so their source is no longer sent with every query
 - Cached results only decode to arrays of `stdClass` rows; a tampered entry can no longer instantiate arbitrary classes
+- Queries calling time-, randomness- or session-dependent SQL functions such as `NOW()` or `RAND()` are no longer cached
+- Raw statements are classified once where every statement passes through the connection, so driver-specific overrides are covered
+- With `consider_rows` disabled, tags separate database and table names, so database `a` with table `bc` and database `ab` with table `c` no longer share tags
 - `exists()` caches `select 1` instead of whole rows
 - Lada connections no longer open the primary and read PDO connections when resolved, only when first used
 - The debug collector lookup no longer throws and catches an exception for every query when Debugbar is not installed
@@ -30,6 +37,8 @@
 - `findMany()`, `whereKey([...])` and BelongsTo eager loads were tagged table-wide and evicted by every write to the table (https://github.com/spiritix/lada-cache/pull/158)
 - Cached lookups of a missing row survived writes that created that row: `insertGetId()` and inserts with an explicit key (https://github.com/spiritix/lada-cache/pull/155), inserts without a key, `insertOrIgnore()`, `insertUsing()`, `insertOrIgnoreUsing()`, and updates that change the primary key
 - Raw statements (`DB::insert/update/delete/statement/affectingStatement/unprepared`, and writes through `DB::select()`) never invalidated anything
+- Raw `DB::insert()` on MySQL bypassed raw statement invalidation, because MySQL's connection overrides `insert()`
+- Writes cascading through foreign keys left cached reads of the cascaded tables stale
 - `insertOrIgnoreReturning()` never invalidated anything
 - `updateOrInsert()` with callback values failed with a `TypeError`
 - A nested transaction commit flushed invalidations before the outer transaction committed, letting other hosts cache uncommitted-era results, and a savepoint rollback discarded the invalidations of the enclosing transaction

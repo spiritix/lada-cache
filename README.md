@@ -176,7 +176,17 @@ Every tag carries a random version token. A read captures the tokens of its tags
 
 Reads inside a transaction always go to the database, and invalidations of writes inside a transaction run when the outermost transaction commits; a rollback discards them, a savepoint rollback keeps those of the enclosing transaction.
 
-Raw statements run through Laravel invalidate too. `DB::insert()`, `DB::update()`, `DB::delete()`, `DB::statement()`, `DB::affectingStatement()`, `DB::unprepared()`, and writes through `DB::select()` such as `INSERT ... RETURNING`, invalidate every entry of the single table they write. Statements that cannot be attributed to one table, such as DDL, multi-table updates, stored procedure calls or several statements at once, retire the whole cache. Reads, session statements (`SET`, `PRAGMA`, savepoints, locks) and temporary tables invalidate nothing. Writes that bypass Laravel's database connection, such as other applications or database consoles, are not seen.
+Raw statements run through Laravel invalidate too. Every statement passing through the connection, whichever method issued it (`DB::insert()`, `DB::update()`, `DB::delete()`, `DB::statement()`, `DB::affectingStatement()`, `DB::unprepared()`, `DB::select()` with `INSERT ... RETURNING`, and driver-specific overrides such as MySQL's `insert()`), invalidates every entry of the single table it writes. Statements that cannot be attributed to one table, such as DDL, multi-table updates, stored procedure calls, writable CTEs or several statements at once, retire the whole cache. Reads, session statements (`SET`, `PRAGMA`, savepoints, locks) and temporary tables invalidate nothing. Writes that bypass Laravel's database connection, such as other applications or database consoles, are not seen.
+
+Writes also invalidate the tables the database changes along with them: foreign keys with `ON DELETE` / `ON UPDATE` `CASCADE`, `SET NULL` or `SET DEFAULT`, followed transitively. The foreign keys are read from the schema with a single query the first time a write needs them in each cache generation, so a migration that changes them is picked up automatically. Changes the schema does not declare, such as tables written by triggers, are listed in `lada-cache.dependent_tables`.
+
+Queries whose result depends on when or by whom they run are never cached: SQL calling `NOW()`, `CURRENT_TIMESTAMP`, `CURRENT_DATE`, `RAND()`, `UUID()`, `date('now')` and similar functions. Pass such values as bindings (for example `now()` from PHP) to keep the query cacheable.
+
+On connections with read replicas (a `read` section in the connection config), results read from a replica are not cached for `lada-cache.replica_lag` seconds (2 by default) after a write to one of their tables, because the replica may not have the write yet. Reads on the write connection, sticky reads after a write, and reads with `useWritePdo()` are cached as usual.
+
+If an invalidation cannot reach Redis, it is kept and replayed before the cache is read or written again; until the replay succeeds, reads bypass the cache. Under PHP-FPM the pending invalidations are shared across requests and processes through APCu when available. Very large backlogs retire the whole cache instead.
+
+The cache key and the cached rows do not depend on the connection's session settings. If parts of your application change session settings that alter results, such as the MySQL or PostgreSQL session time zone for `TIMESTAMP` columns, use a separate connection or `withoutCache()` for those queries. Applications that share one Redis instance must each use their own `lada-cache.prefix`.
 
 Lada Cache never breaks database access. If Redis is unreachable or a cache operation fails, the failure is logged and the query runs against the database as if Lada Cache were not installed. After a failure, Redis is skipped for 30 seconds, so an outage costs at most one connection attempt per worker in that window: under FrankenPHP worker mode or Octane the skip lives as long as the worker, and under PHP-FPM it is shared across requests and processes through APCu when the APCu extension is enabled (otherwise every request tries once). Set short `timeout` and `read_timeout` values on the Redis connection Lada Cache uses to bound that attempt. Failed invalidations are logged as errors because other hosts may serve the previous results until they expire (`LADA_CACHE_EXPIRATION`, 7 days by default).
 
@@ -210,6 +220,23 @@ Pull requests and issue reports are welcome!
 - Follow **PSR-12** coding style  
 - Add tests for all new features  
 - Submit via feature branches (no direct PRs from `master`)
+
+### Running the tests
+
+The suites run in Docker against SQLite, MySQL 8.4 and PostgreSQL 17, with both Redis clients:
+
+```bash
+make test                 # SQLite with phpredis
+make test-mysql           # MySQL
+make test-pgsql           # PostgreSQL
+make test-matrix          # every database with phpredis and Predis
+make fuzz LADA_FUZZ_ITERATIONS=5000
+make concurrency          # several processes against MySQL and PostgreSQL
+```
+
+- **Unit** and **Integration** cover behaviour case by case.
+- **Fuzz** runs a seeded random workload of reads, writes, raw statements, transactions, foreign key cascades, cache flushes, an emptied Redis and evicted keys, and compares every cached read with the same query run without the cache. A failure prints the seed and the operations that led to it; rerun with `LADA_FUZZ_SEED=<seed>`.
+- **Concurrency** forks worker processes, like pods sharing one database and Redis, runs the same workload in all of them at once, and checks that every cached read matches the database once they finish.
 
 ## License
 
