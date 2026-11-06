@@ -19,7 +19,7 @@ use Spiritix\LadaCache\Support\TableExtractor;
  * - Compile the SQL and parameters for cache key construction and debugging.
  *
  * Architectural notes:
- * - Compiled SQL is memoized, since hashing and determinism checks both need it.
+ * - Compiled SQL, tables and rows are memoized, since several collaborators read them per query.
  * - Method signatures and grammar calls are aligned with Laravel 12's query grammars.
  */
 final class Reflector
@@ -37,6 +37,12 @@ final class Reflector
     private readonly string $sqlOperation;
 
     private ?string $sql = null;
+
+    /** @var array<int, string>|null */
+    private ?array $tables = null;
+
+    /** @var array<string, array<int, mixed>>|null */
+    private ?array $rows = null;
 
     public function __construct(
         private readonly QueryBuilder $queryBuilder,
@@ -88,12 +94,12 @@ final class Reflector
 
     public function getTables(): array
     {
-        return TableExtractor::extractTables($this->queryBuilder);
+        return $this->tables ??= TableExtractor::extractTables($this->queryBuilder);
     }
 
     public function getRows(): array
     {
-        return RowExtractor::extractRows($this->queryBuilder);
+        return $this->rows ??= RowExtractor::extractRows($this->queryBuilder);
     }
 
     public function getType(): string
