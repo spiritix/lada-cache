@@ -26,7 +26,7 @@ final class TransactionInvalidationTest extends TestCase
 
         /** @var \Spiritix\LadaCache\Cache $cache */
         $cache = app('lada.cache');
-        $cache->set($k, $t, [['id' => 601, 'name' => 'TX']]);
+        $cache->set($cache->currentGeneration(), $k, $t, [['id' => 601, 'name' => 'TX']]);
         $this->assertCacheHas($k);
 
         DB::beginTransaction();

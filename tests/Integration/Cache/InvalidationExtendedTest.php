@@ -37,9 +37,9 @@ final class InvalidationExtendedTest extends TestCase
 
         /** @var \Spiritix\LadaCache\Cache $cache */
         $cache = app('lada.cache');
-        $cache->set($k30, $t30, [['id' => 30, 'name' => 'A']]);
-        $cache->set($k31, $t31, [['id' => 31, 'name' => 'B']]);
-        $cache->set($kb, $tb, [['id' => 30], ['id' => 31]]);
+        $cache->set($cache->currentGeneration(), $k30, $t30, [['id' => 30, 'name' => 'A']]);
+        $cache->set($cache->currentGeneration(), $k31, $t31, [['id' => 31, 'name' => 'B']]);
+        $cache->set($cache->currentGeneration(), $kb, $tb, [['id' => 30], ['id' => 31]]);
 
         $this->assertCacheHas($k30);
         $this->assertCacheHas($k31);
@@ -70,8 +70,8 @@ final class InvalidationExtendedTest extends TestCase
 
         /** @var \Spiritix\LadaCache\Cache $cache */
         $cache = app('lada.cache');
-        $cache->set($k40, $t40, [['id' => 40, 'name' => 'A']]);
-        $cache->set($k41, $t41, [['id' => 41, 'name' => 'B']]);
+        $cache->set($cache->currentGeneration(), $k40, $t40, [['id' => 40, 'name' => 'A']]);
+        $cache->set($cache->currentGeneration(), $k41, $t41, [['id' => 41, 'name' => 'B']]);
 
         $this->assertCacheHas($k40);
         $this->assertCacheHas($k41);
@@ -102,8 +102,8 @@ final class InvalidationExtendedTest extends TestCase
 
         /** @var \Spiritix\LadaCache\Cache $cache */
         $cache = app('lada.cache');
-        $cache->set($kb, $tb, [['id' => 50], ['id' => 51]]);
-        $cache->set($ks, $ts, [['id' => 50, 'name' => 'A']]);
+        $cache->set($cache->currentGeneration(), $kb, $tb, [['id' => 50], ['id' => 51]]);
+        $cache->set($cache->currentGeneration(), $ks, $ts, [['id' => 50, 'name' => 'A']]);
 
         $this->assertCacheHas($kb);
         $this->assertCacheHas($ks);

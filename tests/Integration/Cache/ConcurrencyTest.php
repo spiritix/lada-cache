@@ -31,24 +31,26 @@ class ConcurrencyTest extends TestCase
         // Compute key and seed cache entry directly (stable in transactional harness)
         $key = (new Hasher($reflector))->getHash();
         $payload = [['id' => 910, 'name' => 'X']];
-        $cache->set($key, $tags, $payload);
+        $generation = $cache->currentGeneration();
+        $cache->set($generation, $key, $tags, $payload);
         $this->assertCacheHas($key);
 
         // Remove membership from both specific and unspecific table tags
-        $unspecificTag = "tags:database:{$dbName}:table_unspecific:cars";
-        $specificTag = "tags:database:{$dbName}:table_specific:cars";
         $redis = new LadaRedis();
-        $redis->srem($redis->prefix($unspecificTag), $redis->prefix($key));
-        $redis->srem($redis->prefix($specificTag), $redis->prefix($key));
-        $this->assertFalse((bool) $redis->sismember($redis->prefix($unspecificTag), $redis->prefix($key)));
-        $this->assertFalse((bool) $redis->sismember($redis->prefix($specificTag), $redis->prefix($key)));
+        $unspecificTag = $redis->prefix($generation->scope("tags:database:{$dbName}:table_unspecific:cars"));
+        $specificTag = $redis->prefix($generation->scope("tags:database:{$dbName}:table_specific:cars"));
+        $storedKey = $redis->prefix($generation->scope($key));
+        $redis->srem($unspecificTag, $storedKey);
+        $redis->srem($specificTag, $storedKey);
+        $this->assertFalse((bool) $redis->sismember($unspecificTag, $storedKey));
+        $this->assertFalse((bool) $redis->sismember($specificTag, $storedKey));
 
         // Directly exercise repair to avoid relying on read path timing
-        $cache->repairTagMembership($key, $tags);
+        $cache->repairTagMembership($generation, $key, $tags);
 
         // Membership should be restored in at least one of the table tags
-        $restoredUnspecific = (bool) $redis->sismember($redis->prefix($unspecificTag), $redis->prefix($key));
-        $restoredSpecific = (bool) $redis->sismember($redis->prefix($specificTag), $redis->prefix($key));
+        $restoredUnspecific = (bool) $redis->sismember($unspecificTag, $storedKey);
+        $restoredSpecific = (bool) $redis->sismember($specificTag, $storedKey);
         $this->assertTrue($restoredUnspecific || $restoredSpecific, 'Expected tag membership to be repaired');
     }
 }

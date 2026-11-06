@@ -28,7 +28,7 @@ final readonly class Invalidator
      */
     public function invalidate(array $tags): array
     {
-        $hashes = $this->collectAndDeleteTagSets($tags);
+        $hashes = $this->collectAndDeleteTagSets($this->redis->currentGeneration()->scopeAll($tags));
         $this->deleteKeys($hashes);
 
         return $hashes;

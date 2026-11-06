@@ -21,7 +21,7 @@ class FlushWithConnectionPrefixTest extends TestCase
         $app['config']->set('lada-cache.prefix', 'lada:');
     }
 
-    public function testFlushDeletesAllKeys(): void
+    public function testFlushDeletesAllEntriesAndKeepsOnlyTheGenerationCounter(): void
     {
         RedisFacade::purge('cache');
 
@@ -29,15 +29,15 @@ class FlushWithConnectionPrefixTest extends TestCase
         $encoder = new Encoder();
         $cache = new Cache($redis, $encoder, 0);
 
-        $cache->set('k1', [], '1');
-        $cache->set('k2', [], '2');
+        $cache->set($cache->currentGeneration(), 'k1', ['t1'], '1');
+        $cache->set($cache->currentGeneration(), 'k2', ['t2'], '2');
 
         $keysBefore = RedisFacade::connection('cache')->keys('*lada:*');
-        $this->assertGreaterThanOrEqual(2, count($keysBefore));
+        $this->assertGreaterThanOrEqual(4, count($keysBefore));
 
         $cache->flush();
 
         $keysAfter = RedisFacade::connection('cache')->keys('*lada:*');
-        $this->assertEmpty($keysAfter, 'flush() should delete all keys');
+        $this->assertSame(['app_lada:generation'], $keysAfter);
     }
 }

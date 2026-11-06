@@ -22,6 +22,8 @@ use Illuminate\Support\Facades\Redis as RedisFacade;
  */
 final readonly class Redis
 {
+    private const string GENERATION_KEY = 'generation';
+
     private string $prefix;
 
     private Connection $connection;
@@ -40,6 +42,31 @@ final readonly class Redis
     public function prefix(string $key): string
     {
         return $this->prefix.$key;
+    }
+
+    public function generationKey(): string
+    {
+        return $this->prefix(self::GENERATION_KEY);
+    }
+
+    public function currentGeneration(): Generation
+    {
+        $stored = $this->connection->get($this->generationKey());
+
+        if ($stored === null || $stored === false) {
+            $this->connection->setnx($this->generationKey(), Generation::fresh()->id);
+            $stored = $this->connection->get($this->generationKey());
+        }
+
+        return new Generation((string) $stored);
+    }
+
+    public function advanceGeneration(): Generation
+    {
+        $generation = Generation::fresh();
+        $this->connection->set($this->generationKey(), $generation->id);
+
+        return $generation;
     }
 
     public function __call(string $name, array $arguments): mixed

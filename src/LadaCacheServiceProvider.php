@@ -6,6 +6,7 @@ namespace Spiritix\LadaCache;
 
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
+use Illuminate\Database\Events\MigrationEnded;
 use Illuminate\Database\Events\MigrationsEnded;
 use Illuminate\Database\Events\TransactionCommitted;
 use Illuminate\Database\Events\TransactionRolledBack;
@@ -74,11 +75,15 @@ final class LadaCacheServiceProvider extends ServiceProvider
             $handler->clearQueuedInvalidationsForConnection($event->connection);
         });
 
-        // Auto-flush cache after migrations complete to prevent stale schema-related cache.
+        $events->listen(MigrationEnded::class, function (): void {
+            /** @var Cache $cache */
+            $cache = $this->app->make('lada.cache');
+            $cache->retireCurrentGeneration();
+        });
         $events->listen(MigrationsEnded::class, function (): void {
             /** @var Cache $cache */
             $cache = $this->app->make('lada.cache');
-            $cache->flush();
+            $cache->pruneRetiredGenerations();
         });
     }
 

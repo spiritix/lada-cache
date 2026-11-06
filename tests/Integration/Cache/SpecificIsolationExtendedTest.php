@@ -38,8 +38,8 @@ final class SpecificIsolationExtendedTest extends TestCase
 
         /** @var \Spiritix\LadaCache\Cache $cache */
         $cache = app('lada.cache');
-        $cache->set($k10, $t10, [['id' => 10, 'name' => 'A']]);
-        $cache->set($k11, $t11, [['id' => 11, 'name' => 'B']]);
+        $cache->set($cache->currentGeneration(), $k10, $t10, [['id' => 10, 'name' => 'A']]);
+        $cache->set($cache->currentGeneration(), $k11, $t11, [['id' => 11, 'name' => 'B']]);
 
         $this->assertCacheHas($k10);
         $this->assertCacheHas($k11);
@@ -71,9 +71,9 @@ final class SpecificIsolationExtendedTest extends TestCase
 
         /** @var \Spiritix\LadaCache\Cache $cache */
         $cache = app('lada.cache');
-        $cache->set($k20, $t20, [['id' => 20, 'name' => 'X']]);
-        $cache->set($k21, $t21, [['id' => 21, 'name' => 'Y']]);
-        $cache->set($k22, $t22, [['id' => 22, 'name' => 'Z']]);
+        $cache->set($cache->currentGeneration(), $k20, $t20, [['id' => 20, 'name' => 'X']]);
+        $cache->set($cache->currentGeneration(), $k21, $t21, [['id' => 21, 'name' => 'Y']]);
+        $cache->set($cache->currentGeneration(), $k22, $t22, [['id' => 22, 'name' => 'Z']]);
 
         $this->assertCacheHas($k20);
         $this->assertCacheHas($k21);

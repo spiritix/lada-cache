@@ -39,8 +39,8 @@ final class SpecificIsolationTest extends TestCase
         $cache = app('lada.cache');
 
         // Seed cache entries for both queries
-        $cache->set($k10, $t10, [['id' => 10, 'name' => 'A']]);
-        $cache->set($k11, $t11, [['id' => 11, 'name' => 'B']]);
+        $cache->set($cache->currentGeneration(), $k10, $t10, [['id' => 10, 'name' => 'A']]);
+        $cache->set($cache->currentGeneration(), $k11, $t11, [['id' => 11, 'name' => 'B']]);
 
         $this->assertCacheHas($k10, 'Expected specific cache for id=10 to be present before update');
         $this->assertCacheHas($k11, 'Expected specific cache for id=11 to be present before update');

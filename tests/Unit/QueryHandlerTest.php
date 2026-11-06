@@ -49,12 +49,41 @@ class QueryHandlerTest extends TestCase
 
         // Assert cache key and tags present
         $reflector = new Reflector($builder);
-        $key = (new Hasher($reflector))->getHash();
+        $generation = $this->redis->currentGeneration();
+        $storedKey = $this->redis->prefix($generation->scope((new Hasher($reflector))->getHash()));
         $tags = (new Tagger($reflector))->getTags();
-        $this->assertSame(1, (int) $this->redis->exists($this->redis->prefix($key)));
-        foreach ($tags as $tag) {
-            $this->assertSame(1, (int) $this->redis->sismember($this->redis->prefix($tag), $this->redis->prefix($key)));
+        $this->assertSame(1, (int) $this->redis->exists($storedKey));
+        foreach ($generation->scopeAll($tags) as $tag) {
+            $this->assertSame(1, (int) $this->redis->sismember($this->redis->prefix($tag), $storedKey));
         }
+    }
+
+    public function testCacheQueryMissesAfterFlushAdvancesTheGeneration(): void
+    {
+        $handler = new QueryHandler($this->cache, $this->invalidator);
+        $builder = DB::table('cars');
+
+        $handler->setBuilder($builder)->cacheQuery(fn (): array => [['id' => 1, 'name' => 'stale-schema']]);
+        $this->cache->flush();
+        $result = $handler->setBuilder($builder)->cacheQuery(fn (): array => [['id' => 1, 'name' => 'fresh-schema']]);
+
+        $this->assertSame([['id' => 1, 'name' => 'fresh-schema']], $result);
+    }
+
+    public function testWriteCapturedBeforeFlushIsNeverServedAfterIt(): void
+    {
+        $handler = new QueryHandler($this->cache, $this->invalidator);
+        $builder = DB::table('cars');
+
+        $staleResult = $handler->setBuilder($builder)->cacheQuery(function (): array {
+            $this->cache->flush();
+
+            return [['id' => 1, 'name' => 'read-before-migration']];
+        });
+        $result = $handler->setBuilder($builder)->cacheQuery(fn (): array => [['id' => 1, 'name' => 'read-after-migration']]);
+
+        $this->assertSame([['id' => 1, 'name' => 'read-before-migration']], $staleResult);
+        $this->assertSame([['id' => 1, 'name' => 'read-after-migration']], $result);
     }
 
     public function testCacheQueryHitReadsCachedValueAndRepairsTags(): void
@@ -68,9 +97,11 @@ class QueryHandlerTest extends TestCase
         $key = (new Hasher($reflector))->getHash();
         $tags = (new Tagger($reflector))->getTags();
         $encoded = (new Encoder())->encode([['id' => 2]]);
-        $this->redis->set($this->redis->prefix($key), $encoded);
-        foreach ($tags as $tag) {
-            $this->redis->srem($this->redis->prefix($tag), $this->redis->prefix($key));
+        $generation = $this->redis->currentGeneration();
+        $storedKey = $this->redis->prefix($generation->scope($key));
+        $this->redis->set($storedKey, $encoded);
+        foreach ($generation->scopeAll($tags) as $tag) {
+            $this->redis->srem($this->redis->prefix($tag), $storedKey);
         }
 
         $executions = 0;
@@ -83,8 +114,8 @@ class QueryHandlerTest extends TestCase
         $this->assertSame([['id' => 2]], $result);
 
         // Assert tag membership repaired
-        foreach ($tags as $tag) {
-            $this->assertSame(1, (int) $this->redis->sismember($this->redis->prefix($tag), $this->redis->prefix($key)));
+        foreach ($generation->scopeAll($tags) as $tag) {
+            $this->assertSame(1, (int) $this->redis->sismember($this->redis->prefix($tag), $storedKey));
         }
     }
 }

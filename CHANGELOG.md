@@ -5,6 +5,9 @@
 - Added `withoutCache()` for per-query bypass of read caching and write invalidation (see https://github.com/spiritix/lada-cache/pull/151)
 - Added `lada-cache.scope` (`LADA_CACHE_SCOPE`): `models` caches only reads from models using `LadaCacheTrait`, while writes from any builder still invalidate
 
+### Changed
+- Cache entries and tags are scoped by a random generation id stored in Redis. Each completed migration and every flush replace it atomically, so results read before a schema change are never served afterwards, even if the migration batch fails midway or Redis is emptied. Retired generations are pruned when a migration batch finishes. Existing entries from earlier versions are ignored and removed on the next prune
+
 ## [6.1.1] - 2026-05-22
 ### Fixed
 - Fixed cache key collision for deferred query mutations (see https://github.com/spiritix/lada-cache/pull/150)

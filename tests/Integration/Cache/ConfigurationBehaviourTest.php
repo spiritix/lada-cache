@@ -74,10 +74,11 @@ class ConfigurationBehaviourTest extends TestCase
 
         $key = 'expire-key';
         $tags = [];
-        $cache->set($key, $tags, ['x' => 1]);
+        $generation = $cache->currentGeneration();
+        $cache->set($generation, $key, $tags, ['x' => 1]);
 
         // TTL should be >=0 (exists) and <= 60
-        $ttl = $redis->ttl($redis->prefix($key));
+        $ttl = $redis->ttl($redis->prefix($generation->scope($key)));
         $this->assertIsInt($ttl);
         $this->assertTrue($ttl === -1 || $ttl <= 60, 'TTL should be -1 (no expire) or <= configured expiration');
     }

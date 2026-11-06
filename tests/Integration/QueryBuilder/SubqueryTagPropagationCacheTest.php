@@ -34,13 +34,9 @@ final class SubqueryTagPropagationCacheTest extends TestCase
 
         /** @var \Spiritix\LadaCache\Cache $cache */
         $cache = app('lada.cache');
-        $cache->set($key, $tags, [['id' => 801, 'name' => 'C']]);
+        $cache->set($cache->currentGeneration(), $key, $tags, [['id' => 801, 'name' => 'C']]);
         $this->assertCacheHas($key);
-
-        $redis = new LadaRedis();
-        $carsSpecific = "tags:database:{$db}:table_specific:cars";
-        $enginesUnspecific = "tags:database:{$db}:table_unspecific:engines";
-        $this->assertTrue((bool) $redis->sismember($redis->prefix($carsSpecific), $redis->prefix($key)));
-        $this->assertTrue((bool) $redis->sismember($redis->prefix($enginesUnspecific), $redis->prefix($key)));
+        $this->assertTagHasKey("tags:database:{$db}:table_specific:cars", $key);
+        $this->assertTagHasKey("tags:database:{$db}:table_unspecific:engines", $key);
     }
 }

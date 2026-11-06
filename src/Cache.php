@@ -14,8 +14,10 @@ use Throwable;
  * key prefix and maintains tag membership used for invalidation.
  *
  * Architectural notes:
- * - Keys are prefixed via `Redis::prefix()` to avoid collisions.
- * - `flush()` removes all keys for the Lada prefix and safely handles
+ * - Keys and tags are scoped by the current `Generation` and prefixed via `Redis::prefix()`.
+ * - `retireCurrentGeneration()` advances the generation, which atomically retires every
+ *   entry on all hosts. `pruneRetiredGenerations()` deletes keys of older generations
+ *   and `flush()` does both. Pruning safely handles
  *   connection-level Redis prefixes (Predis/PhpRedis) by stripping the
  *   connection prefix before deletion and batching deletes (preferring UNLINK).
  */
@@ -31,14 +33,14 @@ final class Cache
         $this->expirationTime = $expirationTime ?? (int) config('lada-cache.expiration_time', 0);
     }
 
-    public function has(string $key): bool
+    public function currentGeneration(): Generation
     {
-        return (bool) $this->redis->exists($this->redis->prefix($key));
+        return $this->redis->currentGeneration();
     }
 
-    public function set(string $key, array $tags, mixed $data): void
+    public function set(Generation $generation, string $key, array $tags, mixed $data): void
     {
-        $key = $this->redis->prefix($key);
+        $key = $this->redis->prefix($generation->scope($key));
         $value = $this->encoder->encode($data);
 
         if ($this->expirationTime > 0) {
@@ -47,23 +49,23 @@ final class Cache
             $this->redis->set($key, $value);
         }
 
-        foreach ($tags as $tag) {
+        foreach ($generation->scopeAll($tags) as $tag) {
             $this->redis->sadd($this->redis->prefix($tag), $key);
         }
     }
 
-    public function get(string $key): mixed
+    public function get(Generation $generation, string $key): mixed
     {
-        $encoded = $this->redis->get($this->redis->prefix($key));
+        $encoded = $this->redis->get($this->redis->prefix($generation->scope($key)));
 
         return $encoded === null ? null : $this->encoder->decode($encoded);
     }
 
-    public function repairTagMembership(string $key, array $tags): void
+    public function repairTagMembership(Generation $generation, string $key, array $tags): void
     {
-        $prefixedKey = $this->redis->prefix($key);
+        $prefixedKey = $this->redis->prefix($generation->scope($key));
 
-        foreach ($tags as $tag) {
+        foreach ($generation->scopeAll($tags) as $tag) {
             try {
                 $this->redis->sadd($this->redis->prefix($tag), $prefixedKey);
             } catch (Throwable $e) {
@@ -74,22 +76,39 @@ final class Cache
 
     public function flush(): void
     {
+        $this->retireCurrentGeneration();
+        $this->pruneRetiredGenerations();
+    }
+
+    public function retireCurrentGeneration(): Generation
+    {
+        return $this->redis->advanceGeneration();
+    }
+
+    public function pruneRetiredGenerations(): void
+    {
+        $current = $this->redis->currentGeneration();
+
         try {
             $connectionPrefix = (string) (config('database.redis.options.prefix') ?? '');
+            $ladaPrefix = $this->redis->prefix('');
+            $generationKey = $this->redis->generationKey();
 
-            // Fetch all Lada keys as returned by the connection (includes connection prefix if set)
-            $keys = $this->redis->keys($this->redis->prefix('*'));
+            $keys = array_map(
+                static fn (string $key): string => $connectionPrefix !== '' && str_starts_with($key, $connectionPrefix)
+                    ? substr($key, strlen($connectionPrefix))
+                    : $key,
+                $this->redis->keys($this->redis->prefix('*')) ?: []
+            );
 
-            if (! empty($keys)) {
-                // Strip the connection-level prefix so the driver applies it exactly once when deleting
-                $toDelete = $connectionPrefix !== ''
-                    ? array_map(
-                        static fn(string $k): string => str_starts_with($k, $connectionPrefix) ? substr($k, strlen($connectionPrefix)) : $k,
-                        $keys
-                    )
-                    : $keys;
+            $staleKeys = array_values(array_filter(
+                $keys,
+                static fn (string $key): bool => $key !== $generationKey
+                    && ! $current->retains(substr($key, strlen($ladaPrefix)))
+            ));
 
-                foreach (array_chunk($toDelete, 1000) as $batch) {
+            if ($staleKeys !== []) {
+                foreach (array_chunk($staleKeys, 1000) as $batch) {
                     try {
                         $this->redis->unlink(...$batch);
                     } catch (Throwable) {
@@ -98,7 +117,7 @@ final class Cache
                 }
             }
         } catch (Throwable $e) {
-            Log::warning('[LadaCache] Redis flush failed: '.$e->getMessage());
+            Log::warning('[LadaCache] Pruning retired generations failed: '.$e->getMessage());
         }
     }
 }

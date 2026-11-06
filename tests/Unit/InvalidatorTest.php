@@ -10,6 +10,8 @@ use Spiritix\LadaCache\Tests\TestCase;
 
 class InvalidatorTest extends TestCase
 {
+    private const string GENERATION = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
     private Redis $redis;
 
     protected function setUp(): void
@@ -19,13 +21,14 @@ class InvalidatorTest extends TestCase
         config(['lada-cache.prefix' => 'p:']);
 
         $this->redis = new Redis();
+        $this->redis->set('p:generation', self::GENERATION);
     }
 
     public function testInvalidateReturnsEmptyWhenTagsDoNotExist(): void
     {
         $tags = ['tag:a', 'tag:b'];
-        $tagKeyA = 'p:tag:a';
-        $tagKeyB = 'p:tag:b';
+        $tagKeyA = 'p:'.self::GENERATION.':tag:a';
+        $tagKeyB = 'p:'.self::GENERATION.':tag:b';
 
         // Ensure tags don't exist
         $this->redis->del($tagKeyA);
@@ -38,8 +41,8 @@ class InvalidatorTest extends TestCase
     public function testInvalidateCollectsMembersDeletesTagSetsAndUnlinksKeys(): void
     {
         $tags = ['t1', 't2'];
-        $t1 = 'p:t1';
-        $t2 = 'p:t2';
+        $t1 = 'p:'.self::GENERATION.':t1';
+        $t2 = 'p:'.self::GENERATION.':t2';
         // Seed tag members and corresponding keys
         $this->redis->del($t1); $this->redis->del($t2);
         $this->redis->sadd($t1, 'k1', 'k2');
@@ -59,7 +62,7 @@ class InvalidatorTest extends TestCase
     public function testInvalidateFallsBackToDelWhenUnlinkFails(): void
     {
         $tags = ['t'];
-        $t = 'p:t';
+        $t = 'p:'.self::GENERATION.':t';
         // Seed tag members and keys; simulate unlink unsupported by using DEL fallback by deleting manually
         $this->redis->del($t);
         $this->redis->sadd($t, 'ka', 'kb');
@@ -70,5 +73,20 @@ class InvalidatorTest extends TestCase
         $invalidator->invalidate($tags);
         $this->assertSame(0, (int) $this->redis->exists('ka'));
         $this->assertSame(0, (int) $this->redis->exists('kb'));
+    }
+
+    public function testInvalidateTargetsOnlyTheCurrentGeneration(): void
+    {
+        $this->redis->sadd('p:'.self::GENERATION.':t', 'retired');
+        $this->redis->set('retired', '1');
+        $current = $this->redis->advanceGeneration();
+        $this->redis->sadd('p:'.$current->scope('t'), 'current');
+        $this->redis->set('current', '1');
+
+        $deleted = (new Invalidator($this->redis))->invalidate(['t']);
+
+        $this->assertSame(['current'], $deleted);
+        $this->assertSame(0, (int) $this->redis->exists('current'));
+        $this->assertSame(1, (int) $this->redis->exists('retired'));
     }
 }

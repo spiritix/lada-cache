@@ -164,6 +164,10 @@ By default every query on a Lada connection is cached. Set `LADA_CACHE_SCOPE=mod
 LADA_CACHE_SCOPE=models
 ```
 
+### Rolling deployments
+
+Cache entries and tags are stored under a random generation id kept in Redis. Every completed migration (and `lada-cache:flush`) replaces that id, which retires every entry for all hosts sharing the Redis instance in one atomic step; retired entries are pruned when the migration batch finishes. A query that started before the switch can never store a result that is served afterwards, so pods still running while a migration job executes cannot reintroduce pre-migration results, even when a batch fails midway. Because ids are random, an emptied or restarted Redis simply starts a new generation and never revives entries written under an earlier one. No configuration or deploy version is involved.
+
 ## Console Commands
 
 ```bash

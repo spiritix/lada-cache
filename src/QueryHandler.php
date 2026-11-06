@@ -148,18 +148,19 @@ final class QueryHandler
             $hasher = new Hasher($reflector);
             $tagger = new Tagger($reflector);
 
+            $generation = $this->cache->currentGeneration();
             $key = $hasher->getHash();
             $tags = array_values(array_unique([...$tagger->getTags(), ...$subQueryTags]));
 
-            $cached = $this->cache->has($key) ? $this->cache->get($key) : null;
+            $cached = $this->cache->get($generation, $key);
             $action = $cached === null ? 'Miss' : 'Hit';
 
             if ($cached === null) {
                 $cached = $queryClosure();
-                $this->cache->set($key, $tags, $cached);
+                $this->cache->set($generation, $key, $tags, $cached);
             } else {
                 // Self-heal tag membership inconsistencies by idempotently adding the key to each tag set.
-                $this->cache->repairTagMembership($key, $tags);
+                $this->cache->repairTagMembership($generation, $key, $tags);
             }
 
             $this->stopCollector($reflector, $tags, $key, $action);

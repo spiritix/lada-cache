@@ -11,21 +11,22 @@ trait CacheAssertions
     protected function assertCacheHas(string $key, string $message = ''): void
     {
         $redis = new LadaRedis();
-        $exists = (bool) $redis->exists($redis->prefix($key));
+        $exists = (bool) $redis->exists($redis->prefix($redis->currentGeneration()->scope($key)));
         Assert::assertTrue($exists, $message !== '' ? $message : "Failed asserting that cache has key '{$key}'");
     }
 
     protected function assertCacheMissing(string $key, string $message = ''): void
     {
         $redis = new LadaRedis();
-        $exists = (bool) $redis->exists($redis->prefix($key));
+        $exists = (bool) $redis->exists($redis->prefix($redis->currentGeneration()->scope($key)));
         Assert::assertFalse($exists, $message !== '' ? $message : "Failed asserting that cache is missing key '{$key}'");
     }
 
     protected function assertTagHasKey(string $tag, string $key, string $message = ''): void
     {
         $redis = new LadaRedis();
-        $isMember = (bool) $redis->sismember($redis->prefix($tag), $redis->prefix($key));
+        $generation = $redis->currentGeneration();
+        $isMember = (bool) $redis->sismember($redis->prefix($generation->scope($tag)), $redis->prefix($generation->scope($key)));
         Assert::assertTrue($isMember, $message !== '' ? $message : "Failed asserting that tag '{$tag}' contains key '{$key}'");
     }
 }
