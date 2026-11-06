@@ -12,12 +12,13 @@ enum CacheOperation: string
     case Invalidate = 'invalidating the cache';
     case Retire = 'retiring the cache generation';
     case Prune = 'pruning retired cache entries';
+    case Replay = 'replaying pending invalidations';
 
     public function compromisesFreshness(): bool
     {
         return match ($this) {
             self::Invalidate, self::Retire => true,
-            self::Analyze, self::Read, self::Store, self::Prune => false,
+            self::Analyze, self::Read, self::Store, self::Prune, self::Replay => false,
         };
     }
 }

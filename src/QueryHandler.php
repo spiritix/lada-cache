@@ -276,7 +276,7 @@ final class QueryHandler
 
             return true;
         } catch (Throwable $exception) {
-            FailureReporter::report(CacheOperation::Invalidate, $exception);
+            FailureReporter::report(CacheOperation::Replay, $exception);
 
             return false;
         }

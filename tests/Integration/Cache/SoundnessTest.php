@@ -6,6 +6,7 @@ namespace Spiritix\LadaCache\Tests\Integration\Cache;
 
 use Closure;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Spiritix\LadaCache\Cache;
 use Spiritix\LadaCache\CacheMiss;
@@ -188,6 +189,20 @@ final class SoundnessTest extends TestCase
 
         $this->assertNotSame($generation, $this->generationId());
         $this->assertFalse($failed->hasPending());
+    }
+
+    public function testReplayingDuringAnOutageLogsNoErrors(): void
+    {
+        $failed = FailedInvalidations::processLocal();
+        $failed->record(Invalidation::of(['t'], 'db', 'default', [], 0));
+        $handler = new QueryHandler($this->unreachableCache(), $failed);
+        Log::spy();
+
+        $handler->cacheQuery(DB::table('cars'), fn (): array => []);
+        $handler->cacheQuery(DB::table('cars'), fn (): array => []);
+
+        Log::shouldNotHaveReceived('error');
+        Log::shouldHaveReceived('warning')->once();
     }
 
     public function testRejectedSchemaChangeRetiresTheGenerationOnceRedisIsBack(): void
