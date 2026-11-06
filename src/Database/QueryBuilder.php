@@ -14,16 +14,18 @@ use Illuminate\Database\Query\Grammars\Grammar;
 use Illuminate\Database\Query\Processors\Processor;
 use Spiritix\LadaCache\QueryHandler;
 use Spiritix\LadaCache\Reflector;
+use Spiritix\LadaCache\Support\AssignedRows;
 use Spiritix\LadaCache\Support\SqlAliasParser;
-use Spiritix\LadaCache\Support\TableExtractor;
 
 /**
  * LadaCache Query Builder for Laravel 12+
  *
  * Extends the base query builder to provide automatic caching and invalidation.
  */
-class QueryBuilder extends Builder
+class QueryBuilder extends Builder implements HasCompiledSubQueries
 {
+    use TracksCompiledSubQueries;
+
     public const string DEFAULT_PRIMARY_KEY_NAME = 'id';
 
     private readonly QueryHandler $handler;
@@ -31,11 +33,6 @@ class QueryBuilder extends Builder
     private readonly ?Model $model;
 
     private bool $cacheBypassed = false;
-
-    /**
-     * @var array<int, string>
-     */
-    private array $fromSubTables = [];
 
     public function __construct(
         ConnectionInterface $connection,
@@ -136,79 +133,48 @@ class QueryBuilder extends Builder
     }
 
     /**
-     * @return array<int, string>
-     */
-    public function getFromSubTables(): array
-    {
-        return $this->fromSubTables;
-    }
-
-    /**
      * {@inheritDoc}
      *
      * @param  Closure|Builder|EloquentBuilder<*>|Relation<*, *, *>|string  $query
      */
     public function fromSub($query, $as)
     {
-        $subQuery = $this->resolveSubQuery($query);
-        $this->fromSubTables = $subQuery instanceof Builder ? TableExtractor::extractTables($subQuery) : [];
-
-        return parent::fromSub($subQuery, $as);
+        return parent::fromSub($this->trackCompiledSubQuery($query), $as);
     }
 
     /** {@inheritDoc} */
     public function selectSub($query, $as)
     {
-        // Only collect tags if the subquery is our own builder instance.
-        if ($query instanceof self) {
-            $this->handler->setBuilder($query)->collectSubQueryTags();
-        }
-
-        return parent::selectSub($query, $as);
+        return parent::selectSub($this->trackCompiledSubQuery($query), $as);
     }
 
     /** {@inheritDoc} */
     public function joinSub($query, $as, $first, $operator = null, $second = null, $type = 'inner', $where = false)
     {
-        if ($query instanceof self) {
-            $this->handler->setBuilder($query)->collectSubQueryTags();
-        }
-
-        return parent::joinSub($query, $as, $first, $operator, $second, $type, $where);
+        return parent::joinSub($this->trackCompiledSubQuery($query), $as, $first, $operator, $second, $type, $where);
     }
 
     /** {@inheritDoc} */
-    public function whereIn($column, $values, $boolean = 'and', $not = false)
+    public function joinLateral($query, string $as, string $type = 'inner')
     {
-        if (! $this->isQueryable($values)) {
-            return parent::whereIn($column, $values, $boolean, $not);
-        }
-
-        $subQuery = $this->resolveSubQuery($values);
-        parent::whereIn($column, $subQuery, $boolean, $not);
-
-        if ($subQuery instanceof Builder) {
-            $this->wheres[array_key_last($this->wheres)]['query'] = $subQuery;
-        }
-
-        return $this;
+        return parent::joinLateral($this->trackCompiledSubQuery($query), $as, $type);
     }
 
-    private function resolveSubQuery(mixed $query): mixed
+    /** {@inheritDoc} */
+    public function orderBy($column, $direction = 'asc')
     {
-        if ($query instanceof Closure) {
-            $callback = $query;
-            $callback($query = $this->forSubQuery());
+        if ($this->isQueryable($column)) {
+            $column = $this->trackCompiledSubQuery($column);
         }
 
-        return $query instanceof EloquentBuilder || $query instanceof Relation ? $query->toBase() : $query;
+        return parent::orderBy($column, $direction);
     }
 
     /** {@inheritDoc} */
     public function insert(array $values)
     {
         $result = parent::insert($values);
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, $values);
+        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy($values));
 
         return $result;
     }
@@ -217,8 +183,7 @@ class QueryBuilder extends Builder
     public function insertUsing(array $columns, $query)
     {
         $result = parent::insertUsing($columns, $query);
-        // Treat as INSERT for invalidation.
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT);
+        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, [], AssignedRows::unknown());
 
         return $result;
     }
@@ -227,8 +192,7 @@ class QueryBuilder extends Builder
     public function insertOrIgnoreUsing(array $columns, $query)
     {
         $result = parent::insertOrIgnoreUsing($columns, $query);
-        // May still insert rows; invalidate conservatively as INSERT.
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT);
+        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, [], AssignedRows::unknown());
 
         return $result;
     }
@@ -237,8 +201,7 @@ class QueryBuilder extends Builder
     public function updateFrom(array $values)
     {
         $result = parent::updateFrom($values);
-        // Update-from modifies rows; invalidate as UPDATE.
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_UPDATE, $values);
+        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_UPDATE, $values, $this->rowsAssignedBy($values));
 
         return $result;
     }
@@ -247,14 +210,7 @@ class QueryBuilder extends Builder
     public function insertGetId(array $values, $sequence = null)
     {
         $id = parent::insertGetId($values, $sequence);
-
-        $extraRows = [];
-
-        if (is_string($this->from) && (is_int($id) || is_string($id)) && $id !== '') {
-            $extraRows = [SqlAliasParser::stripAlias($this->from) => [$id]];
-        }
-
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, $values, $extraRows);
+        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy([$this->getPrimaryKeyName() => $id]));
 
         return $id;
     }
@@ -263,7 +219,7 @@ class QueryBuilder extends Builder
     public function update(array $values)
     {
         $count = parent::update($values);
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_UPDATE, $values);
+        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_UPDATE, $values, $this->rowsAssignedBy($values));
 
         return $count;
     }
@@ -282,8 +238,7 @@ class QueryBuilder extends Builder
     public function insertOrIgnore(array $values)
     {
         $result = parent::insertOrIgnore($values);
-        // Insert-or-ignore may still insert rows; invalidate as INSERT.
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, $values);
+        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy($values));
 
         return $result;
     }
@@ -314,40 +269,38 @@ class QueryBuilder extends Builder
         $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_TRUNCATE);
     }
 
-    private function invalidateUnlessBypassed(string $queryType, array $values = [], array $extraRows = []): void
+    private function invalidateUnlessBypassed(string $queryType, array $values = [], AssignedRows $assignedRows = new AssignedRows): void
     {
         if ($this->cacheBypassed) {
             return;
         }
 
-        if ($queryType === Reflector::QUERY_TYPE_INSERT) {
-            $extraRows = array_merge_recursive($extraRows, $this->rowsAssignedBy($values));
-        }
-
-        $this->handler->setBuilder($this)->invalidateQuery($queryType, $values, $extraRows);
+        $this->handler->setBuilder($this)->invalidateQuery($queryType, $values, $assignedRows);
     }
 
     /**
      * @param  array<int|string, mixed>  $values
-     * @return array<string, array<int, int|string>>
      */
-    private function rowsAssignedBy(array $values): array
+    private function rowsAssignedBy(array $values): AssignedRows
     {
         if (! is_string($this->from)) {
-            return [];
+            return AssignedRows::unknown();
         }
 
         $primaryKey = $this->getPrimaryKeyName();
         $ids = [];
+        $complete = true;
 
         foreach (is_array(reset($values)) ? $values : [$values] as $row) {
             $id = is_array($row) ? ($row[$primaryKey] ?? null) : null;
 
             if ((is_int($id) || is_string($id)) && $id !== '') {
                 $ids[] = $id;
+            } else {
+                $complete = false;
             }
         }
 
-        return $ids === [] ? [] : [SqlAliasParser::stripAlias($this->from) => $ids];
+        return AssignedRows::of(SqlAliasParser::stripAlias($this->from), $ids, $complete);
     }
 }

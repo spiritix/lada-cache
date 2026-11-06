@@ -9,6 +9,7 @@ use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\App;
 use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Debug\CacheCollector;
+use Spiritix\LadaCache\Support\AssignedRows;
 use Spiritix\LadaCache\Support\CacheOperation;
 use Spiritix\LadaCache\Support\FailureReporter;
 use Throwable;
@@ -31,9 +32,6 @@ final class QueryHandler
 
     private ?CacheCollector $collector = null;
 
-    /** @var string[] */
-    private array $subQueryTags = [];
-
     /** @var array<string, array<int, string>> */
     private array $queuedInvalidations = [];
 
@@ -48,34 +46,11 @@ final class QueryHandler
         return $this;
     }
 
-    public function collectSubQueryTags(): void
-    {
-        if ($this->builder === null) {
-            return;
-        }
-
-        try {
-            $reflector = new Reflector($this->builder);
-
-            if (! (new Manager($reflector))->shouldCache()) {
-                return;
-            }
-
-            $this->subQueryTags = array_values(array_unique([
-                ...$this->subQueryTags,
-                ...(new Tagger($reflector))->getTags(),
-            ]));
-        } catch (Throwable $exception) {
-            FailureReporter::report(CacheOperation::Analyze, $exception);
-        }
-    }
-
     /**
      * @param  string  $statementType  One of Reflector::QUERY_TYPE_*
      * @param  array<string, mixed>  $values  Values used by the grammar to compile the SQL (e.g., update sets)
-     * @param  array<string, array<int, int|string>>  $extraRows
      */
-    public function invalidateQuery(string $statementType, array $values = [], array $extraRows = []): void
+    public function invalidateQuery(string $statementType, array $values = [], AssignedRows $assignedRows = new AssignedRows): void
     {
         $this->startCollector();
 
@@ -90,7 +65,7 @@ final class QueryHandler
                 return;
             }
 
-            $tags = (new Tagger($reflector, $extraRows))->getTags();
+            $tags = (new Tagger($reflector, $assignedRows))->getTags();
         } catch (Throwable $exception) {
             FailureReporter::report(CacheOperation::Invalidate, $exception, ['statement' => $statementType]);
             $this->retireGeneration();
@@ -125,9 +100,6 @@ final class QueryHandler
     {
         $this->startCollector();
 
-        $subQueryTags = $this->subQueryTags;
-        $this->subQueryTags = [];
-
         if ($this->builder === null) {
             return $queryClosure();
         }
@@ -136,7 +108,7 @@ final class QueryHandler
             $reflector = new Reflector($this->builder);
             $cacheable = (new Manager($reflector))->shouldCache();
             $key = $cacheable ? (new Hasher($reflector))->getHash() : '';
-            $tags = $cacheable ? array_values(array_unique([...(new Tagger($reflector))->getTags(), ...$subQueryTags])) : [];
+            $tags = $cacheable ? (new Tagger($reflector))->getTags() : [];
         } catch (Throwable $exception) {
             FailureReporter::report(CacheOperation::Analyze, $exception);
 

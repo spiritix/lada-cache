@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache;
 
+use Spiritix\LadaCache\Support\AssignedRows;
+
 /**
  * Generates cache tags for queries based on database, tables, and targeted rows.
  *
@@ -28,17 +30,10 @@ final readonly class Tagger
 
     private bool $considerRows;
 
-    /** @var array<string, array<int, int|string>> */
-    private array $extraRows;
-
-    /**
-     * @param  array<string, array<int, int|string>>  $extraRows
-     */
-    public function __construct(Reflector $reflector, array $extraRows = [])
+    public function __construct(Reflector $reflector, private AssignedRows $assignedRows = new AssignedRows)
     {
         $this->reflector = $reflector;
         $this->considerRows = (bool) config('lada-cache.consider_rows', true);
-        $this->extraRows = $extraRows;
     }
 
     public function getTags(): array
@@ -64,7 +59,7 @@ final readonly class Tagger
         $tags = $this->getTableTags($tables, $rows);
 
         foreach ($tables as $table) {
-            $tableRows = array_merge($rows[$table] ?? [], $this->extraRows[$table] ?? []);
+            $tableRows = array_merge($rows[$table] ?? [], $this->assignedRows->forTable($table));
 
             if ($tableRows === []) {
                 continue;
@@ -115,6 +110,10 @@ final readonly class Tagger
 
             if ($type === Reflector::QUERY_TYPE_INSERT) {
                 $tags[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
+
+                if (! $this->assignedRows->complete) {
+                    $tags[] = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
+                }
             }
 
             if ($type === Reflector::QUERY_TYPE_TRUNCATE) {

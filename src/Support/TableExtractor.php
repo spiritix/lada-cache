@@ -7,12 +7,12 @@ namespace Spiritix\LadaCache\Support;
 use Illuminate\Database\Query\Builder as BaseBuilder;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Query\JoinClause;
-use Spiritix\LadaCache\Database\QueryBuilder;
+use Spiritix\LadaCache\Database\HasCompiledSubQueries;
 
 /**
  * Utility to extract table names (as strings) from a Laravel Query Builder.
  *
- * Handles FROM, JOINs, EXISTS subqueries, and UNION branches.
+ * Handles FROM, JOINs, where subqueries, subqueries Laravel compiles to raw SQL, and UNION branches.
  */
 final class TableExtractor
 {
@@ -23,56 +23,36 @@ final class TableExtractor
     {
         $tables = [];
 
-        // FROM
         $from = $builder->from;
         if (is_string($from)) {
             $tables[] = SqlAliasParser::stripAlias($from);
         } elseif ($from instanceof BaseBuilder) {
             $tables = array_merge($tables, self::extractTables($from));
         } elseif ($from instanceof Expression) {
-            $expr = $builder->getGrammar()->getValue($from);
-            $alias = SqlAliasParser::extractAliasFromExpression($expr);
+            $alias = SqlAliasParser::extractAliasFromExpression($builder->getGrammar()->getValue($from));
             if ($alias !== null) {
                 $tables[] = $alias;
             }
-            if ($builder instanceof QueryBuilder) {
-                $tables = array_merge($tables, $builder->getFromSubTables());
-            }
         }
 
-        // JOINs
         foreach ($builder->joins ?? [] as $join) {
             if (! ($join instanceof JoinClause)) {
                 continue;
             }
             if (is_string($join->table)) {
                 $tables[] = SqlAliasParser::stripAlias($join->table);
-
-                continue;
-            }
-            if ($join->table instanceof Expression) {
-                $expr = $builder->getGrammar()->getValue($join->table);
-                $alias = SqlAliasParser::extractAliasFromExpression($expr);
+            } elseif ($join->table instanceof Expression) {
+                $alias = SqlAliasParser::extractAliasFromExpression($builder->getGrammar()->getValue($join->table));
                 if ($alias !== null) {
                     $tables[] = $alias;
                 }
             }
+
+            $tables = array_merge($tables, self::extractSubQueryTables($join));
         }
 
-        // WHEREs: dive into subqueries (Exists/NotExists and nested where queries)
-        foreach ($builder->wheres ?? [] as $where) {
-            $type = $where['type'] ?? null;
-            $query = $where['query'] ?? null;
-            if ($query instanceof BaseBuilder) {
-                $tables = array_merge($tables, self::extractTables($query));
-            } elseif ($type === 'Exists' || $type === 'NotExists') {
-                if ($query instanceof BaseBuilder) {
-                    $tables = array_merge($tables, self::extractTables($query));
-                }
-            }
-        }
+        $tables = array_merge($tables, self::extractSubQueryTables($builder));
 
-        // UNION branches
         foreach (($builder->unions ?? []) as $union) {
             $sub = $union['query'] ?? null;
             if ($sub instanceof BaseBuilder) {
@@ -81,5 +61,26 @@ final class TableExtractor
         }
 
         return array_values(array_unique($tables));
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private static function extractSubQueryTables(BaseBuilder $builder): array
+    {
+        $subQueries = $builder instanceof HasCompiledSubQueries ? $builder->getCompiledSubQueries() : [];
+
+        foreach ($builder->wheres ?? [] as $where) {
+            if (($where['query'] ?? null) instanceof BaseBuilder) {
+                $subQueries[] = $where['query'];
+            }
+        }
+
+        $tables = [];
+        foreach ($subQueries as $subQuery) {
+            $tables = array_merge($tables, self::extractTables($subQuery));
+        }
+
+        return $tables;
     }
 }
