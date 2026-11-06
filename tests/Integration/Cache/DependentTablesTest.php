@@ -30,10 +30,11 @@ final class DependentTablesTest extends TestCase
     {
         $dependents = DependentTables::load(DB::connection());
 
-        $this->assertSame(['owner_pet_counts'], $dependents['a:owners']);
-        $this->assertSame(['owner_notes', 'owner_pet_counts', 'pet_toys', 'pets'], $dependents['m:owners']);
-        $this->assertSame(['owner_pet_counts'], $dependents['a:pets']);
-        $this->assertSame(['owner_pet_counts', 'pet_toys'], $dependents['m:pets']);
+        $this->assertSame(['owner_names', 'owner_pet_counts'], $dependents['a:owners']);
+        $this->assertSame(['owner_names', 'owner_notes', 'owner_pet_counts', 'pet_events', 'pet_toys', 'pets'], $dependents['m:owners']);
+        $this->assertSame(['owner_pet_counts', 'pet_events'], $dependents['a:pets']);
+        $this->assertSame(['owner_pet_counts', 'pet_events', 'pet_toys'], $dependents['m:pets']);
+        $this->assertContains('owners', $dependents['a:owner_names']);
         $this->assertArrayNotHasKey('m:owner_audits', $dependents);
     }
 
@@ -55,6 +56,26 @@ final class DependentTablesTest extends TestCase
         DB::table('owners')->where('id', 1)->delete();
 
         $this->assertSame([1], $petCounts());
+    }
+
+    public function testInsertsRefreshCachedReadsOfTablesTheirTriggersWrite(): void
+    {
+        $events = fn (): int => DB::table('pet_events')->count();
+        $this->assertSame(2, $events());
+
+        DB::table('pets')->insert(['id' => 3, 'owner_id' => 1, 'name' => 'new']);
+
+        $this->assertSame(3, $events());
+    }
+
+    public function testWritesThroughAnUpdatableViewRefreshCachedReadsOfItsBaseTable(): void
+    {
+        $this->requireDatabaseDriver('mysql', 'pgsql');
+        $this->assertSame('alice', DB::table('owners')->where('id', 1)->value('name'));
+
+        DB::table('owner_names')->where('id', 1)->update(['name' => 'renamed']);
+
+        $this->assertSame('renamed', DB::table('owners')->where('id', 1)->value('name'));
     }
 
     public function testDeletingAParentRefreshesCachedReadsOfCascadedChildren(): void

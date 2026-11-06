@@ -90,13 +90,7 @@ final class RawStatementClassifier
                 return RawStatementEffect::everything();
             }
 
-            $table = trim($table, '`"[]');
-
-            if ($tablePrefix !== '' && str_starts_with($table, $tablePrefix)) {
-                $table = substr($table, strlen($tablePrefix));
-            }
-
-            return RawStatementEffect::writesTable($table);
+            return RawStatementEffect::writesTable(TableName::withoutPrefix(trim($table, '`"[]'), $tablePrefix));
         }
 
         return RawStatementEffect::everything();

@@ -7,6 +7,7 @@
 - Added `lada-cache.expiration_jitter` (`LADA_CACHE_EXPIRATION_JITTER`, default 15): spreads each expiration by up to that percentage so entries cached together do not expire together (based on https://github.com/spiritix/lada-cache/pull/154)
 - Writes invalidate the tables the database changes through foreign keys with cascading or nulling actions, read from the schema once per cache generation; `lada-cache.dependent_tables` adds undeclared dependencies such as triggers
 - Writes invalidate cached reads of views over the written tables, read from the schema like foreign keys
+- Writes invalidate tables their triggers write, found by scanning trigger bodies, and writes through updatable views invalidate their base tables
 - Added `lada-cache.replica_lag` (`LADA_CACHE_REPLICA_LAG`, default 2): on connections with read replicas, replica reads of recently written tables are not cached
 - Invalidations Redis rejects are kept, shared through APCu under PHP-FPM, and replayed before the cache is used again; reads bypass the cache until then
 - Fuzz and multi-process test suites, and a test matrix over SQLite, MySQL and PostgreSQL with both Redis clients

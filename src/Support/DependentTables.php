@@ -10,9 +10,10 @@ use RuntimeException;
 
 /**
  * Tables the database changes along with a written table, so their cached reads are
- * invalidated too: views over the table and `lada-cache.dependent_tables` (such as trigger
- * targets) change with every write, while foreign keys with cascading or nulling actions
- * only fire on updates and deletes. A changed table changes its own dependents in turn.
+ * invalidated too: views over the table, tables its triggers write and
+ * `lada-cache.dependent_tables` change with every write, while foreign keys with cascading or
+ * nulling actions only fire on updates and deletes. Writing an updatable view writes its base
+ * tables. A changed table changes its own dependents in turn.
  */
 final class DependentTables
 {
@@ -26,6 +27,7 @@ final class DependentTables
         $prefix = $connection->getTablePrefix();
         $everyWrite = self::configured();
         $modifications = [];
+        $viewBases = [];
 
         foreach ($connection->select(self::foreignKeyQuery($connection), [], false) as $foreignKey) {
             $foreignKey = (array) $foreignKey;
@@ -34,14 +36,23 @@ final class DependentTables
                 continue;
             }
 
-            $modifications[self::withoutPrefix((string) $foreignKey['parent_table'], $prefix)][self::withoutPrefix((string) $foreignKey['child_table'], $prefix)] = true;
+            $modifications[TableName::withoutPrefix((string) $foreignKey['parent_table'], $prefix)][TableName::withoutPrefix((string) $foreignKey['child_table'], $prefix)] = true;
         }
 
         foreach (self::viewDependencies($connection) as [$table, $view]) {
-            $everyWrite[self::withoutPrefix($table, $prefix)][self::withoutPrefix($view, $prefix)] = true;
+            $table = TableName::withoutPrefix($table, $prefix);
+            $view = TableName::withoutPrefix($view, $prefix);
+            $everyWrite[$table][$view] = true;
+            $viewBases[$view][$table] = true;
         }
 
-        return self::closure($everyWrite, $modifications);
+        foreach (self::triggerBodies($connection) as [$table, $body]) {
+            foreach (SqlTableScanner::writtenTables($body, $prefix) as $target) {
+                $everyWrite[TableName::withoutPrefix($table, $prefix)][$target] = true;
+            }
+        }
+
+        return self::closure($everyWrite, $modifications, $viewBases);
     }
 
     /**
@@ -125,30 +136,52 @@ final class DependentTables
         return $pairs;
     }
 
+    /**
+     * @return list<array{string, string}> pairs of table and the SQL its triggers run
+     */
+    private static function triggerBodies(Connection $connection): array
+    {
+        $query = match ($connection->getDriverName()) {
+            'mysql', 'mariadb' => 'select event_object_table as table_name, action_statement as body from information_schema.triggers where trigger_schema = database()',
+            'pgsql' => 'select c.relname as table_name, p.prosrc as body from pg_trigger t join pg_class c on c.oid = t.tgrelid'
+                .' join pg_proc p on p.oid = t.tgfoid join pg_namespace n on n.oid = c.relnamespace'
+                .' where not t.tgisinternal and n.nspname = any(current_schemas(false))',
+            'sqlite' => "select tbl_name as table_name, sql as body from sqlite_master where type = 'trigger'",
+            'sqlsrv' => 'select object_name(t.parent_id) as table_name, m.definition as body from sys.triggers t'
+                .' join sys.sql_modules m on m.object_id = t.object_id where t.parent_class = 1',
+            default => throw new RuntimeException('Lada Cache cannot read triggers of driver '.$connection->getDriverName()),
+        };
+
+        $pairs = [];
+        foreach ($connection->select($query, [], false) as $row) {
+            $row = (array) $row;
+            $pairs[] = [(string) $row['table_name'], (string) $row['body']];
+        }
+
+        return $pairs;
+    }
+
     private static function changesDependents(string $action): bool
     {
         return in_array(strtolower(trim($action)), self::CHANGING_ACTIONS, true);
     }
 
-    private static function withoutPrefix(string $table, string $prefix): string
-    {
-        return $prefix !== '' && str_starts_with($table, $prefix) ? substr($table, strlen($prefix)) : $table;
-    }
-
     /**
      * @param  array<string, array<string, true>>  $everyWrite  table => tables every write to it changes
      * @param  array<string, array<string, true>>  $modifications  table => tables its updates and deletes change
+     * @param  array<string, array<string, true>>  $viewBases  view => base tables a write through it changes
      * @return array<string, list<string>>
      */
-    private static function closure(array $everyWrite, array $modifications): array
+    private static function closure(array $everyWrite, array $modifications, array $viewBases): array
     {
         $fields = [];
 
-        foreach (array_keys($everyWrite + $modifications) as $table) {
+        foreach (array_keys($everyWrite + $modifications + $viewBases) as $table) {
             $table = (string) $table;
+            $everyWriteChanges = ($everyWrite[$table] ?? []) + ($viewBases[$table] ?? []);
             $direct = [
-                WriteKind::Insert->value => $everyWrite[$table] ?? [],
-                WriteKind::Modify->value => ($everyWrite[$table] ?? []) + ($modifications[$table] ?? []),
+                WriteKind::Insert->value => $everyWriteChanges,
+                WriteKind::Modify->value => $everyWriteChanges + ($modifications[$table] ?? []),
             ];
 
             foreach (WriteKind::cases() as $kind) {

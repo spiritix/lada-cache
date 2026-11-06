@@ -36,6 +36,25 @@ final class SqlTableScannerTest extends TestCase
         $this->assertSame($expected, SqlTableScanner::tables($sql, ''));
     }
 
+    /**
+     * @return iterable<string, array{string, list<string>}>
+     */
+    public static function triggerBodies(): iterable
+    {
+        yield 'sqlite trigger' => ['CREATE TRIGGER t AFTER UPDATE OF name ON pets BEGIN insert into pet_events (pet_id) values (new.id); END', ['pet_events']];
+        yield 'mysql body' => ['begin update owners set name = 1 where id = new.owner_id; delete from pet_toys where pet_id = old.id; end', ['owners', 'pet_toys']];
+        yield 'postgres function' => ["begin insert into audit.\"events\" values (new.id) on conflict (id) do update set id = excluded.id; return new; end;", ['events']];
+        yield 'replace and merge' => ['replace into a values (1); merge into b using c on 1 = 1 when matched then delete', ['a', 'b']];
+        yield 'literals ignored' => ["insert into log values ('update owners set x')", ['log']];
+        yield 'select for update is not a write' => ['select * from pets for update of pets', []];
+    }
+
+    #[DataProvider('triggerBodies')]
+    public function testWrittenTablesAreFoundInTriggerBodies(string $sql, array $expected): void
+    {
+        $this->assertSame($expected, SqlTableScanner::writtenTables($sql, ''));
+    }
+
     public function testTablePrefixIsStripped(): void
     {
         $this->assertSame(['cars', 'pets'], SqlTableScanner::tables('select * from "lc_cars" where exists (select 1 from lc_pets)', 'lc_'));

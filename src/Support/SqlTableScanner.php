@@ -5,11 +5,10 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Support;
 
 /**
- * Finds the tables a compiled SELECT reads, including those only named inside raw expressions
- * such as `whereRaw('exists (select 1 from pets ...)')` that the builder structure does not
- * reveal. Every identifier following FROM or JOIN, and each item of a comma-separated FROM
- * list, counts; words that are not tables (`extract(year from created_at)`) only add tags
- * nothing writes, which costs nothing.
+ * Finds the tables SQL text reads or writes, including those only named inside raw
+ * expressions such as `whereRaw('exists (select 1 from pets ...)')` that the builder
+ * structure does not reveal, and those written by trigger bodies. Words mistaken for tables
+ * (`extract(year from created_at)`) only add tags nothing writes, which costs nothing.
  */
 final class SqlTableScanner
 {
@@ -17,40 +16,59 @@ final class SqlTableScanner
 
     private const string IDENTIFIER = '(?:`[^`]+`|"[^"]+"|\[[^\]]+\]|[A-Za-z_][\w$]*)';
 
+    private const string QUALIFIED = self::IDENTIFIER.'(?:\s*\.\s*'.self::IDENTIFIER.')*';
+
+    private const string WRITE = '/\b(?:insert\s+(?:(?:ignore|low_priority|delayed|high_priority)\s+)*(?:or\s+\w+\s+)?into|replace\s+(?:(?:low_priority|delayed)\s+)?into|update(?:\s+(?:low_priority|ignore|only))*|delete(?:\s+(?:low_priority|quick|ignore))*\s+from(?:\s+only)?|merge\s+into|truncate(?:\s+table)?(?:\s+only)?)\s+(?!(?:set|of|on|nowait|skip|table|only)\b)(?<name>'.self::QUALIFIED.')/i';
+
     /**
+     * Every identifier following FROM or JOIN, and each item of a comma-separated FROM list.
+     *
      * @return list<string>
      */
     public static function tables(string $sql, string $tablePrefix): array
     {
-        $code = (string) preg_replace(self::LITERALS, "''", $sql);
-        $qualified = self::IDENTIFIER.'(?:\s*\.\s*'.self::IDENTIFIER.')*';
-        $item = $qualified.'(?:\s+(?:as\s+)?(?!(?:where|on|using|join|inner|left|right|full|cross|natural|straight_join|group|order|limit|having|union|window|for|lateral)\b)'.self::IDENTIFIER.')?';
+        $item = self::QUALIFIED.'(?:\s+(?:as\s+)?(?!(?:where|on|using|join|inner|left|right|full|cross|natural|straight_join|group|order|limit|having|union|window|for|lateral)\b)'.self::IDENTIFIER.')?';
 
-        preg_match_all('/\b(?:from|join|straight_join)\s+(?<list>'.$item.'(?:\s*,\s*'.$item.')*)/i', $code, $matches);
+        preg_match_all('/\b(?:from|join|straight_join)\s+(?<list>'.$item.'(?:\s*,\s*'.$item.')*)/i', self::withoutLiterals($sql), $matches);
 
-        $tables = [];
+        $names = [];
         foreach ($matches['list'] as $list) {
-            preg_match_all('/(?:^|,)\s*(?<name>'.$qualified.')/', $list, $names);
+            preg_match_all('/(?:^|,)\s*(?<name>'.self::QUALIFIED.')/', $list, $items);
+            array_push($names, ...$items['name']);
+        }
 
-            foreach ($names['name'] as $name) {
-                $table = self::withoutPrefix(self::lastSegment($name), $tablePrefix);
-                $tables[$table] = true;
-            }
+        return self::tableNames($names, $tablePrefix);
+    }
+
+    /**
+     * Every table an INSERT, REPLACE, UPDATE, DELETE, MERGE or TRUNCATE in the SQL writes.
+     *
+     * @return list<string>
+     */
+    public static function writtenTables(string $sql, string $tablePrefix): array
+    {
+        preg_match_all(self::WRITE, self::withoutLiterals($sql), $matches);
+
+        return self::tableNames($matches['name'], $tablePrefix);
+    }
+
+    private static function withoutLiterals(string $sql): string
+    {
+        return (string) preg_replace(self::LITERALS, "''", $sql);
+    }
+
+    /**
+     * @param  list<string>  $qualifiedNames
+     * @return list<string>
+     */
+    private static function tableNames(array $qualifiedNames, string $tablePrefix): array
+    {
+        $tables = [];
+        foreach ($qualifiedNames as $qualified) {
+            preg_match_all('/'.self::IDENTIFIER.'/', $qualified, $segments);
+            $tables[TableName::withoutPrefix(trim((string) end($segments[0]), '`"[]'), $tablePrefix)] = true;
         }
 
         return array_map('strval', array_keys($tables));
-    }
-
-    private static function lastSegment(string $qualified): string
-    {
-        preg_match_all('/'.self::IDENTIFIER.'/', $qualified, $segments);
-        $last = (string) end($segments[0]);
-
-        return trim($last, '`"[]');
-    }
-
-    private static function withoutPrefix(string $table, string $prefix): string
-    {
-        return $prefix !== '' && str_starts_with($table, $prefix) ? substr($table, strlen($prefix)) : $table;
     }
 }
