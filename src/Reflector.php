@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache;
 
+use Illuminate\Database\Connection;
 use RuntimeException;
 use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Support\RowExtractor;
@@ -48,6 +49,29 @@ final class Reflector
     public function getDatabase(): string
     {
         return $this->queryBuilder->getConnection()->getDatabaseName();
+    }
+
+    /**
+     * The database server and database the query runs against, so results of equally named
+     * databases on different servers never share cache entries.
+     */
+    public function getDatabaseServer(): string
+    {
+        $connection = $this->queryBuilder->getConnection();
+
+        if (! $connection instanceof Connection) {
+            return $connection->getDatabaseName();
+        }
+
+        $config = $connection->getConfig();
+
+        return (string) json_encode([
+            $connection->getDriverName(),
+            $config['host'] ?? null,
+            $config['port'] ?? null,
+            $config['unix_socket'] ?? null,
+            $connection->getDatabaseName(),
+        ]);
     }
 
     public function isModelQuery(): bool

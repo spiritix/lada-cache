@@ -42,6 +42,7 @@
 - Writes cascading through foreign keys left cached reads of the cascaded tables stale
 - A read keyed `where id = '05'` stayed stale after a write keyed `where id = 5`, and string keys differing only in case missed each other on case-insensitive collations
 - Updates that set the primary key to an expression did not invalidate cached reads of the new key
+- Equally named databases on different servers shared cache entries, so one could serve the other's rows; entries are now keyed by driver, host, port and socket as well
 - `insertOrIgnoreReturning()` never invalidated anything
 - `updateOrInsert()` with callback values failed with a `TypeError`
 - A nested transaction commit flushed invalidations before the outer transaction committed, letting other hosts cache uncommitted-era results, and a savepoint rollback discarded the invalidations of the enclosing transaction
