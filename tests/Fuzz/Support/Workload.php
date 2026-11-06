@@ -209,6 +209,20 @@ final class Workload
     }
 
     /**
+     * Every read shape as a query running through the cache, for checking properties that hold
+     * for all of them.
+     *
+     * @return array<string, Closure(): mixed>
+     */
+    public function cachedReads(int $id): array
+    {
+        return array_map(
+            static fn (Closure $shapeFor): Closure => static fn (): mixed => $shapeFor($id, self::NAMES[$id % 3])(true),
+            $this->readShapes(),
+        );
+    }
+
+    /**
      * Compares every read shape for every id against the database.
      */
     public function sweep(): void
