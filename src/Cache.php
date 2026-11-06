@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache;
 
+use Spiritix\LadaCache\Support\ForeignKeyDependents;
 use Spiritix\LadaCache\Support\Invalidation;
 use Throwable;
 use UnexpectedValueException;
@@ -97,9 +98,11 @@ final class Cache
             count($invalidation->cascadeSources()),
         ];
 
+        $databases = array_keys($invalidation->cascadeSources());
+
         foreach ($invalidation->cascadeSources() as $database => $tables) {
             $prefixes = Tagger::tableWideTagPrefixes($database);
-            array_push($arguments, $database, count($prefixes), ...$prefixes);
+            array_push($arguments, self::dependentsName($database), count($prefixes), ...$prefixes);
             array_push($arguments, count($tables), ...$tables);
         }
 
@@ -115,7 +118,10 @@ final class Cache
 
         return [
             'generation' => new Generation((string) $reply[0]),
-            'databasesWithUnknownDependents' => array_map('strval', array_slice($reply, 1)),
+            'databasesWithUnknownDependents' => array_map(
+                static fn (mixed $group): string => $databases[(int) $group - 1] ?? throw new UnexpectedValueException('Unknown dependents group '.json_encode($group).' in Lada Cache invalidation reply'),
+                array_slice($reply, 1),
+            ),
         ];
     }
 
@@ -125,13 +131,22 @@ final class Cache
      */
     public function storeDependents(Generation $generation, string $database, array $dependents): bool
     {
-        $arguments = [$generation->id, $database, $this->expiration->nextTtl()];
+        $arguments = [$generation->id, self::dependentsName($database), $this->expiration->nextTtl()];
 
         foreach ($dependents as $table => $tables) {
             array_push($arguments, $table, implode("\n", $tables));
         }
 
         return (int) $this->redis->evaluate(LuaScripts::STORE_DEPENDENTS, $arguments) === 1;
+    }
+
+    /**
+     * Hosts with different `dependent_tables`, such as old and new pods during a deploy, keep
+     * separate dependency maps instead of one host's configuration applying to all.
+     */
+    private static function dependentsName(string $database): string
+    {
+        return $database.':'.substr(sha1((string) json_encode(ForeignKeyDependents::configured())), 0, 12);
     }
 
     public function flush(): void

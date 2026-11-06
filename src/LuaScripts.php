@@ -15,7 +15,8 @@ namespace Spiritix\LadaCache;
  * - `<base><generation>:e:<hash>`       entry: 40 character fingerprint followed by the payload
  * - `<base><generation>:v:<tag>`        current version token of a tag
  * - `<base><generation>:w:<tag>`        present while reads of the tag may come from a lagging replica
- * - `<base><generation>:fk:<database>`  hash of table => newline separated tables changed along with it
+ * - `<base><generation>:fk:<name>`      hash of table => newline separated tables changed along with it,
+ *                                       named by database and dependency configuration
  *
  * An entry is valid only while the fingerprint of its tags' current tokens matches the one
  * captured before the query ran, so a result read before a concurrent write is never served.
@@ -85,10 +86,10 @@ final class LuaScripts
 
     /**
      * ARGV: base, fresh token, ttl seconds, replica lag seconds, tag count, tags...,
-     *       group count, then per group: database, prefix count, prefixes..., table count, tables...
+     *       group count, then per group: dependents name, prefix count, prefixes..., table count, tables...
      * Replaces the tokens of the tags, and of every table-wide tag of the tables the database
      * changes along with each group's tables. Returns {0} when nothing was ever cached, else
-     * {generation, databases whose dependents are not known yet...}.
+     * {generation, 1-based indexes of the groups whose dependents are not known yet...}.
      */
     public const string INVALIDATE = <<<'LUA'
         local base, fresh, ttl, lag = ARGV[1], ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4])
@@ -117,8 +118,8 @@ final class LuaScripts
         local result = {generation}
         local groupCount = tonumber(ARGV[index])
         index = index + 1
-        for _ = 1, groupCount do
-            local database = ARGV[index]
+        for group = 1, groupCount do
+            local dependentsName = ARGV[index]
             local prefixCount = tonumber(ARGV[index + 1])
             index = index + 2
             local prefixes = {}
@@ -128,10 +129,10 @@ final class LuaScripts
             end
             local tableCount = tonumber(ARGV[index])
             index = index + 1
-            local dependentsKey = scope .. 'fk:' .. database
+            local dependentsKey = scope .. 'fk:' .. dependentsName
             local known = redis.call('EXISTS', dependentsKey) == 1
             if not known then
-                result[#result + 1] = database
+                result[#result + 1] = group
             end
             for _ = 1, tableCount do
                 if known then
@@ -151,7 +152,7 @@ final class LuaScripts
         LUA;
 
     /**
-     * ARGV: base, generation, database, ttl seconds, then pairs of table and newline separated dependents
+     * ARGV: base, generation, dependents name, ttl seconds, then pairs of table and newline separated dependents
      * Returns 1 when stored and 0 when the generation was retired meanwhile.
      */
     public const string STORE_DEPENDENTS = <<<'LUA'

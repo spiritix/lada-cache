@@ -126,6 +126,20 @@ final class ForeignKeyCascadeTest extends TestCase
         $this->assertSame('written by a trigger', DB::table('materials')->where('id', 1)->value('name'));
     }
 
+    public function testChangedDependentTablesApplyWithoutRetiringTheCache(): void
+    {
+        DB::table('drivers')->count();
+        DB::table('drivers')->update(['name' => 'stores the dependency map']);
+        config(['lada-cache.dependent_tables' => ['drivers' => ['materials']]]);
+        DB::table('materials')->insert(['id' => 1, 'name' => 'steel']);
+        $this->assertSame('steel', DB::table('materials')->where('id', 1)->value('name'));
+        DB::connection()->getPdo()->exec("update materials set name = 'written by a trigger' where id = 1");
+
+        DB::table('drivers')->update(['name' => 'anyone']);
+
+        $this->assertSame('written by a trigger', DB::table('materials')->where('id', 1)->value('name'));
+    }
+
     public function testDependentsAreReadOncePerGeneration(): void
     {
         DB::table('pets')->count();
