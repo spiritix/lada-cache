@@ -16,6 +16,7 @@ use Random\Randomizer;
 use Spiritix\LadaCache\Redis;
 use Spiritix\LadaCache\Tests\Database\Models\Car;
 use Spiritix\LadaCache\Tests\Database\Models\Driver;
+use Spiritix\LadaCache\Tests\Database\Models\License;
 
 /**
  * Seeded random workload of reads, writes, transactions and cache disturbances against the
@@ -33,6 +34,8 @@ final class Workload
     private const int HISTORY_LENGTH = 60;
 
     private const int PROBES_PER_WRITE = 6;
+
+    private const array LICENSE_CODES = ['ab-1', 'Cd-2', 'EF_3', 'gh-4', 'ij-5', 'Kl-6', 'MN_7', 'op-8'];
 
     private readonly Randomizer $random;
 
@@ -85,12 +88,22 @@ final class Workload
             DB::table('owner_notes')->insert(['id' => $id, 'owner_id' => $this->random->getInt(1, 4), 'body' => $this->name()]);
         }
         DB::table('owner_audits')->insert(['id' => 1, 'owner_id' => 4, 'event' => 'signup']);
+        foreach (array_slice(self::LICENSE_CODES, 0, 4) as $code) {
+            DB::table('licenses')->insert(['code' => $code, 'holder' => $this->name()]);
+        }
 
         if ($this->driver === 'pgsql') {
             foreach (['owners', 'drivers', 'pets', 'cars', 'pet_toys', 'owner_notes', 'owner_audits', 'materials'] as $table) {
                 DB::statement("select setval(pg_get_serial_sequence('{$this->table($table)}', 'id'), 100)");
             }
         }
+    }
+
+    private static function licenseCode(int $id): string
+    {
+        $code = self::LICENSE_CODES[$id % count(self::LICENSE_CODES)];
+
+        return $id % 3 === 0 ? strtoupper($code) : ($id % 3 === 1 ? strtolower($code) : $code);
     }
 
     private function table(string $name): string
@@ -268,6 +281,11 @@ final class Workload
         return [
             'pet by id' => fn (int $id) => $rows(fn () => DB::table('pets')->where('id', $id)),
             'owner by id' => fn (int $id) => $rows(fn () => DB::table('owners')->where('id', $id)),
+            'pet by padded id' => fn (int $id) => $rows(fn () => DB::table('pets')->where('id', sprintf('%03d', $id))),
+            'owners in mixed ids' => fn (int $id) => $rows(fn () => DB::table('owners')->whereIn('id', [(string) $id, $id + 1, sprintf('0%d', $id + 2)])->orderBy('id')),
+            'pets in many ids' => fn (int $id) => $rows(fn () => DB::table('pets')->whereIn('id', range($id, $id + 150))->orderBy('id')),
+            'license by code' => fn (int $id) => static fn (bool $cached): array => ($cached ? License::query() : License::query()->withoutCache())->whereKey(self::licenseCode($id))->get()->toArray(),
+            'licenses by codes' => fn (int $id) => static fn (bool $cached): array => ($cached ? License::query() : License::query()->withoutCache())->whereKey([self::licenseCode($id), self::licenseCode($id + 1)])->orderBy('code')->get()->toArray(),
             'toy by id' => fn (int $id) => $rows(fn () => DB::table('pet_toys')->where('id', $id)),
             'note by id' => fn (int $id) => $rows(fn () => DB::table('owner_notes')->where('id', $id)),
             'pets in ids' => fn (int $id) => $rows(fn () => DB::table('pets')->whereIn('id', [$id, $id + 1])->orderBy('id')),
@@ -355,6 +373,10 @@ final class Workload
             'eloquent force delete' => fn () => Car::withTrashed()->withoutCache()->find($this->id())?->forceDelete(),
             'sync car materials' => fn () => Car::query()->withoutCache()->find($this->id())?->materials()->sync(array_slice([1, 2, 3], 0, $this->random->getInt(0, 3))),
             'attach car material' => fn () => Car::query()->withoutCache()->find($this->id())?->materials()->syncWithoutDetaching([$this->random->getInt(1, 3)]),
+            'update license' => fn () => License::query()->whereKey(self::licenseCode($this->id()))->update(['holder' => $this->name()]),
+            'update pet by padded id' => fn () => DB::table('pets')->where('id', sprintf('%02d', $this->id()))->update(['name' => $this->name()]),
+            'update pets in many ids' => fn () => DB::table('pets')->whereIn('id', range(1, 120))->update(['age' => $this->random->getInt(0, 9)]),
+            'rekey license' => fn () => License::query()->whereKey(self::licenseCode($this->id()))->update(['code' => self::licenseCode($this->random->getInt(1, 2 * count(self::LICENSE_CODES)))]),
             'rename material' => fn () => DB::table('materials')->where('id', $this->random->getInt(1, 3))->update(['name' => $this->name()]),
             'eloquent mass update' => fn () => Car::query()->where('driver_id', $this->id())->update(['name' => $this->name()]),
             'eloquent mass delete' => fn () => Car::query()->whereKey($this->id())->delete(),
