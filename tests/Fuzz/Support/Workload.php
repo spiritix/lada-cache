@@ -35,6 +35,8 @@ final class Workload
 
     private const int PROBES_PER_WRITE = 6;
 
+    private const string ALIAS_CONNECTION = 'fuzz_alias';
+
     private const array LICENSE_CODES = ['ab-1', 'Cd-2', 'EF_3', 'gh-4', 'ij-5', 'Kl-6', 'MN_7', 'op-8'];
 
     private readonly Randomizer $random;
@@ -49,12 +51,24 @@ final class Workload
 
     private ?string $currentWrite = null;
 
+    private readonly string $primaryConnection;
+
+    /** @var list<string> */
+    private array $connections;
+
     public function __construct(
         public readonly int $seed,
         private readonly string $driver,
         private readonly bool $allowCacheDisturbances = true,
     ) {
         $this->random = new Randomizer(new Mt19937($seed));
+        $this->primaryConnection = (string) config('database.default');
+        $this->connections = [$this->primaryConnection];
+
+        if ($driver !== 'sqlite') {
+            config(['database.connections.'.self::ALIAS_CONNECTION => config('database.connections.'.$this->primaryConnection)]);
+            $this->connections[] = self::ALIAS_CONNECTION;
+        }
     }
 
     public static function seedFromEnvironment(): int
@@ -136,6 +150,7 @@ final class Workload
      */
     public function step(bool $compareReads = true): void
     {
+        $this->maybeSwitchConnection();
         $roll = $this->random->getInt(1, 100);
 
         try {
@@ -183,10 +198,14 @@ final class Workload
 
     public function finish(): void
     {
-        while (DB::transactionLevel() > 0) {
-            $this->log('commit at end of run');
-            DB::commit();
+        foreach ($this->connections as $connection) {
+            while (DB::connection($connection)->transactionLevel() > 0) {
+                $this->log("commit on {$connection} at end of run");
+                DB::connection($connection)->commit();
+            }
         }
+
+        DB::setDefaultConnection($this->primaryConnection);
     }
 
     /**
@@ -395,6 +414,28 @@ final class Workload
         $this->currentWrite = $label;
         $writes[$label]();
         $this->currentWrite = null;
+    }
+
+    /**
+     * Moves the workload to another connection to the same database now and then, so writes
+     * on one connection must invalidate reads cached through another. Only between
+     * transactions, since a transaction on one connection would block writes on the other.
+     */
+    private function maybeSwitchConnection(): void
+    {
+        if (count($this->connections) < 2 || $this->random->getInt(1, 4) !== 1) {
+            return;
+        }
+
+        foreach ($this->connections as $connection) {
+            if (DB::connection($connection)->transactionLevel() > 0) {
+                return;
+            }
+        }
+
+        $connection = $this->pick($this->connections);
+        $this->log("use connection {$connection}");
+        DB::setDefaultConnection($connection);
     }
 
     private function transactionControl(): void
