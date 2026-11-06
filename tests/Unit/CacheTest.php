@@ -9,6 +9,7 @@ use Spiritix\LadaCache\Cache;
 use Spiritix\LadaCache\CacheHit;
 use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\Encoder;
+use Spiritix\LadaCache\EntrySizeLimit;
 use Spiritix\LadaCache\ExpirationPolicy;
 use Spiritix\LadaCache\Redis;
 use Spiritix\LadaCache\Support\Invalidation;
@@ -28,6 +29,39 @@ class CacheTest extends TestCase
 
         $this->redis = new Redis();
         $this->cache = new Cache($this->redis, new Encoder(), new ExpirationPolicy(0));
+    }
+
+    public function testResultsLargerThanTheEntrySizeLimitAreNotStored(): void
+    {
+        $cache = new Cache($this->redis, new Encoder(), new ExpirationPolicy(0), new EntrySizeLimit(100));
+        $small = $cache->lookup('small', ['t']);
+        $large = $cache->lookup('large', ['t']);
+        $this->assertInstanceOf(CacheMiss::class, $small);
+        $this->assertInstanceOf(CacheMiss::class, $large);
+
+        $cache->store($small, [['name' => 'a']]);
+        $cache->store($large, [['name' => str_repeat('a', 200)]]);
+
+        $this->assertInstanceOf(CacheHit::class, $cache->lookup('small', ['t']));
+        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('large', ['t']));
+    }
+
+    public function testZeroEntrySizeLimitStoresAnySize(): void
+    {
+        $cache = new Cache($this->redis, new Encoder(), new ExpirationPolicy(0), new EntrySizeLimit(0));
+        $miss = $cache->lookup('large', ['t']);
+        $this->assertInstanceOf(CacheMiss::class, $miss);
+
+        $cache->store($miss, [['name' => str_repeat('a', 10000)]]);
+
+        $this->assertInstanceOf(CacheHit::class, $cache->lookup('large', ['t']));
+    }
+
+    public function testNegativeEntrySizeLimitIsRejected(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        new EntrySizeLimit(-1);
     }
 
     public function testFirstLookupCreatesAStableGeneration(): void

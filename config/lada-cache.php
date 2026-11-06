@@ -80,6 +80,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Maximum Entry Size
+    |--------------------------------------------------------------------------
+    |
+    | Results whose encoded size exceeds this many bytes are returned but not
+    | cached, since moving them through Redis costs about as much as running
+    | the query again and blocks Redis while it happens. Set to 0 for no limit.
+    |
+    */
+    'max_entry_size' => env('LADA_CACHE_MAX_ENTRY_SIZE', 8 * 1024 * 1024),
+
+    /*
+    |--------------------------------------------------------------------------
     | Replica Lag
     |--------------------------------------------------------------------------
     |

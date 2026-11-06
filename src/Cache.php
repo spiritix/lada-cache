@@ -29,12 +29,16 @@ final class Cache
 
     private readonly ExpirationPolicy $expiration;
 
+    private readonly EntrySizeLimit $entrySizeLimit;
+
     public function __construct(
         private readonly Redis $redis,
         private readonly Encoder $encoder,
         ?ExpirationPolicy $expiration = null,
+        ?EntrySizeLimit $entrySizeLimit = null,
     ) {
         $this->expiration = $expiration ?? ExpirationPolicy::fromConfig();
+        $this->entrySizeLimit = $entrySizeLimit ?? EntrySizeLimit::fromConfig();
     }
 
     /**
@@ -70,12 +74,18 @@ final class Cache
      */
     public function store(CacheMiss $miss, array $rows, array $tagsReadFromReplica = []): void
     {
+        $payload = $this->encoder->encode($rows);
+
+        if (! $this->entrySizeLimit->allows($payload)) {
+            return;
+        }
+
         $this->redis->evaluate(LuaScripts::STORE, [
             $miss->generation->id,
             $miss->key,
             $miss->fingerprint,
             $this->expiration->nextTtl(),
-            $this->encoder->encode($rows),
+            $payload,
             ...self::canonicalTags($tagsReadFromReplica),
         ]);
     }

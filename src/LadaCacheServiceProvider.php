@@ -127,6 +127,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
         try {
             CacheScope::fromConfig(config('lada-cache.scope', CacheScope::All->value));
             ExpirationPolicy::fromConfig();
+            EntrySizeLimit::fromConfig();
             ReplicaReads::configuredLagSeconds();
             DependentTables::configured();
 
