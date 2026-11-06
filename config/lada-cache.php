@@ -97,11 +97,12 @@ return [
     | Dependent Tables
     |--------------------------------------------------------------------------
     |
-    | Writes to a table also invalidate the tables the database changes
-    | along with it through foreign keys with ON DELETE / ON UPDATE
-    | CASCADE, SET NULL or SET DEFAULT; these are read from the schema
-    | automatically. List changes the schema does not declare here, such
-    | as tables written by triggers: 'orders' => ['order_totals'].
+    | Writes to a table also invalidate what the database changes along
+    | with it: views reading the table, and tables reached through foreign
+    | keys with ON DELETE / ON UPDATE CASCADE, SET NULL or SET DEFAULT.
+    | Both are read from the schema automatically. List changes the schema
+    | does not declare here, such as tables written by triggers on every
+    | write to a table: 'orders' => ['order_totals'].
     |
     */
     'dependent_tables' => [],

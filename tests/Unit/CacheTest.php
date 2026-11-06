@@ -44,9 +44,9 @@ class CacheTest extends TestCase
         $this->cache->store($this->miss('k', ['t1', 't2']), ['row']);
 
         $hit = $this->cache->lookup('k', ['t1', 't2']);
-        $this->cache->invalidate(Invalidation::of(['unrelated'], 'db', 'default', [], 0));
+        $this->cache->invalidate(Invalidation::of(['unrelated']));
         $stillHit = $this->cache->lookup('k', ['t1', 't2']);
-        $this->cache->invalidate(Invalidation::of(['t2'], 'db', 'default', [], 0));
+        $this->cache->invalidate(Invalidation::of(['t2']));
 
         $this->assertInstanceOf(CacheHit::class, $hit);
         $this->assertSame(['row'], $hit->rows);
@@ -65,7 +65,7 @@ class CacheTest extends TestCase
     {
         $capturedBeforeWrite = $this->miss('k', ['t']);
 
-        $this->cache->invalidate(Invalidation::of(['t'], 'db', 'default', [], 0));
+        $this->cache->invalidate(Invalidation::of(['t']));
         $this->cache->store($capturedBeforeWrite, ['stale']);
 
         $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t']));

@@ -63,7 +63,7 @@ final class SoundnessTest extends TestCase
         $miss = $cache->lookup('k', ['t']);
         $this->assertInstanceOf(CacheMiss::class, $miss);
 
-        $cache->invalidate(Invalidation::of(['t'], 'db', 'default', [], 30));
+        $cache->invalidate(Invalidation::of(['t'], 30));
         $afterWrite = $cache->lookup('k', ['t']);
         $this->assertInstanceOf(CacheMiss::class, $afterWrite);
         $cache->store($afterWrite, [['read from a lagging replica']], ['t']);
@@ -74,7 +74,7 @@ final class SoundnessTest extends TestCase
     public function testPrimaryReadsAreStoredRightAfterAWrite(): void
     {
         $cache = new Cache(new Redis, new Encoder, new ExpirationPolicy(0));
-        $cache->invalidate(Invalidation::of(['t'], 'db', 'default', [], 30));
+        $cache->invalidate(Invalidation::of(['t'], 30));
         $miss = $cache->lookup('k', ['t']);
         $this->assertInstanceOf(CacheMiss::class, $miss);
 
@@ -144,7 +144,7 @@ final class SoundnessTest extends TestCase
         }
 
         $failingRequest = FailedInvalidations::detect('lada-cache:test-failed:', 60);
-        $failingRequest->record(Invalidation::of(['t'], 'db', 'default', [], 0));
+        $failingRequest->record(Invalidation::of(['t']));
 
         $nextRequest = FailedInvalidations::detect('lada-cache:test-failed:', 60);
         $replayed = [];
@@ -159,7 +159,7 @@ final class SoundnessTest extends TestCase
     public function testFailingReplayKeepsInvalidationsPendingAndBypassesTheCache(): void
     {
         $failed = FailedInvalidations::processLocal();
-        $failed->record(Invalidation::of(['t'], 'db', 'default', [], 0));
+        $failed->record(Invalidation::of(['t']));
         $handler = new QueryHandler($this->unreachableCache(), $failed);
         $executions = 0;
 
@@ -194,7 +194,7 @@ final class SoundnessTest extends TestCase
     public function testReplayingDuringAnOutageLogsNoErrors(): void
     {
         $failed = FailedInvalidations::processLocal();
-        $failed->record(Invalidation::of(['t'], 'db', 'default', [], 0));
+        $failed->record(Invalidation::of(['t']));
         $handler = new QueryHandler($this->unreachableCache(), $failed);
         Log::spy();
 

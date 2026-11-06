@@ -15,7 +15,7 @@ namespace Spiritix\LadaCache;
  * - `<base><generation>:e:<hash>`       entry: 40 character fingerprint followed by the payload
  * - `<base><generation>:v:<tag>`        current version token of a tag
  * - `<base><generation>:w:<tag>`        present while reads of the tag may come from a lagging replica
- * - `<base><generation>:fk:<name>`      hash of table => newline separated tables changed along with it,
+ * - `<base><generation>:d:<name>`       hash of WriteKind field => newline separated tables changed along with it,
  *                                       named by database and dependency configuration
  *
  * An entry is valid only while the fingerprint of its tags' current tokens matches the one
@@ -86,7 +86,7 @@ final class LuaScripts
 
     /**
      * ARGV: base, fresh token, ttl seconds, replica lag seconds, tag count, tags...,
-     *       group count, then per group: dependents name, prefix count, prefixes..., table count, tables...
+     *       group count, then per group: dependents name, prefix count, prefixes..., field count, dependents fields (see WriteKind)...
      * Replaces the tokens of the tags, and of every table-wide tag of the tables the database
      * changes along with each group's tables. Returns {0} when nothing was ever cached, else
      * {generation, 1-based indexes of the groups whose dependents are not known yet...}.
@@ -127,14 +127,14 @@ final class LuaScripts
                 prefixes[p] = ARGV[index]
                 index = index + 1
             end
-            local tableCount = tonumber(ARGV[index])
+            local fieldCount = tonumber(ARGV[index])
             index = index + 1
-            local dependentsKey = scope .. 'fk:' .. dependentsName
+            local dependentsKey = scope .. 'd:' .. dependentsName
             local known = redis.call('EXISTS', dependentsKey) == 1
             if not known then
                 result[#result + 1] = group
             end
-            for _ = 1, tableCount do
+            for _ = 1, fieldCount do
                 if known then
                     local dependents = redis.call('HGET', dependentsKey, ARGV[index])
                     if dependents then
@@ -152,7 +152,7 @@ final class LuaScripts
         LUA;
 
     /**
-     * ARGV: base, generation, dependents name, ttl seconds, then pairs of table and newline separated dependents
+     * ARGV: base, generation, dependents name, ttl seconds, then pairs of WriteKind field and newline separated dependents
      * Returns 1 when stored and 0 when the generation was retired meanwhile.
      */
     public const string STORE_DEPENDENTS = <<<'LUA'
@@ -160,7 +160,7 @@ final class LuaScripts
         if redis.call('GET', base .. 'generation') ~= generation then
             return 0
         end
-        local dependentsKey = base .. generation .. ':fk:' .. ARGV[3]
+        local dependentsKey = base .. generation .. ':d:' .. ARGV[3]
         redis.call('DEL', dependentsKey)
         redis.call('HSET', dependentsKey, '', '')
         for i = 5, #ARGV, 2 do

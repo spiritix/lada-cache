@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache;
 
-use Spiritix\LadaCache\Support\ForeignKeyDependents;
+use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\Invalidation;
 use Throwable;
 use UnexpectedValueException;
@@ -100,10 +100,10 @@ final class Cache
 
         $databases = array_keys($invalidation->cascadeSources());
 
-        foreach ($invalidation->cascadeSources() as $database => $tables) {
+        foreach ($invalidation->cascadeSources() as $database => $fields) {
             $prefixes = Tagger::tableWideTagPrefixes($database);
             array_push($arguments, self::dependentsName($database), count($prefixes), ...$prefixes);
-            array_push($arguments, count($tables), ...$tables);
+            array_push($arguments, count($fields), ...$fields);
         }
 
         $reply = $this->redis->evaluate(LuaScripts::INVALIDATE, $arguments);
@@ -126,7 +126,7 @@ final class Cache
     }
 
     /**
-     * @param  array<string, list<string>>  $dependents  table => tables changed along with it
+     * @param  array<string, list<string>>  $dependents  `WriteKind::dependentsField()` => tables changed along with it
      * @return bool Whether they were stored, false when the generation was retired meanwhile
      */
     public function storeDependents(Generation $generation, string $database, array $dependents): bool
@@ -146,7 +146,7 @@ final class Cache
      */
     private static function dependentsName(string $database): string
     {
-        return $database.':'.substr(sha1((string) json_encode(ForeignKeyDependents::configured())), 0, 12);
+        return $database.':'.substr(sha1((string) json_encode(DependentTables::configured())), 0, 12);
     }
 
     public function flush(): void

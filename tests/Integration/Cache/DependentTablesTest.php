@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Support\ForeignKeyDependents;
+use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
 use Spiritix\LadaCache\Tests\Concerns\RecordsRedisCommands;
 use Spiritix\LadaCache\Tests\TestCase;
 
-final class ForeignKeyCascadeTest extends TestCase
+final class DependentTablesTest extends TestCase
 {
     use CacheAssertions;
     use RecordsRedisCommands;
@@ -28,11 +28,33 @@ final class ForeignKeyCascadeTest extends TestCase
 
     public function testDependentsAreReadFromTheSchema(): void
     {
-        $dependents = ForeignKeyDependents::load(DB::connection());
+        $dependents = DependentTables::load(DB::connection());
 
-        $this->assertSame(['owner_notes', 'pet_toys', 'pets'], $dependents['owners']);
-        $this->assertSame(['pet_toys'], $dependents['pets']);
-        $this->assertArrayNotHasKey('owner_audits', $dependents);
+        $this->assertSame(['owner_pet_counts'], $dependents['a:owners']);
+        $this->assertSame(['owner_notes', 'owner_pet_counts', 'pet_toys', 'pets'], $dependents['m:owners']);
+        $this->assertSame(['owner_pet_counts'], $dependents['a:pets']);
+        $this->assertSame(['owner_pet_counts', 'pet_toys'], $dependents['m:pets']);
+        $this->assertArrayNotHasKey('m:owner_audits', $dependents);
+    }
+
+    public function testInsertsRefreshCachedReadsOfViewsOverTheTable(): void
+    {
+        $petCount = fn (): int => (int) DB::table('owner_pet_counts')->where('owner_id', 1)->value('pet_count');
+        $this->assertSame(1, $petCount());
+
+        DB::table('pets')->insert(['id' => 3, 'owner_id' => 1, 'name' => 'new']);
+
+        $this->assertSame(2, $petCount());
+    }
+
+    public function testDeletesRefreshCachedReadsOfViewsOverTheTable(): void
+    {
+        $petCounts = fn (): array => array_map('intval', DB::table('owner_pet_counts')->orderBy('owner_id')->pluck('pet_count')->all());
+        $this->assertSame([1, 1], $petCounts());
+
+        DB::table('owners')->where('id', 1)->delete();
+
+        $this->assertSame([1], $petCounts());
     }
 
     public function testDeletingAParentRefreshesCachedReadsOfCascadedChildren(): void

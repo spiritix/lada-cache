@@ -13,13 +13,14 @@ use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Debug\CacheCollector;
 use Spiritix\LadaCache\Support\AssignedRows;
 use Spiritix\LadaCache\Support\CacheOperation;
+use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\FailedInvalidations;
 use Spiritix\LadaCache\Support\FailureReporter;
-use Spiritix\LadaCache\Support\ForeignKeyDependents;
 use Spiritix\LadaCache\Support\Invalidation;
 use Spiritix\LadaCache\Support\PendingInvalidations;
 use Spiritix\LadaCache\Support\RawStatementEffect;
 use Spiritix\LadaCache\Support\ReplicaReads;
+use Spiritix\LadaCache\Support\WriteKind;
 use Throwable;
 
 /**
@@ -73,12 +74,11 @@ final class QueryHandler
             }
 
             $tags = (new Tagger($reflector, $assignedRows))->getTags();
-            $invalidation = Invalidation::of(
-                $tags,
+            $invalidation = Invalidation::of($tags, ReplicaReads::lagSeconds($connection))->withChangesOf(
                 $reflector->getDatabase(),
                 (string) $connection->getName(),
-                $reflector->getType() === Reflector::QUERY_TYPE_INSERT ? [] : $reflector->getTables(),
-                ReplicaReads::lagSeconds($connection),
+                $reflector->getType() === Reflector::QUERY_TYPE_INSERT ? WriteKind::Insert : WriteKind::Modify,
+                $reflector->getTables(),
             );
         } catch (Throwable $exception) {
             FailureReporter::report(CacheOperation::Invalidate, $exception, ['statement' => $statementType]);
@@ -301,9 +301,9 @@ final class QueryHandler
         $stored = [];
         foreach ($unknown as $database) {
             try {
-                $dependents = ForeignKeyDependents::load(DB::connection($invalidation->connectionOf($database)));
+                $dependents = DependentTables::load(DB::connection($invalidation->connectionOf($database)));
             } catch (Throwable $exception) {
-                FailureReporter::report(CacheOperation::Invalidate, $exception, ['database' => $database, 'reading' => 'foreign keys']);
+                FailureReporter::report(CacheOperation::Invalidate, $exception, ['database' => $database, 'reading' => 'dependent tables']);
                 $this->cache->retireAfterSchemaChange();
 
                 return;

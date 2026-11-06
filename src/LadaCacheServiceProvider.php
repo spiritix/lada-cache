@@ -29,7 +29,7 @@ use Spiritix\LadaCache\Debug\CacheCollector;
 use Spiritix\LadaCache\Support\CacheOperation;
 use Spiritix\LadaCache\Support\FailedInvalidations;
 use Spiritix\LadaCache\Support\FailureReporter;
-use Spiritix\LadaCache\Support\ForeignKeyDependents;
+use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\ReplicaReads;
 use Throwable;
 
@@ -122,7 +122,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
             CacheScope::fromConfig(config('lada-cache.scope', CacheScope::All->value));
             ExpirationPolicy::fromConfig();
             ReplicaReads::configuredLagSeconds();
-            ForeignKeyDependents::configured();
+            DependentTables::configured();
 
             return true;
         } catch (InvalidArgumentException $exception) {

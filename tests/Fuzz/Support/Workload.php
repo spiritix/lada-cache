@@ -332,6 +332,8 @@ final class Workload
             'raw pet count per owner' => fn (int $id) => $rows(fn () => DB::table('owners')->where('id', $id)->selectRaw("id, (select count(*) from {$this->table('pets')} where owner_id = {$this->table('owners')}.id) as pet_count")),
             'raw join toys' => fn () => $rows(fn () => DB::table('pets')->join(DB::raw($this->table('pet_toys')), 'pet_toys.pet_id', '=', 'pets.id')->orderBy('pet_toys.id')->select('pet_toys.id', 'pets.name')),
             'notes from raw' => fn () => $rows(fn () => DB::query()->fromRaw($this->table('owner_notes'))->orderBy('id')->select('id', 'owner_id')),
+            'owner pet counts view' => fn () => $rows(fn () => DB::table('owner_pet_counts')->orderBy('owner_id')->select('owner_id', 'pet_count')),
+            'pet count view of owner' => fn (int $id) => $rows(fn () => DB::table('owner_pet_counts')->where('owner_id', $id)->select('pet_count')),
             'car material pairs' => fn () => $rows(fn () => DB::table('car_material')->orderBy('car_id')->orderBy('material_id')->select('car_id', 'material_id')),
         ];
     }

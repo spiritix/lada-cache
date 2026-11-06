@@ -43,7 +43,7 @@ class FlushWithConnectionPrefixTest extends TestCase
         $cache = $this->freshCache();
         $this->seedEntry($cache, 'k1', ['t1'], ['row']);
 
-        $cache->invalidate(Invalidation::of(['t1'], 'db', 'default', [], 0));
+        $cache->invalidate(Invalidation::of(['t1']));
 
         $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k1', ['t1']));
     }

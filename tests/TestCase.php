@@ -19,6 +19,7 @@ class TestCase extends BaseTestCase
             '--database' => $defaultConnection,
             '--path' => realpath(__DIR__.'/Database/migrations'),
             '--realpath' => true,
+            '--drop-views' => true,
         ];
 
         $this->artisan('migrate:fresh', $migrationParams);

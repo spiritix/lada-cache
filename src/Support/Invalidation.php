@@ -15,7 +15,7 @@ final readonly class Invalidation
 {
     /**
      * @param  array<string, true>  $tags
-     * @param  array<string, array<string, true>>  $cascadeSources  database => tables
+     * @param  array<string, array<string, true>>  $cascadeSources  database => `WriteKind::dependentsField()` of each written table
      * @param  array<string, string>  $connections  database => name of a connection to it
      */
     private function __construct(
@@ -38,17 +38,26 @@ final readonly class Invalidation
 
     /**
      * @param  array<string>  $tags
-     * @param  array<string>  $cascadeTables
      */
-    public static function of(array $tags, string $database, string $connection, array $cascadeTables, int $replicaLagSeconds): self
+    public static function of(array $tags, int $replicaLagSeconds = 0): self
     {
-        return new self(
-            array_fill_keys($tags, true),
-            $cascadeTables === [] ? [] : [$database => array_fill_keys($cascadeTables, true)],
-            $cascadeTables === [] ? [] : [$database => $connection],
-            false,
-            $replicaLagSeconds,
-        );
+        return new self(array_fill_keys($tags, true), [], [], false, $replicaLagSeconds);
+    }
+
+    /**
+     * Also invalidates the tables the database changes along with the written tables.
+     *
+     * @param  array<string>  $tables
+     */
+    public function withChangesOf(string $database, string $connection, WriteKind $kind, array $tables): self
+    {
+        if ($tables === []) {
+            return $this;
+        }
+
+        $fields = array_fill_keys(array_map($kind->dependentsField(...), $tables), true);
+
+        return $this->merge(new self([], [$database => $fields], [$database => $connection], false, 0));
     }
 
     public function merge(self $other): self
@@ -118,11 +127,6 @@ final readonly class Invalidation
             false,
             $this->replicaLagSeconds,
         );
-    }
-
-    public function withoutRetire(): self
-    {
-        return new self($this->tags, $this->cascadeSources, $this->connections, false, $this->replicaLagSeconds);
     }
 
     public function connectionOf(string $database): string
