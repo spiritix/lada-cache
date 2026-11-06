@@ -11,6 +11,7 @@ use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\Encoder;
 use Spiritix\LadaCache\ExpirationPolicy;
 use Spiritix\LadaCache\Redis;
+use Spiritix\LadaCache\SchemaVersion;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class CacheTest extends TestCase
@@ -42,22 +43,22 @@ class CacheTest extends TestCase
     {
         $this->cache->store($this->miss('k', ['t1', 't2']), ['row']);
 
-        $hit = $this->cache->lookup('k', ['t1', 't2']);
+        $hit = $this->cache->lookup('k', ['t1', 't2'], SchemaVersion::fixed('test', '1'));
         $this->cache->invalidate(['unrelated']);
-        $stillHit = $this->cache->lookup('k', ['t1', 't2']);
+        $stillHit = $this->cache->lookup('k', ['t1', 't2'], SchemaVersion::fixed('test', '1'));
         $this->cache->invalidate(['t2']);
 
         $this->assertInstanceOf(CacheHit::class, $hit);
-        $this->assertSame(['row'], $hit->value);
+        $this->assertSame(['row'], $hit->rows);
         $this->assertInstanceOf(CacheHit::class, $stillHit);
-        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t1', 't2']));
+        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t1', 't2'], SchemaVersion::fixed('test', '1')));
     }
 
     public function testTagOrderAndDuplicatesDoNotChangeTheFingerprint(): void
     {
         $this->cache->store($this->miss('k', ['b', 'a']), ['row']);
 
-        $this->assertInstanceOf(CacheHit::class, $this->cache->lookup('k', ['a', 'b', 'a']));
+        $this->assertInstanceOf(CacheHit::class, $this->cache->lookup('k', ['a', 'b', 'a'], SchemaVersion::fixed('test', '1')));
     }
 
     public function testStoreAfterConcurrentInvalidationIsNeverServed(): void
@@ -67,7 +68,7 @@ class CacheTest extends TestCase
         $this->cache->invalidate(['t']);
         $this->cache->store($capturedBeforeWrite, ['stale']);
 
-        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t']));
+        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t'], SchemaVersion::fixed('test', '1')));
     }
 
     public function testStoreAfterRetireIsDiscarded(): void
@@ -77,16 +78,16 @@ class CacheTest extends TestCase
         $this->cache->retireCurrentGeneration();
         $this->cache->store($capturedBeforeMigration, ['pre-migration-schema']);
 
-        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t']));
-        $this->assertSame(0, (int) $this->redis->exists('p:'.$capturedBeforeMigration->generation->id.':e:k'));
+        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t'], SchemaVersion::fixed('test', '1')));
+        $this->assertSame(0, (int) $this->redis->exists('p:'.$capturedBeforeMigration->generation->id.':e:1:k'));
     }
 
     public function testEntryWithoutValidFingerprintIsAMiss(): void
     {
         $miss = $this->miss('k', ['t']);
-        $this->redis->set('p:'.$miss->generation->id.':e:k', 'legacy-unfingerprinted-payload');
+        $this->redis->set('p:'.$miss->generation->id.':e:1:k', 'legacy-unfingerprinted-payload');
 
-        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t']));
+        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t'], SchemaVersion::fixed('test', '1')));
     }
 
     public function testEmptiedRedisNeverRevivesEntriesWrittenWithAnEarlierGeneration(): void
@@ -98,7 +99,7 @@ class CacheTest extends TestCase
         $this->cache->store($capturedBeforeWipe, ['written-by-pod-mid-query']);
 
         $this->assertNotSame($capturedBeforeWipe->generation->id, $afterWipe->generation->id);
-        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t']));
+        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t'], SchemaVersion::fixed('test', '1')));
     }
 
     public function testCorruptStoredGenerationFailsLoudly(): void
@@ -108,7 +109,7 @@ class CacheTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('Invalid Lada Cache generation id "7"');
 
-        $this->cache->lookup('k', ['t']);
+        $this->cache->lookup('k', ['t'], SchemaVersion::fixed('test', '1'));
     }
 
     public function testRetireMakesEntriesUnreachable(): void
@@ -117,7 +118,7 @@ class CacheTest extends TestCase
 
         $this->cache->retireCurrentGeneration();
 
-        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t']));
+        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t'], SchemaVersion::fixed('test', '1')));
     }
 
     public function testPruneKeepsCurrentEntriesAndDeletesEverythingElse(): void
@@ -131,11 +132,11 @@ class CacheTest extends TestCase
         $deleted = $this->cache->pruneRetiredGenerations();
 
         $this->assertSame(3, $deleted);
-        $this->assertSame(0, (int) $this->redis->exists('p:'.$retired->generation->id.':e:old'));
+        $this->assertSame(0, (int) $this->redis->exists('p:'.$retired->generation->id.':e:1:old'));
         $this->assertSame(0, (int) $this->redis->exists('p:legacy-key'));
-        $hit = $this->cache->lookup('k', ['t']);
+        $hit = $this->cache->lookup('k', ['t'], SchemaVersion::fixed('test', '1'));
         $this->assertInstanceOf(CacheHit::class, $hit);
-        $this->assertSame(['current'], $hit->value);
+        $this->assertSame(['current'], $hit->rows);
     }
 
     public function testPruneWalksPastASingleScanBatch(): void
@@ -143,7 +144,7 @@ class CacheTest extends TestCase
         $retired = $this->miss('k', ['t']);
         $this->cache->retireCurrentGeneration();
         for ($index = 0; $index < 2500; $index++) {
-            $this->redis->set('p:'.$retired->generation->id.':e:'.$index, '1');
+            $this->redis->set('p:'.$retired->generation->id.':e:1:'.$index, '1');
         }
 
         $this->cache->pruneRetiredGenerations();
@@ -173,18 +174,18 @@ class CacheTest extends TestCase
 
         $this->cache->flush();
 
-        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t']));
+        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t'], SchemaVersion::fixed('test', '1')));
         $this->assertSame([], $this->redis->keys('p:'.$before->generation->id.':*'));
     }
 
     public function testEntriesAndVersionsExpireWithTheConfiguredTtl(): void
     {
         $cache = new Cache($this->redis, new Encoder(), new ExpirationPolicy(60));
-        $miss = $cache->lookup('k', ['t']);
+        $miss = $cache->lookup('k', ['t'], SchemaVersion::fixed('test', '1'));
         $this->assertInstanceOf(CacheMiss::class, $miss);
         $cache->store($miss, ['row']);
 
-        $this->assertGreaterThan(0, (int) $this->redis->ttl('p:'.$miss->generation->id.':e:k'));
+        $this->assertGreaterThan(0, (int) $this->redis->ttl('p:'.$miss->generation->id.':e:1:k'));
         $this->assertGreaterThan(0, (int) $this->redis->ttl('p:'.$miss->generation->id.':v:t'));
     }
 
@@ -193,7 +194,7 @@ class CacheTest extends TestCase
         $miss = $this->miss('k', ['t']);
         $this->cache->store($miss, ['row']);
 
-        $this->assertSame(-1, (int) $this->redis->ttl('p:'.$miss->generation->id.':e:k'));
+        $this->assertSame(-1, (int) $this->redis->ttl('p:'.$miss->generation->id.':e:1:k'));
     }
 
     /**
@@ -201,7 +202,7 @@ class CacheTest extends TestCase
      */
     private function miss(string $key, array $tags): CacheMiss
     {
-        $lookup = $this->cache->lookup($key, $tags);
+        $lookup = $this->cache->lookup($key, $tags, SchemaVersion::fixed('test', '1'));
         $this->assertInstanceOf(CacheMiss::class, $lookup);
 
         return $lookup;

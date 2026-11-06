@@ -13,8 +13,10 @@ use Spiritix\LadaCache\QueryHandler as LadaQueryHandler;
  * Extends Laravel's MySqlConnection to return the Lada QueryBuilder when active,
  * preserving all driver-specific behaviors (schema builder, insert IDs, etc.).
  */
-final class MySqlConnection extends BaseMySqlConnection
+final class MySqlConnection extends BaseMySqlConnection implements RunsBuilderStatements
 {
+    use InvalidatesRawStatements;
+
     /** {@inheritDoc} */
     public function query()
     {

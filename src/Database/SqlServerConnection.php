@@ -10,8 +10,10 @@ use Spiritix\LadaCache\QueryHandler as LadaQueryHandler;
 /**
  * Lada Cache-aware SQL Server connection.
  */
-final class SqlServerConnection extends BaseSqlServerConnection
+final class SqlServerConnection extends BaseSqlServerConnection implements RunsBuilderStatements
 {
+    use InvalidatesRawStatements;
+
     /** {@inheritDoc} */
     public function query()
     {

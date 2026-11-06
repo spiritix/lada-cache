@@ -8,31 +8,38 @@ use Illuminate\Redis\Connections\Connection;
 use Illuminate\Redis\Connections\PhpRedisConnection;
 use Illuminate\Redis\Connections\PredisConnection;
 use Illuminate\Support\Facades\Redis as RedisFacade;
+use Predis\Response\ServerException;
 use Redis as PhpRedisClient;
 use RuntimeException;
+use Spiritix\LadaCache\Support\RedisAvailability;
 use Throwable;
 
 /**
- * Lazy Redis access for Lada Cache with a per-process circuit breaker.
+ * Lazy Redis access for Lada Cache with a circuit breaker.
  *
  * Architectural notes:
  * - The connection is resolved on first use, so building query builders never touches Redis.
- * - After any failed script the proxy refuses further scripts for a cooldown period, so an
- *   unreachable Redis costs at most one timeout per cooldown instead of one per query.
+ * - After any failed script, including a failed connection, further scripts are refused for a
+ *   cooldown period (see `RedisAvailability`), so an unreachable Redis costs at most one
+ *   timeout per cooldown instead of one per query.
  * - `__call` forwards raw commands to the underlying connection.
  */
 final class Redis
 {
-    private const int UNAVAILABLE_COOLDOWN_NANOSECONDS = 30_000_000_000;
-
     private readonly string $prefix;
 
-    private ?int $unavailableUntil = null;
+    private readonly RedisAvailability $availability;
+
+    private ?string $keyBase = null;
 
     public function __construct(
         private ?Connection $connection = null,
+        ?RedisAvailability $availability = null,
     ) {
         $this->prefix = (string) config('lada-cache.prefix', 'lada:');
+        $this->availability = $availability ?? RedisAvailability::detect(
+            'lada-cache:unavailable:'.$this->connectionName().':'.$this->prefix
+        );
     }
 
     public function prefix(string $key): string
@@ -42,37 +49,90 @@ final class Redis
 
     private function keyBase(): string
     {
-        return $this->connectionPrefix().$this->prefix;
+        return $this->keyBase ??= $this->connectionPrefix().$this->prefix;
     }
 
     /**
      * Runs a script from `LuaScripts`, passing the key base as ARGV[1] ahead of the arguments.
+     * Scripts run by SHA so their source crosses the network only once per Redis server.
      *
      * @param  list<string|int>  $arguments
      */
     public function evaluate(string $script, array $arguments): mixed
     {
-        if ($this->unavailableUntil !== null && hrtime(true) < $this->unavailableUntil) {
+        if ($this->availability->isCoolingDown()) {
             throw new CacheUnavailableException('Redis is skipped for a cooldown period after a previous failure');
         }
 
+        return $this->evaluateNow($script, $arguments);
+    }
+
+    /**
+     * Like `evaluate()`, but tries Redis even during a cooldown. For rare operations whose
+     * failure compromises freshness, such as retiring the generation after a schema change.
+     *
+     * @param  list<string|int>  $arguments
+     */
+    public function evaluateIgnoringCooldown(string $script, array $arguments): mixed
+    {
+        return $this->evaluateNow($script, $arguments);
+    }
+
+    /**
+     * @param  list<string|int>  $arguments
+     */
+    private function evaluateNow(string $script, array $arguments): mixed
+    {
         try {
-            $result = $this->getConnection()->eval($script, 0, $this->keyBase(), ...$arguments);
+            $result = $this->runBySha($script, [$this->keyBase(), ...$arguments]);
         } catch (Throwable $exception) {
-            $this->markUnavailable();
+            $this->availability->markUnavailable();
 
             throw $exception;
         }
 
         if ($result === false) {
-            $this->markUnavailable();
+            $this->availability->markUnavailable();
 
             throw new RuntimeException('Redis rejected a Lada Cache script: '.$this->lastClientError());
         }
 
-        $this->unavailableUntil = null;
+        $this->availability->markAvailable();
 
         return $result;
+    }
+
+    /**
+     * @param  list<string|int>  $arguments
+     */
+    private function runBySha(string $script, array $arguments): mixed
+    {
+        $connection = $this->getConnection();
+        $sha = sha1($script);
+
+        if ($connection instanceof PhpRedisConnection) {
+            $client = $connection->client();
+            $client->clearLastError();
+            $result = $connection->command('evalsha', [$sha, $arguments, 0]);
+
+            if ($result === false && str_starts_with((string) $client->getLastError(), 'NOSCRIPT')) {
+                $client->clearLastError();
+
+                return $connection->command('eval', [$script, $arguments, 0]);
+            }
+
+            return $result;
+        }
+
+        try {
+            return $connection->command('evalsha', [$sha, 0, ...$arguments]);
+        } catch (ServerException $exception) {
+            if ($exception->getErrorType() !== 'NOSCRIPT') {
+                throw $exception;
+            }
+
+            return $connection->command('eval', [$script, 0, ...$arguments]);
+        }
     }
 
     public function __call(string $name, array $arguments): mixed
@@ -103,8 +163,8 @@ final class Redis
         return $client instanceof PhpRedisClient ? (string) $client->getLastError() : 'no error reported';
     }
 
-    private function markUnavailable(): void
+    private function connectionName(): string
     {
-        $this->unavailableUntil = hrtime(true) + self::UNAVAILABLE_COOLDOWN_NANOSECONDS;
+        return $this->connection?->getName() ?? (string) config('lada-cache.redis_connection', 'cache');
     }
 }

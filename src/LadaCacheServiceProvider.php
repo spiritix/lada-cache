@@ -6,8 +6,10 @@ namespace Spiritix\LadaCache;
 
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
+use Illuminate\Database\Events\DatabaseRefreshed;
 use Illuminate\Database\Events\MigrationEnded;
 use Illuminate\Database\Events\MigrationsEnded;
+use Illuminate\Database\Events\SchemaLoaded;
 use Illuminate\Database\Events\TransactionCommitted;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Support\Facades\DB;
@@ -67,25 +69,21 @@ final class LadaCacheServiceProvider extends ServiceProvider
             $this->registerDebugbarCollector();
         }
 
-        // Register transaction event listeners to coordinate transaction-aware invalidations.
         $events = $this->app['events'];
         $events->listen(TransactionCommitted::class, function (TransactionCommitted $event): void {
-            /** @var QueryHandler $handler */
-            $handler = $this->app->make('lada.handler');
-            $handler->flushQueuedInvalidationsForConnection($event->connection);
+            $this->app->make('lada.handler')->transactionCommitted($event->connection);
         });
         $events->listen(TransactionRolledBack::class, function (TransactionRolledBack $event): void {
-            /** @var QueryHandler $handler */
-            $handler = $this->app->make('lada.handler');
-            $handler->clearQueuedInvalidationsForConnection($event->connection);
+            $this->app->make('lada.handler')->transactionRolledBack($event->connection);
         });
 
-        $events->listen(MigrationEnded::class, function (): void {
-            try {
-                $this->app->make('lada.cache')->retireCurrentGeneration();
-            } catch (Throwable $exception) {
-                FailureReporter::report(CacheOperation::Retire, $exception);
-            }
+        $events->listen(MigrationEnded::class, function (MigrationEnded $event): void {
+            $this->app->make('lada.handler')->schemaChanged($this->app->make('migrator')->resolveConnection($event->migration->getConnection()));
+        });
+        $events->listen([SchemaLoaded::class, DatabaseRefreshed::class], function (SchemaLoaded|DatabaseRefreshed $event): void {
+            $this->app->make('lada.handler')->schemaChanged(
+                $event instanceof SchemaLoaded ? $event->connection : DB::connection($event->database)
+            );
         });
         $events->listen(MigrationsEnded::class, function (): void {
             try {
@@ -159,7 +157,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
     private function hydrateLadaConnection(\Illuminate\Database\Connection $base, \Illuminate\Database\Connection $lada, string $name): \Illuminate\Database\Connection
     {
         if (method_exists($lada, 'setReadPdo')) {
-            $lada->setReadPdo($base->getReadPdo());
+            $lada->setReadPdo($base->getRawReadPdo());
         }
         if (method_exists($lada, 'setName')) {
             $lada->setName($name);
@@ -183,7 +181,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
             /** @var \Illuminate\Database\MySqlConnection $base */
             $base = app('db.factory')->make($config, $name);
             $lada = new LadaMySqlConnection(
-                $base->getPdo(),
+                $base->getRawPdo(),
                 $base->getDatabaseName(),
                 $base->getTablePrefix(),
                 $base->getConfig(),
@@ -196,7 +194,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
             /** @var \Illuminate\Database\MySqlConnection $base */
             $base = app('db.factory')->make($config, $name);
             $lada = new LadaMariaDbConnection(
-                $base->getPdo(),
+                $base->getRawPdo(),
                 $base->getDatabaseName(),
                 $base->getTablePrefix(),
                 $base->getConfig(),
@@ -208,7 +206,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
             /** @var \Illuminate\Database\PostgresConnection $base */
             $base = app('db.factory')->make($config, $name);
             $lada = new LadaPostgresConnection(
-                $base->getPdo(),
+                $base->getRawPdo(),
                 $base->getDatabaseName(),
                 $base->getTablePrefix(),
                 $base->getConfig(),
@@ -220,7 +218,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
             /** @var \Illuminate\Database\SqliteConnection $base */
             $base = app('db.factory')->make($config, $name);
             $lada = new LadaSqliteConnection(
-                $base->getPdo(),
+                $base->getRawPdo(),
                 $base->getDatabaseName(),
                 $base->getTablePrefix(),
                 $base->getConfig(),
@@ -232,7 +230,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
             /** @var \Illuminate\Database\SqlServerConnection $base */
             $base = app('db.factory')->make($config, $name);
             $lada = new LadaSqlServerConnection(
-                $base->getPdo(),
+                $base->getRawPdo(),
                 $base->getDatabaseName(),
                 $base->getTablePrefix(),
                 $base->getConfig(),

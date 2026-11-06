@@ -6,57 +6,51 @@ namespace Spiritix\LadaCache\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use Spiritix\LadaCache\Encoder;
+use stdClass;
 
 class EncoderTest extends TestCase
 {
-    public function testEncodeDecodeScalarsArraysAndNull(): void
+    public function testRowsRoundTrip(): void
     {
         $encoder = new Encoder();
+        $row = new stdClass();
+        $row->id = 1;
+        $row->name = 'car';
+        $row->price = null;
+        $rows = [$row, ['id' => 2, 'name' => 'array row'], []];
 
-        $cases = [
-            null,
-            0,
-            123,
-            12.34,
-            true,
-            false,
-            'string',
-            ['a' => 1, 'b' => [2, 3]],
-        ];
-
-        foreach ($cases as $original) {
-            $encoded = $encoder->encode($original);
-            $decoded = $encoder->decode($encoded);
-            $this->assertEquals($original, $decoded);
-        }
+        $this->assertEquals($rows, $encoder->decode($encoder->encode($rows)));
+        $this->assertSame([], $encoder->decode($encoder->encode([])));
     }
 
-    public function testEncodeFallsBackToSerializeForObjectsAndRoundTrips(): void
+    public function testDecodeRejectsPayloadsThatAreNotResults(): void
     {
         $encoder = new Encoder();
 
-        $obj = new class() {
-            public int $x = 5;
-            public string $y = 'test';
-        };
-
-        $encoded = $encoder->encode($obj);
-        $this->assertIsString($encoded);
-
-        $decoded = $encoder->decode($encoded);
-        $this->assertIsObject($decoded);
-        $this->assertSame(5, $decoded->x);
-        $this->assertSame('test', $decoded->y);
+        $this->assertNull($encoder->decode('not-serialized'));
+        $this->assertNull($encoder->decode('"json string"'));
+        $this->assertNull($encoder->decode('a:1:{i:0;'));
+        $this->assertNull($encoder->decode(serialize('a:string')));
     }
 
-    public function testDecodeReturnsNullOnCompletelyInvalidPayload(): void
+    public function testDecodeNeverInstantiatesClassesOtherThanStdClass(): void
     {
-        $encoder = new Encoder();
+        $payload = serialize([new EncoderGadget()]);
 
-        $invalid = "this-is-not-json-and-not-serialized";
-        $decoded = $encoder->decode($invalid);
+        $rows = (new Encoder())->decode($payload);
 
-        $this->assertNull($decoded);
+        $this->assertIsArray($rows);
+        $this->assertNotInstanceOf(EncoderGadget::class, $rows[0]);
+        $this->assertFalse(EncoderGadget::$woken);
     }
 }
 
+final class EncoderGadget
+{
+    public static bool $woken = false;
+
+    public function __wakeup(): void
+    {
+        self::$woken = true;
+    }
+}

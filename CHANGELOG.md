@@ -14,6 +14,14 @@
 - Removed `Invalidator` and the `lada.invalidator` binding; invalidation is part of `Cache`
 - An invalid `lada-cache.scope`, `expiration_time` or `expiration_jitter` disables Lada Cache with a logged error instead of failing the application boot
 - Subquery tables are tracked on the builder that owns them instead of on the shared query handler, which also lets `include_tables`/`exclude_tables` see them
+- Entries are also scoped by the schema version of their database (highest migrations id, re-read at most every two seconds), so hosts stop serving entries of a previous schema within two seconds of a recorded migration even when nothing retired the generation, for example when the migration job runs without Lada Cache or cannot reach Redis
+- `schema:load`, `migrate:fresh`/`refresh` and raw DDL retire the generation; retiring after a schema change retries for about a second and ignores the failure cooldown, and a schema change inside a transaction retires again when it ends
+- The failure cooldown is shared across PHP-FPM requests and processes through APCu when available; under FrankenPHP worker mode and Octane it lasts for the worker. Pending transaction invalidations are held per connection object, so purged connections in long-lived workers leave nothing behind
+- Lua scripts run by SHA (`EVALSHA`, falling back to `EVAL` after `SCRIPT FLUSH`), so their source is no longer sent with every query
+- Cached results only decode to arrays of `stdClass` rows; a tampered entry can no longer instantiate arbitrary classes
+- `exists()` caches `select 1` instead of whole rows
+- Lada connections no longer open the primary and read PDO connections when resolved, only when first used
+- The debug collector lookup no longer throws and catches an exception for every query when Debugbar is not installed
 
 ### Fixed
 - A failing SQL query was executed twice, and a successful query ran again when storing its result failed
@@ -22,6 +30,11 @@
 - Top-level `OR` and `whereNot` queries were scoped to the primary-key rows of one branch, leaving them stale after writes to other rows (https://github.com/spiritix/lada-cache/pull/156)
 - `findMany()`, `whereKey([...])` and BelongsTo eager loads were tagged table-wide and evicted by every write to the table (https://github.com/spiritix/lada-cache/pull/158)
 - Cached lookups of a missing row survived writes that created that row: `insertGetId()` and inserts with an explicit key (https://github.com/spiritix/lada-cache/pull/155), inserts without a key, `insertOrIgnore()`, `insertUsing()`, `insertOrIgnoreUsing()`, and updates that change the primary key
+- Raw statements (`DB::insert/update/delete/statement/affectingStatement/unprepared`, and writes through `DB::select()`) never invalidated anything
+- `insertOrIgnoreReturning()` never invalidated anything
+- `updateOrInsert()` with callback values failed with a `TypeError`
+- A nested transaction commit flushed invalidations before the outer transaction committed, letting other hosts cache uncommitted-era results, and a savepoint rollback discarded the invalidations of the enclosing transaction
+- A Redis connection failure under phpredis bypassed the failure cooldown, costing a connection attempt per query
 
 ## [6.1.1] - 2026-05-22
 ### Fixed

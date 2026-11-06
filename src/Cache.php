@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache;
 
+use Throwable;
 use UnexpectedValueException;
 
 /**
@@ -22,6 +23,8 @@ final class Cache
 {
     private const int PRUNE_BATCH_SIZE = 1000;
 
+    private const array SCHEMA_CHANGE_RETRY_DELAYS_MICROSECONDS = [100_000, 300_000, 900_000];
+
     private readonly ExpirationPolicy $expiration;
 
     public function __construct(
@@ -35,39 +38,62 @@ final class Cache
     /**
      * @param  array<string>  $tags
      */
-    public function lookup(string $key, array $tags): CacheHit|CacheMiss
+    public function lookup(string $key, array $tags, SchemaVersion $schema): CacheHit|CacheMiss
+    {
+        $reply = $this->evaluateLookup($key, $tags, $schema, '');
+
+        if ($reply === 0) {
+            $reply = $this->evaluateLookup($key, $tags, $schema, $schema->resolve());
+        }
+
+        if (! is_array($reply) || ! isset($reply[0], $reply[1], $reply[2])) {
+            throw new UnexpectedValueException('Malformed Lada Cache lookup reply for key '.$key);
+        }
+
+        if (isset($reply[3])) {
+            $rows = $this->encoder->decode((string) $reply[3]);
+
+            if ($rows !== null) {
+                return new CacheHit($rows);
+            }
+        }
+
+        return new CacheMiss(new Generation((string) $reply[0]), (string) $reply[1], $key, (string) $reply[2]);
+    }
+
+    /**
+     * @param  array<mixed>  $rows
+     */
+    public function store(CacheMiss $miss, array $rows): void
+    {
+        $this->redis->evaluate(LuaScripts::STORE, [
+            $miss->generation->id,
+            $miss->schema,
+            $miss->key,
+            $miss->fingerprint,
+            $this->expiration->nextTtl(),
+            $this->encoder->encode($rows),
+        ]);
+    }
+
+    /**
+     * @param  array<string>  $tags
+     */
+    private function evaluateLookup(string $key, array $tags, SchemaVersion $schema, string $schemaCandidate): mixed
     {
         $reply = $this->redis->evaluate(LuaScripts::LOOKUP, [
             $key,
             self::freshToken(),
             $this->expiration->nextTtl(),
+            $schema->database,
+            $schemaCandidate,
+            SchemaVersion::TTL_SECONDS,
             ...self::canonicalTags($tags),
         ]);
 
-        if (! is_array($reply) || ! isset($reply[0], $reply[1])) {
-            throw new UnexpectedValueException('Malformed Lada Cache lookup reply for key '.$key);
-        }
-
-        if (isset($reply[2])) {
-            $value = $this->encoder->decode((string) $reply[2]);
-
-            if ($value !== null) {
-                return new CacheHit($value);
-            }
-        }
-
-        return new CacheMiss(new Generation((string) $reply[0]), $key, (string) $reply[1]);
-    }
-
-    public function store(CacheMiss $miss, mixed $data): void
-    {
-        $this->redis->evaluate(LuaScripts::STORE, [
-            $miss->generation->id,
-            $miss->key,
-            $miss->fingerprint,
-            $this->expiration->nextTtl(),
-            $this->encoder->encode($data),
-        ]);
+        return $reply === 0 && $schemaCandidate !== ''
+            ? throw new UnexpectedValueException('Lada Cache lookup ignored the schema version for key '.$key)
+            : $reply;
     }
 
     /**
@@ -95,6 +121,25 @@ final class Cache
     public function retireCurrentGeneration(): void
     {
         $this->redis->evaluate(LuaScripts::RETIRE, [self::freshToken()]);
+    }
+
+    /**
+     * Retires the generation even while Redis is in a cooldown, retrying with backoff, because
+     * a missed retire after a schema change lets hosts serve results of the previous schema.
+     */
+    public function retireAfterSchemaChange(): void
+    {
+        foreach (self::SCHEMA_CHANGE_RETRY_DELAYS_MICROSECONDS as $delay) {
+            try {
+                $this->redis->evaluateIgnoringCooldown(LuaScripts::RETIRE, [self::freshToken()]);
+
+                return;
+            } catch (Throwable) {
+                usleep($delay);
+            }
+        }
+
+        $this->redis->evaluateIgnoringCooldown(LuaScripts::RETIRE, [self::freshToken()]);
     }
 
     public function pruneRetiredGenerations(): int

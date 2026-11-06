@@ -10,8 +10,10 @@ use Spiritix\LadaCache\QueryHandler as LadaQueryHandler;
 /**
  * Lada Cache-aware SQLite connection.
  */
-final class SqliteConnection extends BaseSqliteConnection
+final class SqliteConnection extends BaseSqliteConnection implements RunsBuilderStatements
 {
+    use InvalidatesRawStatements;
+
     /** {@inheritDoc} */
     public function query()
     {

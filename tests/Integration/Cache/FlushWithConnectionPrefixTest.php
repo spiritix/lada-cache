@@ -11,6 +11,7 @@ use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\Encoder;
 use Spiritix\LadaCache\ExpirationPolicy;
 use Spiritix\LadaCache\Redis;
+use Spiritix\LadaCache\SchemaVersion;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class FlushWithConnectionPrefixTest extends TestCase
@@ -27,13 +28,13 @@ class FlushWithConnectionPrefixTest extends TestCase
     {
         $cache = $this->freshCache();
 
-        $miss = $cache->lookup('k1', ['t1']);
+        $miss = $cache->lookup('k1', ['t1'], SchemaVersion::fixed('test', '1'));
         $this->assertInstanceOf(CacheMiss::class, $miss);
         $cache->store($miss, ['row']);
 
-        $hit = $cache->lookup('k1', ['t1']);
+        $hit = $cache->lookup('k1', ['t1'], SchemaVersion::fixed('test', '1'));
         $this->assertInstanceOf(CacheHit::class, $hit);
-        $this->assertSame(['row'], $hit->value);
+        $this->assertSame(['row'], $hit->rows);
         $this->assertContains('app_lada:generation', RedisFacade::connection('cache')->keys('lada:*'));
     }
 
@@ -44,19 +45,21 @@ class FlushWithConnectionPrefixTest extends TestCase
 
         $cache->invalidate(['t1']);
 
-        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k1', ['t1']));
+        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k1', ['t1'], SchemaVersion::fixed('test', '1')));
     }
 
     public function testFlushDeletesAllEntriesAndKeepsOnlyTheGenerationKey(): void
     {
         $cache = $this->freshCache();
-        $this->seedEntry($cache, 'k1', ['t1'], '1');
-        $this->seedEntry($cache, 'k2', ['t2'], '2');
+        $this->seedEntry($cache, 'k1', ['t1'], ['1']);
+        $this->seedEntry($cache, 'k2', ['t2'], ['2']);
         $this->assertGreaterThanOrEqual(5, count(RedisFacade::connection('cache')->keys('lada:*')));
 
         $cache->flush();
 
-        $this->assertSame(['app_lada:generation'], RedisFacade::connection('cache')->keys('lada:*'));
+        $keys = RedisFacade::connection('cache')->keys('lada:*');
+        sort($keys);
+        $this->assertSame(['app_lada:generation', 'app_lada:schema:test'], $keys);
     }
 
     private function freshCache(): Cache
@@ -69,10 +72,10 @@ class FlushWithConnectionPrefixTest extends TestCase
     /**
      * @param  array<string>  $tags
      */
-    private function seedEntry(Cache $cache, string $key, array $tags, mixed $data): void
+    private function seedEntry(Cache $cache, string $key, array $tags, array $rows): void
     {
-        $miss = $cache->lookup($key, $tags);
+        $miss = $cache->lookup($key, $tags, SchemaVersion::fixed('test', '1'));
         $this->assertInstanceOf(CacheMiss::class, $miss);
-        $cache->store($miss, $data);
+        $cache->store($miss, $rows);
     }
 }

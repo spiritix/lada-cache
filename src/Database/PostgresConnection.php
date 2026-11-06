@@ -10,8 +10,10 @@ use Spiritix\LadaCache\QueryHandler as LadaQueryHandler;
 /**
  * Lada Cache-aware Postgres connection.
  */
-final class PostgresConnection extends BasePostgresConnection
+final class PostgresConnection extends BasePostgresConnection implements RunsBuilderStatements
 {
+    use InvalidatesRawStatements;
+
     /** {@inheritDoc} */
     public function query()
     {

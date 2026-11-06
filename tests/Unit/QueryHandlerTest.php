@@ -5,19 +5,20 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Tests\Unit;
 
 use Illuminate\Database\QueryException;
-use Illuminate\Redis\Events\CommandExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Redis as RedisFacade;
 use Spiritix\LadaCache\Cache;
 use Spiritix\LadaCache\Encoder;
 use Spiritix\LadaCache\ExpirationPolicy;
 use Spiritix\LadaCache\QueryHandler;
 use Spiritix\LadaCache\Redis;
+use Spiritix\LadaCache\Tests\Concerns\RecordsRedisCommands;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class QueryHandlerTest extends TestCase
 {
+    use RecordsRedisCommands;
+
     private Cache $cache;
 
     protected function getEnvironmentSetUp($app): void
@@ -68,19 +69,20 @@ class QueryHandlerTest extends TestCase
 
         $commands = $this->recordRedisCommands(fn () => $handler->setBuilder($builder)->cacheQuery(fn (): array => [['id' => 1]]));
 
-        $this->assertSame(['eval'], $commands);
+        $this->assertSame(['evalsha'], $commands);
     }
 
     public function testCacheMissCostsTwoRedisCommandsAndInvalidationOne(): void
     {
         $handler = new QueryHandler($this->cache);
         $builder = DB::table('cars')->where('id', 1);
+        $handler->setBuilder(DB::table('drivers'))->cacheQuery(fn (): array => []);
 
         $missCommands = $this->recordRedisCommands(fn () => $handler->setBuilder($builder)->cacheQuery(fn (): array => [['id' => 1]]));
         $invalidationCommands = $this->recordRedisCommands(fn () => $handler->setBuilder(DB::table('cars')->where('id', 1))->invalidateQuery('update', ['name' => 'x']));
 
-        $this->assertSame(['eval', 'eval'], $missCommands);
-        $this->assertSame(['eval'], $invalidationCommands);
+        $this->assertSame(['evalsha', 'evalsha'], $missCommands);
+        $this->assertSame(['evalsha'], $invalidationCommands);
     }
 
     public function testCacheQueryMissesAfterFlushRetiresTheGeneration(): void
@@ -193,23 +195,5 @@ class QueryHandlerTest extends TestCase
         config(['lada-cache.redis_connection' => 'unreachable']);
 
         return new QueryHandler(new Cache(new Redis(), new Encoder(), new ExpirationPolicy(0)));
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function recordRedisCommands(callable $callback): array
-    {
-        $commands = [];
-        $connection = RedisFacade::connection((string) config('lada-cache.redis_connection'));
-        $connection->setEventDispatcher(app('events'));
-        app('events')->listen(CommandExecuted::class, function (CommandExecuted $event) use (&$commands): void {
-            $commands[] = strtolower($event->command);
-        });
-
-        $callback();
-        $connection->unsetEventDispatcher();
-
-        return $commands;
     }
 }

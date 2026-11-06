@@ -30,6 +30,10 @@ class TestCase extends BaseTestCase
         // Ensure a clean cache for every test: flush configured Redis connection
         $connection = (string) config('lada-cache.redis_connection', 'cache');
         Redis::connection($connection)->flushdb();
+
+        if (function_exists('apcu_clear_cache')) {
+            apcu_clear_cache();
+        }
     }
 
     protected function getPackageProviders($app): array

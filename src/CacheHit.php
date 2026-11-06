@@ -6,7 +6,10 @@ namespace Spiritix\LadaCache;
 
 final readonly class CacheHit
 {
+    /**
+     * @param  array<mixed>  $rows
+     */
     public function __construct(
-        public mixed $value,
+        public array $rows,
     ) {}
 }

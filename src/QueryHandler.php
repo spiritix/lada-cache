@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use Closure;
+use Illuminate\Database\Connection;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\App;
 use Spiritix\LadaCache\Database\QueryBuilder;
@@ -12,6 +13,8 @@ use Spiritix\LadaCache\Debug\CacheCollector;
 use Spiritix\LadaCache\Support\AssignedRows;
 use Spiritix\LadaCache\Support\CacheOperation;
 use Spiritix\LadaCache\Support\FailureReporter;
+use Spiritix\LadaCache\Support\PendingInvalidations;
+use Spiritix\LadaCache\Support\RawStatementEffect;
 use Throwable;
 
 /**
@@ -21,7 +24,11 @@ use Throwable;
  * - Decide whether a query should be cached using `Manager`.
  * - Compute cache keys with `Hasher` and tags with `Tagger`.
  * - Look up, store and invalidate results via `Cache`.
+ * - Defer invalidations of writes inside a transaction until the outermost commit.
  * - Integrate with the debug collector when available.
+ *
+ * Reads inside a transaction bypass the cache (see `Manager`), because a transaction may see
+ * its own uncommitted writes or an older snapshot.
  *
  * Every cache failure is reported and degrades to plain database access: a query runs
  * exactly once and its own exceptions propagate unchanged.
@@ -32,12 +39,13 @@ final class QueryHandler
 
     private ?CacheCollector $collector = null;
 
-    /** @var array<string, array<int, string>> */
-    private array $queuedInvalidations = [];
+    private readonly PendingInvalidations $pending;
 
     public function __construct(
         private readonly Cache $cache,
-    ) {}
+    ) {
+        $this->pending = new PendingInvalidations;
+    }
 
     public function setBuilder(QueryBuilder $builder): self
     {
@@ -58,6 +66,8 @@ final class QueryHandler
             return;
         }
 
+        $connection = $this->builder->getConnection();
+
         try {
             $reflector = new Reflector($this->builder, $statementType, $values);
 
@@ -68,28 +78,32 @@ final class QueryHandler
             $tags = (new Tagger($reflector, $assignedRows))->getTags();
         } catch (Throwable $exception) {
             FailureReporter::report(CacheOperation::Invalidate, $exception, ['statement' => $statementType]);
-            $this->retireGeneration();
+            $this->retireGenerationNow(fn () => $this->cache->retireCurrentGeneration());
 
             return;
         }
 
-        $connection = $this->builder->getConnection();
-        if (method_exists($connection, 'transactionLevel') && $connection->transactionLevel() > 0) {
-            $this->queueInvalidationForConnection($connection, $tags);
+        $deferred = $this->invalidateTags($connection, $tags);
+        $this->stopCollector($reflector, $tags, [], $deferred ? "Invalidation queued ({$statementType})" : "Invalidation ({$statementType})");
+    }
 
-            if (method_exists($connection, 'afterCommit')) {
-                $connection->afterCommit(function () use ($connection): void {
-                    $this->flushQueuedInvalidationsForConnection($connection);
-                });
+    public function invalidateRawStatement(Connection $connection, RawStatementEffect $effect): void
+    {
+        if ($effect->changesEverything) {
+            $this->schemaChanged($connection);
+
+            return;
+        }
+
+        foreach ($effect->tables as $table) {
+            $builder = $connection->query()->from($table);
+
+            if (! $builder instanceof QueryBuilder) {
+                return;
             }
 
-            $this->stopCollector($reflector, $tags, [], "Invalidation queued ({$statementType})");
-
-            return;
+            $this->setBuilder($builder)->invalidateQuery(Reflector::QUERY_TYPE_TRUNCATE);
         }
-
-        $this->invalidateTags($tags);
-        $this->stopCollector($reflector, $tags, [], "Invalidation ({$statementType})");
     }
 
     /**
@@ -101,6 +115,12 @@ final class QueryHandler
         $this->startCollector();
 
         if ($this->builder === null) {
+            return $queryClosure();
+        }
+
+        $connection = $this->builder->getConnection();
+
+        if (! $connection instanceof Connection) {
             return $queryClosure();
         }
 
@@ -119,12 +139,12 @@ final class QueryHandler
             return $queryClosure();
         }
 
-        $lookup = $this->lookup($key, $tags);
+        $lookup = $this->lookup($key, $tags, SchemaVersion::ofConnection($connection));
 
-        if ($lookup instanceof CacheHit && is_array($lookup->value)) {
+        if ($lookup instanceof CacheHit) {
             $this->stopCollector($reflector, $tags, $key, 'Hit');
 
-            return $lookup->value;
+            return $lookup->rows;
         }
 
         $rows = $queryClosure();
@@ -133,36 +153,46 @@ final class QueryHandler
             $this->store($lookup, $rows);
         }
 
-        $this->stopCollector($reflector, $tags, $key, $lookup instanceof CacheMiss ? 'Miss' : 'Bypass (cache unavailable)');
+        $this->stopCollector($reflector, $tags, $key, $lookup instanceof CacheMiss ? 'Miss' : 'Bypass');
 
         return $rows;
     }
 
-    public function queueInvalidationForConnection(ConnectionInterface $connection, array $tags): void
+    public function transactionCommitted(ConnectionInterface $connection): void
     {
-        $name = (string) ($connection->getName() ?? 'default');
-        $existing = $this->queuedInvalidations[$name] ?? [];
-        $this->queuedInvalidations[$name] = array_values(array_unique([...$existing, ...$tags]));
-    }
+        if (self::inTransaction($connection)) {
+            return;
+        }
 
-    public function flushQueuedInvalidationsForConnection(ConnectionInterface $connection): void
-    {
-        $name = (string) ($connection->getName() ?? 'default');
-        $tags = $this->queuedInvalidations[$name] ?? [];
-        unset($this->queuedInvalidations[$name]);
+        ['tags' => $tags, 'retire' => $retire] = $this->pending->take($connection);
+
+        if ($retire) {
+            $this->retireGenerationNow(fn () => $this->cache->retireAfterSchemaChange());
+        }
 
         if ($tags !== []) {
-            $this->invalidateTags($tags);
+            $this->invalidateTagsNow($tags);
+        }
+    }
+
+    public function transactionRolledBack(ConnectionInterface $connection): void
+    {
+        if (self::inTransaction($connection)) {
+            return;
+        }
+
+        if ($this->pending->take($connection)['retire']) {
+            $this->retireGenerationNow(fn () => $this->cache->retireAfterSchemaChange());
         }
     }
 
     /**
      * @param  array<string>  $tags
      */
-    private function lookup(string $key, array $tags): CacheHit|CacheMiss|null
+    private function lookup(string $key, array $tags, SchemaVersion $schema): CacheHit|CacheMiss|null
     {
         try {
-            return $this->cache->lookup($key, $tags);
+            return $this->cache->lookup($key, $tags, $schema);
         } catch (Throwable $exception) {
             FailureReporter::report(CacheOperation::Read, $exception, ['key' => $key]);
 
@@ -183,9 +213,28 @@ final class QueryHandler
     }
 
     /**
+     * Invalidates now, or at the outermost commit when the connection is inside a transaction.
+     *
+     * @param  array<string>  $tags
+     * @return bool Whether the invalidation was deferred
+     */
+    private function invalidateTags(ConnectionInterface $connection, array $tags): bool
+    {
+        if (! self::inTransaction($connection)) {
+            $this->invalidateTagsNow($tags);
+
+            return false;
+        }
+
+        $this->pending->addTags($connection, $tags);
+
+        return true;
+    }
+
+    /**
      * @param  array<string>  $tags
      */
-    private function invalidateTags(array $tags): void
+    private function invalidateTagsNow(array $tags): void
     {
         try {
             $this->cache->invalidate($tags);
@@ -194,29 +243,41 @@ final class QueryHandler
         }
     }
 
-    private function retireGeneration(): void
+    /**
+     * Retires the generation now and again when the transaction ends, committed or not: a
+     * transactional schema change only becomes visible at commit, while other databases apply
+     * schema changes immediately and cannot roll them back.
+     */
+    public function schemaChanged(ConnectionInterface $connection): void
+    {
+        $this->retireGenerationNow(fn () => $this->cache->retireAfterSchemaChange());
+
+        if (self::inTransaction($connection)) {
+            $this->pending->requestRetire($connection);
+        }
+    }
+
+    /**
+     * @param  Closure(): void  $retire
+     */
+    private function retireGenerationNow(Closure $retire): void
     {
         try {
-            $this->cache->retireCurrentGeneration();
+            $retire();
         } catch (Throwable $exception) {
             FailureReporter::report(CacheOperation::Retire, $exception);
         }
     }
 
-    public function clearQueuedInvalidationsForConnection(ConnectionInterface $connection): void
+    private static function inTransaction(ConnectionInterface $connection): bool
     {
-        $name = (string) ($connection->getName() ?? 'default');
-        unset($this->queuedInvalidations[$name]);
+        return $connection->transactionLevel() > 0;
     }
 
     private function startCollector(): void
     {
-        try {
-            $this->collector = App::make('lada.collector');
-            $this->collector->startMeasuring();
-        } catch (Throwable) {
-            $this->collector = null;
-        }
+        $this->collector = App::bound('lada.collector') ? App::make('lada.collector') : null;
+        $this->collector?->startMeasuring();
     }
 
     /**

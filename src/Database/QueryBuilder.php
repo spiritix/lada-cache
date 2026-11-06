@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Database;
 
+use Closure;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Query\Grammars\Grammar;
 use Illuminate\Database\Query\Processors\Processor;
 use Spiritix\LadaCache\QueryHandler;
@@ -61,14 +63,11 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     /** {@inheritDoc} */
     public function exists()
     {
-        // If locked, defer to base implementation (always hit DB).
         if ($this->lock !== null) {
             return parent::exists();
         }
 
-        // Use a cached-select pathway by limiting to 1 row and checking non-emptiness.
-        // This ensures existence checks benefit from caching without changing semantics.
-        return $this->clone()->limit(1)->get(['*'])->isNotEmpty();
+        return $this->clone()->limit(1)->get([new Expression('1 as lada_exists')])->isNotEmpty();
     }
 
     public function getHandler(): QueryHandler
@@ -111,7 +110,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
         // Laravel stores lock intent in $this->lock; when present we should always hit the DB.
         // Also bypass when the caller opted out via withoutCache().
         if ($this->lock !== null || $this->cacheBypassed) {
-            return parent::runSelect();
+            return $this->runStatement(fn () => parent::runSelect());
         }
 
         // Laravel can defer query mutations until just before execution. Finalize
@@ -120,19 +119,17 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
 
         return $this->handler
             ->setBuilder($this)
-            ->cacheQuery(function () {
-                return $this->connection->select(
-                    $this->toSql(),
-                    $this->getBindings(),
-                    ! $this->useWritePdo
-                );
-            });
+            ->cacheQuery(fn () => $this->runStatement(fn () => $this->connection->select(
+                $this->toSql(),
+                $this->getBindings(),
+                ! $this->useWritePdo
+            )));
     }
 
     /** {@inheritDoc} */
     public function insert(array $values)
     {
-        $result = parent::insert($values);
+        $result = $this->runStatement(fn () => parent::insert($values));
         $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy($values));
 
         return $result;
@@ -141,7 +138,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     /** {@inheritDoc} */
     public function insertUsing(array $columns, $query)
     {
-        $result = $this->withoutTrackingCompiledSubQueries(fn () => parent::insertUsing($columns, $query));
+        $result = $this->runStatement(fn () => $this->withoutTrackingCompiledSubQueries(fn () => parent::insertUsing($columns, $query)));
         $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, [], AssignedRows::unknown());
 
         return $result;
@@ -150,7 +147,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     /** {@inheritDoc} */
     public function insertOrIgnoreUsing(array $columns, $query)
     {
-        $result = $this->withoutTrackingCompiledSubQueries(fn () => parent::insertOrIgnoreUsing($columns, $query));
+        $result = $this->runStatement(fn () => $this->withoutTrackingCompiledSubQueries(fn () => parent::insertOrIgnoreUsing($columns, $query)));
         $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, [], AssignedRows::unknown());
 
         return $result;
@@ -159,7 +156,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     /** {@inheritDoc} */
     public function updateFrom(array $values)
     {
-        $result = parent::updateFrom($values);
+        $result = $this->runStatement(fn () => parent::updateFrom($values));
         $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_UPDATE, $values, $this->rowsAssignedBy($values));
 
         return $result;
@@ -168,7 +165,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     /** {@inheritDoc} */
     public function insertGetId(array $values, $sequence = null)
     {
-        $id = parent::insertGetId($values, $sequence);
+        $id = $this->runStatement(fn () => parent::insertGetId($values, $sequence));
         $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy([$this->getPrimaryKeyName() => $id]));
 
         return $id;
@@ -177,7 +174,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     /** {@inheritDoc} */
     public function update(array $values)
     {
-        $count = parent::update($values);
+        $count = $this->runStatement(fn () => parent::update($values));
         $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_UPDATE, $values, $this->rowsAssignedBy($values));
 
         return $count;
@@ -186,9 +183,8 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     /** {@inheritDoc} */
     public function upsert(array $values, $uniqueBy, $update = null)
     {
-        $result = parent::upsert($values, $uniqueBy, $update);
-        // Treat UPSERT as an UPDATE-like invalidation to safely clear unspecific table tags.
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_UPDATE, is_array($values) ? (array) $values : []);
+        $result = $this->runStatement(fn () => parent::upsert($values, $uniqueBy, $update));
+        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_UPDATE, $values);
 
         return $result;
     }
@@ -196,18 +192,21 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     /** {@inheritDoc} */
     public function insertOrIgnore(array $values)
     {
-        $result = parent::insertOrIgnore($values);
+        $result = $this->runStatement(fn () => parent::insertOrIgnore($values));
         $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy($values));
 
         return $result;
     }
 
-    /** {@inheritDoc} */
-    public function updateOrInsert(array $attributes, callable|array $values = [])
+    /**
+     * {@inheritDoc}
+     *
+     * @return \Illuminate\Support\Collection<int, \stdClass>
+     */
+    public function insertOrIgnoreReturning(array $values, array $returning = ['*'], array|string|null $uniqueBy = null)
     {
-        $result = parent::updateOrInsert($attributes, $values);
-        // May perform insert or update; invalidate conservatively as UPDATE.
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_UPDATE, $values ?: $attributes);
+        $result = $this->runStatement(fn () => parent::insertOrIgnoreReturning($values, $returning, $uniqueBy));
+        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy($values));
 
         return $result;
     }
@@ -215,7 +214,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     /** {@inheritDoc} */
     public function delete($id = null)
     {
-        $count = parent::delete($id);
+        $count = $this->runStatement(fn () => parent::delete($id));
         $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_DELETE, [$this->getPrimaryKeyName() => $id]);
 
         return $count;
@@ -224,8 +223,21 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     /** {@inheritDoc} */
     public function truncate()
     {
-        parent::truncate();
+        $this->runStatement(fn () => parent::truncate());
         $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_TRUNCATE);
+    }
+
+    /**
+     * @template TResult
+     *
+     * @param  Closure(): TResult  $statement
+     * @return TResult
+     */
+    private function runStatement(Closure $statement): mixed
+    {
+        return $this->connection instanceof RunsBuilderStatements
+            ? $this->connection->runBuilderStatement($statement)
+            : $statement();
     }
 
     private function invalidateUnlessBypassed(string $queryType, array $values = [], AssignedRows $assignedRows = new AssignedRows): void

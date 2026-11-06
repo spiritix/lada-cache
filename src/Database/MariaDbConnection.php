@@ -13,8 +13,10 @@ use Spiritix\LadaCache\QueryHandler as LadaQueryHandler;
  * MariaDB is compatible with Laravel's MySQL driver, so we extend
  * Illuminate's MySqlConnection while providing Lada's query builder.
  */
-final class MariaDbConnection extends BaseMySqlConnection
+final class MariaDbConnection extends BaseMySqlConnection implements RunsBuilderStatements
 {
+    use InvalidatesRawStatements;
+
     /** {@inheritDoc} */
     public function query()
     {

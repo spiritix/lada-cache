@@ -6,6 +6,7 @@ namespace Spiritix\LadaCache\Tests\Integration\Cache;
 use Illuminate\Support\Facades\DB;
 use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\Redis as LadaRedis;
+use Spiritix\LadaCache\SchemaVersion;
 use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
 use Spiritix\LadaCache\Tests\TestCase;
 
@@ -20,7 +21,7 @@ class ConcurrencyTest extends TestCase
         [$key, $tags] = $this->cacheKeyAndTags($builder);
         $cache = app('lada.cache');
 
-        $slowReader = $cache->lookup($key, $tags);
+        $slowReader = $cache->lookup($key, $tags, SchemaVersion::ofConnection(DB::connection()));
         $this->assertInstanceOf(CacheMiss::class, $slowReader);
         $rowsReadBeforeWrite = [['id' => 910, 'name' => 'before', 'engine_id' => null, 'driver_id' => null]];
 

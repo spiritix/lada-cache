@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Tests\Concerns;
 
 use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Assert;
 use Spiritix\LadaCache\Cache;
 use Spiritix\LadaCache\CacheHit;
@@ -11,6 +12,7 @@ use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Hasher;
 use Spiritix\LadaCache\Reflector;
+use Spiritix\LadaCache\SchemaVersion;
 use Spiritix\LadaCache\Tagger;
 
 trait CacheAssertions
@@ -18,11 +20,11 @@ trait CacheAssertions
     /**
      * @param  array<string>  $tags
      */
-    protected function seedCache(string $key, array $tags, mixed $data): void
+    protected function seedCache(string $key, array $tags, array $rows): void
     {
-        $lookup = $this->ladaCache()->lookup($key, $tags);
+        $lookup = $this->ladaCache()->lookup($key, $tags, SchemaVersion::ofConnection(DB::connection()));
         Assert::assertInstanceOf(CacheMiss::class, $lookup, "Expected no valid entry for '{$key}' before seeding");
-        $this->ladaCache()->store($lookup, $data);
+        $this->ladaCache()->store($lookup, $rows);
     }
 
     /**
@@ -32,7 +34,7 @@ trait CacheAssertions
     {
         Assert::assertInstanceOf(
             CacheHit::class,
-            $this->ladaCache()->lookup($key, $tags),
+            $this->ladaCache()->lookup($key, $tags, SchemaVersion::ofConnection(DB::connection())),
             $message !== '' ? $message : "Failed asserting that cache has a valid entry for '{$key}'"
         );
     }
@@ -44,7 +46,7 @@ trait CacheAssertions
     {
         Assert::assertInstanceOf(
             CacheMiss::class,
-            $this->ladaCache()->lookup($key, $tags),
+            $this->ladaCache()->lookup($key, $tags, SchemaVersion::ofConnection(DB::connection())),
             $message !== '' ? $message : "Failed asserting that cache has no valid entry for '{$key}'"
         );
     }
