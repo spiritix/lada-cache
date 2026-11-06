@@ -50,6 +50,7 @@
 - Reads naming tables only inside raw SQL (`whereRaw`, `selectRaw`, raw joins, `fromRaw`) were never invalidated by writes to those tables
 - Writes to tables in `exclude_tables` or missing from `include_tables` did not invalidate, so foreign key actions carrying them into cached tables left those stale
 - Equally named databases on different servers shared cache entries, so one could serve the other's rows; entries are now keyed by driver, host, port and socket as well
+- On MySQL, reads of `otherdb.table` and writes to `table` on a connection to `otherdb` (or the reverse) missed each other; database-qualified tables are now tagged under their database
 - `insertOrIgnoreReturning()` never invalidated anything
 - `updateOrInsert()` with callback values failed with a `TypeError`
 - A nested transaction commit flushed invalidations before the outer transaction committed, letting other hosts cache uncommitted-era results, and a savepoint rollback discarded the invalidations of the enclosing transaction

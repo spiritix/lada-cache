@@ -39,11 +39,14 @@ final readonly class Tagger
      */
     public function getTags(): array
     {
-        $databaseTag = self::PREFIX_DATABASE.$this->reflector->getDatabase();
         $tables = array_values(array_filter($this->reflector->getTables(), 'is_string'));
 
         if (! $this->considerRows) {
-            return array_map(static fn (string $table): string => $databaseTag.self::PREFIX_TABLE_UNSPECIFIC.$table, $tables);
+            return array_values(array_unique(array_map(function (string $table): string {
+                [$database, $name] = $this->locate($table);
+
+                return self::PREFIX_DATABASE.$database.self::PREFIX_TABLE_UNSPECIFIC.$name;
+            }, $tables)));
         }
 
         $pinnedRows = $this->reflector->getRows();
@@ -51,16 +54,36 @@ final readonly class Tagger
         $tags = [];
 
         foreach ($tables as $table) {
+            [$database, $name] = $this->locate($table);
             $stringKeys = $this->reflector->usesStringKeys($table);
             $pinned = RowKeys::canonical($pinnedRows[$table] ?? [], $stringKeys);
             $assigned = $this->assignedRows->complete ? RowKeys::canonical($this->assignedRows->forTable($table), $stringKeys) : null;
 
-            foreach ($this->tableTags($type, $table, $pinned, $assigned) as $tag) {
-                $tags[$databaseTag.$tag] = true;
+            foreach ($this->tableTags($type, $name, $pinned, $assigned) as $tag) {
+                $tags[self::PREFIX_DATABASE.$database.$tag] = true;
             }
         }
 
         return array_map('strval', array_keys($tags));
+    }
+
+    /**
+     * Splits a qualified table name into the database and table it tags. MySQL qualifiers name
+     * databases, so `reports.sales` shares tags with `sales` written on a connection to
+     * `reports`; elsewhere they name schemas within the connection's database.
+     *
+     * @return array{string, string}
+     */
+    private function locate(string $table): array
+    {
+        $segments = explode('.', $table);
+        $name = (string) array_pop($segments);
+
+        if ($segments === [] || ! $this->reflector->qualifiersNameDatabases()) {
+            return [$this->reflector->getDatabase(), $name];
+        }
+
+        return [(string) end($segments), $name];
     }
 
     /**

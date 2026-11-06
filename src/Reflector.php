@@ -170,6 +170,13 @@ final class Reflector
         return $this->queryBuilder->getBindings();
     }
 
+    public function qualifiersNameDatabases(): bool
+    {
+        $connection = $this->queryBuilder->getConnection();
+
+        return $connection instanceof Connection && in_array($connection->getDriverName(), ['mysql', 'mariadb'], true);
+    }
+
     public function isPretending(): bool
     {
         $connection = $this->queryBuilder->getConnection();
