@@ -15,39 +15,38 @@ final class DifferentialFuzzTest extends TestCase
 
     public function testCachedReadsAlwaysMatchTheDatabase(): void
     {
-        $workload = new Workload(Workload::seedFromEnvironment(), self::databaseDriver());
-        $workload->seedData();
-        $iterations = Workload::iterationsFromEnvironment(self::DEFAULT_ITERATIONS);
-
-        for ($iteration = 1; $iteration <= $iterations; $iteration++) {
-            $workload->step();
-
-            if ($iteration % self::SWEEP_INTERVAL === 0) {
-                $workload->finish();
-                $workload->sweep();
-            }
-        }
-
-        $workload->finish();
-        $workload->sweep();
-
-        $this->assertGreaterThan(0, $workload->comparisons());
+        $this->runWorkload(Workload::iterationsFromEnvironment(self::DEFAULT_ITERATIONS));
     }
 
     public function testCachedReadsMatchTheDatabaseWithoutRowLevelTags(): void
     {
         config(['lada-cache.consider_rows' => false]);
+
+        $this->runWorkload(intdiv(Workload::iterationsFromEnvironment(self::DEFAULT_ITERATIONS), 2));
+    }
+
+    public function testCachedReadsMatchTheDatabaseWhenOnlyModelsAreCached(): void
+    {
+        config(['lada-cache.scope' => 'models']);
+
+        $this->runWorkload(intdiv(Workload::iterationsFromEnvironment(self::DEFAULT_ITERATIONS), 2));
+    }
+
+    public function testCachedReadsMatchTheDatabaseWithoutExpiration(): void
+    {
+        config(['lada-cache.expiration_time' => 0]);
+        $this->app->forgetInstance('lada.cache');
+        $this->app->forgetInstance('lada.handler');
+
+        $this->runWorkload(intdiv(Workload::iterationsFromEnvironment(self::DEFAULT_ITERATIONS), 2));
+    }
+
+    private function runWorkload(int $iterations): void
+    {
         $workload = new Workload(Workload::seedFromEnvironment(), self::databaseDriver());
-        $workload->seedData();
-        $iterations = intdiv(Workload::iterationsFromEnvironment(self::DEFAULT_ITERATIONS), 2);
-
-        for ($iteration = 1; $iteration <= $iterations; $iteration++) {
-            $workload->step();
-        }
-
-        $workload->finish();
-        $workload->sweep();
+        $workload->run($iterations, self::SWEEP_INTERVAL);
 
         $this->assertGreaterThan(0, $workload->comparisons());
+        $this->assertSame([], $workload->writesAlwaysRejected(3), 'These writes never succeeded, so the workload does not exercise them');
     }
 }

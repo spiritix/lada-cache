@@ -15,6 +15,7 @@ use Random\Engine\Mt19937;
 use Random\Randomizer;
 use Spiritix\LadaCache\Redis;
 use Spiritix\LadaCache\Tests\Database\Models\Car;
+use Spiritix\LadaCache\Tests\Database\Models\Driver;
 
 /**
  * Seeded random workload of reads, writes, transactions and cache disturbances against the
@@ -39,6 +40,11 @@ final class Workload
     private array $history = [];
 
     private int $comparisons = 0;
+
+    /** @var array<string, array{runs: int, rejected: int}> */
+    private array $writeStatistics = [];
+
+    private ?string $currentWrite = null;
 
     public function __construct(
         public readonly int $seed,
@@ -69,20 +75,45 @@ final class Workload
             DB::table('drivers')->insert(['id' => $id, 'name' => $this->name()]);
         }
         foreach (range(1, 5) as $id) {
-            DB::table('pets')->insert(['id' => $id, 'owner_id' => $this->random->getInt(1, 4), 'name' => $this->name()]);
+            DB::table('pets')->insert(['id' => $id, 'owner_id' => $this->random->getInt(1, 4), 'name' => $this->name(), 'age' => $this->random->getInt(0, 9)]);
             DB::table('cars')->insert(['id' => $id, 'name' => $this->name(), 'driver_id' => $this->random->getInt(1, 4), 'engine_id' => null]);
         }
         foreach (range(1, 3) as $id) {
+            DB::table('materials')->insert(['id' => $id, 'name' => $this->name()]);
+            DB::table('car_material')->insert(['car_id' => $this->random->getInt(1, 5), 'material_id' => $id]);
             DB::table('pet_toys')->insert(['id' => $id, 'pet_id' => $this->random->getInt(1, 5), 'name' => $this->name()]);
             DB::table('owner_notes')->insert(['id' => $id, 'owner_id' => $this->random->getInt(1, 4), 'body' => $this->name()]);
         }
         DB::table('owner_audits')->insert(['id' => 1, 'owner_id' => 4, 'event' => 'signup']);
 
         if ($this->driver === 'pgsql') {
-            foreach (['owners', 'drivers', 'pets', 'cars', 'pet_toys', 'owner_notes', 'owner_audits'] as $table) {
-                DB::statement("select setval(pg_get_serial_sequence('{$table}', 'id'), 100)");
+            foreach (['owners', 'drivers', 'pets', 'cars', 'pet_toys', 'owner_notes', 'owner_audits', 'materials'] as $table) {
+                DB::statement("select setval(pg_get_serial_sequence('{$this->table($table)}', 'id'), 100)");
             }
         }
+    }
+
+    private function table(string $name): string
+    {
+        return DB::connection()->getTablePrefix().$name;
+    }
+
+    private function toggleIndex(): void
+    {
+        if (DB::transactionLevel() > 0) {
+            return;
+        }
+
+        $index = $this->table('fuzz_owner_name_index');
+        $exists = DB::connection()->getSchemaBuilder()->hasIndex('owners', 'fuzz_owner_name_index');
+
+        if (! $exists) {
+            DB::statement("create index {$index} on {$this->table('owners')} (name)");
+
+            return;
+        }
+
+        DB::statement($this->driver === 'mysql' ? "drop index {$index} on {$this->table('owners')}" : "drop index {$index}");
     }
 
     /**
@@ -104,11 +135,37 @@ final class Workload
         } catch (QueryException $exception) {
             $this->log('database rejected the statement: '.strtok($exception->getMessage(), "\n"));
 
+            if ($this->currentWrite !== null) {
+                $this->writeStatistics[$this->currentWrite]['rejected']++;
+                $this->currentWrite = null;
+            }
+
             if (DB::transactionLevel() > 0) {
                 DB::rollBack(0);
                 $this->log('rolled back every open transaction');
             }
         }
+    }
+
+    /**
+     * Seeds the data and runs the iterations, comparing every read shape for every id after
+     * each $sweepEvery iterations and at the end.
+     */
+    public function run(int $iterations, int $sweepEvery = PHP_INT_MAX): void
+    {
+        $this->seedData();
+
+        for ($iteration = 1; $iteration <= $iterations; $iteration++) {
+            $this->step();
+
+            if ($iteration % $sweepEvery === 0) {
+                $this->finish();
+                $this->sweep();
+            }
+        }
+
+        $this->finish();
+        $this->sweep();
     }
 
     public function finish(): void
@@ -134,6 +191,21 @@ final class Workload
     public function comparisons(): int
     {
         return $this->comparisons;
+    }
+
+    /**
+     * Write operations the database rejected every time, so the workload never exercised them.
+     *
+     * @return list<string>
+     */
+    public function writesAlwaysRejected(int $minimumRuns): array
+    {
+        $rejected = array_filter(
+            $this->writeStatistics,
+            static fn (array $statistics): bool => $statistics['runs'] >= $minimumRuns && $statistics['rejected'] === $statistics['runs'],
+        );
+
+        return array_keys($rejected);
     }
 
     private function read(bool $compare): void
@@ -224,6 +296,21 @@ final class Workload
             'car models find many' => fn (int $id) => static fn (bool $cached): array => ($cached ? Car::query() : Car::query()->withoutCache())->findMany([$id, $id + 1], ['id', 'name'])->sortBy('id')->values()->toArray(),
             'car model count' => fn () => static fn (bool $cached): int => ($cached ? Car::query() : Car::query()->withoutCache())->count(),
             'cars of driver' => fn (int $id) => $rows(fn () => DB::table('cars')->where('driver_id', $id)->whereNull('deleted_at')->orderBy('id')->select('id', 'name')),
+            'pet ages by owner' => fn () => $rows(fn () => DB::table('pets')->select('owner_id', DB::raw('sum(age) as total_age'), DB::raw('count(*) as pets'))->groupBy('owner_id')->havingRaw('count(*) > 0')->orderBy('owner_id')),
+            'distinct pet names' => fn () => $scalar(fn () => DB::table('pets')->distinct()->orderBy('name'), static fn (Builder $query): array => $query->pluck('name')->all()),
+            'oldest pet' => fn () => $rows(fn () => DB::table('pets')->orderByDesc('age')->orderBy('id')->limit(1)),
+            'pets page' => fn (int $id) => $rows(fn () => DB::table('pets')->orderBy('id')->offset($id % 4)->limit(3)),
+            'pet age value' => fn (int $id) => $scalar(fn () => DB::table('pets')->where('id', $id), static fn (Builder $query): mixed => $query->value('age')),
+            'average age' => fn () => $scalar(fn () => DB::table('pets'), static fn (Builder $query): ?string => ($average = $query->avg('age')) === null ? null : number_format((float) $average, 4)),
+            'no pets of owner' => fn (int $id) => $scalar(fn () => DB::table('pets')->where('owner_id', $id), static fn (Builder $query): bool => $query->doesntExist()),
+            'pets where age column' => fn () => $rows(fn () => DB::table('pets')->whereColumn('age', '>', 'owner_id')->orderBy('id')->select('id')),
+            'notes of owner names' => fn (int $id, string $name) => $rows(fn () => DB::table('owner_notes')->whereIn('owner_id', fn (Builder $query) => $query->select('id')->from('owners')->where('name', $name))->orderBy('id')),
+            'car models with driver' => fn (int $id) => static fn (bool $cached): array => ($cached ? Car::query() : Car::query()->withoutCache())->with('driver:id,name')->whereKey([$id, $id + 1])->orderBy('id')->get(['id', 'name', 'driver_id'])->toArray(),
+            'car models with materials' => fn (int $id) => static fn (bool $cached): array => ($cached ? Car::query() : Car::query()->withoutCache())->with('materials:id,name')->whereKey($id)->get(['id'])->map(static fn (Car $car): array => [$car->id, $car->materials->sortBy('id')->pluck('id')->values()->all()])->all(),
+            'drivers with car count' => fn () => static fn (bool $cached): array => ($cached ? Driver::query() : Driver::query()->withoutCache())->withCount('cars')->orderBy('id')->get(['id'])->map(static fn (Driver $driver): array => [$driver->id, $driver->cars_count])->all(),
+            'drivers having cars named' => fn (int $id, string $name) => static fn (bool $cached): array => ($cached ? Driver::query() : Driver::query()->withoutCache())->whereHas('cars', static fn (EloquentBuilder $query) => $query->where('name', $name))->orderBy('id')->pluck('id')->all(),
+            'trashed cars' => fn () => static fn (bool $cached): array => ($cached ? Car::onlyTrashed() : Car::onlyTrashed()->withoutCache())->orderBy('id')->pluck('id')->all(),
+            'car material pairs' => fn () => $rows(fn () => DB::table('car_material')->orderBy('car_id')->orderBy('material_id')->select('car_id', 'material_id')),
         ];
     }
 
@@ -243,20 +330,43 @@ final class Workload
             'delete pets range' => fn () => DB::table('pets')->whereBetween('id', [$this->id(), $this->id() + 1])->delete(),
             'delete note' => fn () => DB::table('owner_notes')->where('id', $this->id())->delete(),
             'rename toy' => fn () => DB::table('pet_toys')->where('id', $this->id())->update(['name' => $this->name()]),
-            'raw update pet' => fn () => DB::update('update pets set name = ? where id = ?', [$this->name(), $this->id()]),
-            'raw insert note' => fn () => DB::insert('insert into owner_notes (owner_id, body) values (?, ?)', [$this->existingId('owners'), $this->name()]),
-            'raw delete toy' => fn () => DB::delete('delete from pet_toys where id = ?', [$this->id()]),
+            'raw update pet' => fn () => DB::update("update {$this->table('pets')} set name = ? where id = ?", [$this->name(), $this->id()]),
+            'raw insert note' => fn () => DB::insert("insert into {$this->table('owner_notes')} (owner_id, body) values (?, ?)", [$this->existingId('owners'), $this->name()]),
+            'raw delete toy' => fn () => DB::delete("delete from {$this->table('pet_toys')} where id = ?", [$this->id()]),
             'update or insert owner' => fn () => DB::table('owners')->updateOrInsert(['id' => $this->id()], ['name' => $this->name()]),
             'create car model' => fn () => Car::query()->create(['name' => $this->name(), 'driver_id' => $this->existingId('drivers')]),
             'update car model' => fn () => Car::query()->withoutCache()->find($this->id())?->update(['name' => $this->name()]),
             'soft delete car model' => fn () => Car::query()->withoutCache()->find($this->id())?->delete(),
             'update driver' => fn () => DB::table('drivers')->where('id', $this->id())->update(['name' => $this->name()]),
             'truncate toys' => fn () => DB::transactionLevel() === 0 ? DB::table('pet_toys')->truncate() : null,
+            'increment pet age' => fn () => DB::table('pets')->where('id', $this->id())->increment('age', $this->random->getInt(1, 3)),
+            'decrement ages of owner' => fn () => DB::table('pets')->where('owner_id', $this->id())->decrement('age'),
+            'increment many ages' => fn () => DB::table('pets')->whereIn('id', [$this->id(), $this->id()])->incrementEach(['age' => 1]),
+            'update pets of named owners' => fn () => DB::table('pets')->whereIn('owner_id', DB::table('owners')->select('id')->where('name', $this->name()))->update(['name' => $this->name()]),
+            'update pets joined to owners' => fn () => DB::table('pets')->join('owners', 'owners.id', '=', 'pets.owner_id')->where('owners.name', $this->name())->update(['pets.age' => $this->random->getInt(0, 9)]),
+            'delete pets of named owners' => fn () => DB::table('pets')->whereExists(fn (Builder $query) => $query->select(DB::raw(1))->from('owners')->whereColumn('owners.id', 'pets.owner_id')->where('owners.name', $this->name()))->delete(),
+            'copy owners into notes' => fn () => DB::table('owner_notes')->insertUsing(['owner_id', 'body'], DB::table('owners')->select('id', 'name')->where('name', $this->name())),
+            'update without cache' => fn () => DB::table('owners')->withoutCache()->where('id', $this->id())->update(['name' => $this->name()]),
+            'delete without cache' => fn () => DB::table('pet_toys')->withoutCache()->where('id', $this->id())->delete(),
+            'raw multi statement' => fn () => DB::unprepared(sprintf("update %s set name = 'a' where id = %d; update %s set body = 'b' where id = %d", $this->table('owners'), $this->id(), $this->table('owner_notes'), $this->id())),
+            'raw index ddl' => fn () => $this->toggleIndex(),
+            'eloquent increment' => fn () => Car::query()->withoutCache()->find($this->id())?->increment('driver_id', 0, ['name' => $this->name()]),
+            'eloquent restore' => fn () => Car::onlyTrashed()->withoutCache()->find($this->id())?->restore(),
+            'eloquent force delete' => fn () => Car::withTrashed()->withoutCache()->find($this->id())?->forceDelete(),
+            'sync car materials' => fn () => Car::query()->withoutCache()->find($this->id())?->materials()->sync(array_slice([1, 2, 3], 0, $this->random->getInt(0, 3))),
+            'attach car material' => fn () => Car::query()->withoutCache()->find($this->id())?->materials()->syncWithoutDetaching([$this->random->getInt(1, 3)]),
+            'rename material' => fn () => DB::table('materials')->where('id', $this->random->getInt(1, 3))->update(['name' => $this->name()]),
+            'eloquent mass update' => fn () => Car::query()->where('driver_id', $this->id())->update(['name' => $this->name()]),
+            'eloquent mass delete' => fn () => Car::query()->whereKey($this->id())->delete(),
         ];
 
         $label = $this->pick(array_keys($writes));
         $this->log("write {$label}");
+        $this->writeStatistics[$label] ??= ['runs' => 0, 'rejected' => 0];
+        $this->writeStatistics[$label]['runs']++;
+        $this->currentWrite = $label;
         $writes[$label]();
+        $this->currentWrite = null;
     }
 
     private function transactionControl(): void

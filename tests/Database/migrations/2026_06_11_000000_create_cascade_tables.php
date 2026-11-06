@@ -19,6 +19,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('owner_id')->constrained('owners')->cascadeOnDelete()->cascadeOnUpdate();
             $table->string('name');
+            $table->unsignedInteger('age')->default(0);
         });
 
         Schema::create('pet_toys', function (Blueprint $table) {
