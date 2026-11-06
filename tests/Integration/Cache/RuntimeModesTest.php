@@ -103,6 +103,15 @@ final class RuntimeModesTest extends TestCase
         $this->assertSame('updated', DB::table('cars')->where('id', 1)->value('name'));
     }
 
+    public function testPretendedReadsAreNotCached(): void
+    {
+        DB::table('cars')->insert(['id' => 1, 'name' => 'real', 'engine_id' => null, 'driver_id' => null]);
+
+        DB::pretend(fn () => DB::table('cars')->where('id', 1)->value('name'));
+
+        $this->assertSame('real', DB::table('cars')->where('id', 1)->value('name'));
+    }
+
     public function testFetchModesBypassTheCacheAndReachPdo(): void
     {
         DB::table('cars')->insert(['id' => 1, 'name' => 'first', 'engine_id' => null, 'driver_id' => null]);

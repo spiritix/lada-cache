@@ -160,6 +160,13 @@ final class Reflector
         return $this->queryBuilder->getBindings();
     }
 
+    public function isPretending(): bool
+    {
+        $connection = $this->queryBuilder->getConnection();
+
+        return $connection instanceof Connection && $connection->pretending();
+    }
+
     public function inTransaction(): bool
     {
         $connection = $this->queryBuilder->getConnection();

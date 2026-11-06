@@ -140,6 +140,16 @@ final class ForeignKeyCascadeTest extends TestCase
         $this->assertSame('written by a trigger', DB::table('materials')->where('id', 1)->value('name'));
     }
 
+    public function testWritesToTablesExcludedFromCachingStillCascade(): void
+    {
+        config(['lada-cache.exclude_tables' => ['owners']]);
+        $this->assertSame(2, DB::table('pets')->count());
+
+        DB::table('owners')->where('id', 1)->delete();
+
+        $this->assertSame(1, DB::table('pets')->count());
+    }
+
     public function testDependentsAreReadOncePerGeneration(): void
     {
         DB::table('pets')->count();

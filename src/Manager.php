@@ -37,9 +37,7 @@ final readonly class Manager
 
     public function shouldCache(): bool
     {
-        // Avoid caching while a DB transaction is active to prevent serving
-        // stale data within the same transaction (invalidations flush on commit).
-        if ($this->reflector->inTransaction()) {
+        if ($this->reflector->inTransaction() || $this->reflector->isPretending()) {
             return false;
         }
 
@@ -54,11 +52,13 @@ final readonly class Manager
         return ! NonDeterministicSql::isNonDeterministic($this->reflector->getSql());
     }
 
+    /**
+     * Writes invalidate even for tables excluded from caching, since foreign key actions can
+     * carry them into cached tables; invalidating tags nothing reads costs nothing.
+     */
     public function shouldInvalidate(): bool
     {
-        // Unlike shouldCache(), this does not disable behavior inside transactions,
-        // because invalidations must be queued during a transaction and flushed on commit.
-        return $this->cacheActive && $this->tablesCacheable();
+        return $this->cacheActive && ! $this->reflector->isPretending();
     }
 
     private function tablesCacheable(): bool
@@ -69,12 +69,10 @@ final readonly class Manager
             return true;
         }
 
-        // Inclusive mode: every referenced table must be present in includeTables
         if ($this->includeTables !== []) {
             return array_diff($tables, $this->includeTables) === [];
         }
 
-        // Exclusive mode: no referenced table may appear in excludeTables
         return array_intersect($tables, $this->excludeTables) === [];
     }
 }
