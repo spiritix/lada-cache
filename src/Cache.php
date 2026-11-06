@@ -38,27 +38,28 @@ final class Cache
     /**
      * @param  array<string>  $tags
      */
-    public function lookup(string $key, array $tags, SchemaVersion $schema): CacheHit|CacheMiss
+    public function lookup(string $key, array $tags): CacheHit|CacheMiss
     {
-        $reply = $this->evaluateLookup($key, $tags, $schema, '');
+        $reply = $this->redis->evaluate(LuaScripts::LOOKUP, [
+            $key,
+            self::freshToken(),
+            $this->expiration->nextTtl(),
+            ...self::canonicalTags($tags),
+        ]);
 
-        if ($reply === 0) {
-            $reply = $this->evaluateLookup($key, $tags, $schema, $schema->resolve());
-        }
-
-        if (! is_array($reply) || ! isset($reply[0], $reply[1], $reply[2])) {
+        if (! is_array($reply) || ! isset($reply[0], $reply[1])) {
             throw new UnexpectedValueException('Malformed Lada Cache lookup reply for key '.$key);
         }
 
-        if (isset($reply[3])) {
-            $rows = $this->encoder->decode((string) $reply[3]);
+        if (isset($reply[2])) {
+            $rows = $this->encoder->decode((string) $reply[2]);
 
             if ($rows !== null) {
                 return new CacheHit($rows);
             }
         }
 
-        return new CacheMiss(new Generation((string) $reply[0]), (string) $reply[1], $key, (string) $reply[2]);
+        return new CacheMiss(new Generation((string) $reply[0]), $key, (string) $reply[1]);
     }
 
     /**
@@ -68,32 +69,11 @@ final class Cache
     {
         $this->redis->evaluate(LuaScripts::STORE, [
             $miss->generation->id,
-            $miss->schema,
             $miss->key,
             $miss->fingerprint,
             $this->expiration->nextTtl(),
             $this->encoder->encode($rows),
         ]);
-    }
-
-    /**
-     * @param  array<string>  $tags
-     */
-    private function evaluateLookup(string $key, array $tags, SchemaVersion $schema, string $schemaCandidate): mixed
-    {
-        $reply = $this->redis->evaluate(LuaScripts::LOOKUP, [
-            $key,
-            self::freshToken(),
-            $this->expiration->nextTtl(),
-            $schema->database,
-            $schemaCandidate,
-            SchemaVersion::TTL_SECONDS,
-            ...self::canonicalTags($tags),
-        ]);
-
-        return $reply === 0 && $schemaCandidate !== ''
-            ? throw new UnexpectedValueException('Lada Cache lookup ignored the schema version for key '.$key)
-            : $reply;
     }
 
     /**

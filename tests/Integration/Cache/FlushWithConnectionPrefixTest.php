@@ -11,7 +11,6 @@ use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\Encoder;
 use Spiritix\LadaCache\ExpirationPolicy;
 use Spiritix\LadaCache\Redis;
-use Spiritix\LadaCache\SchemaVersion;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class FlushWithConnectionPrefixTest extends TestCase
@@ -28,11 +27,11 @@ class FlushWithConnectionPrefixTest extends TestCase
     {
         $cache = $this->freshCache();
 
-        $miss = $cache->lookup('k1', ['t1'], SchemaVersion::fixed('test', '1'));
+        $miss = $cache->lookup('k1', ['t1']);
         $this->assertInstanceOf(CacheMiss::class, $miss);
         $cache->store($miss, ['row']);
 
-        $hit = $cache->lookup('k1', ['t1'], SchemaVersion::fixed('test', '1'));
+        $hit = $cache->lookup('k1', ['t1']);
         $this->assertInstanceOf(CacheHit::class, $hit);
         $this->assertSame(['row'], $hit->rows);
         $this->assertContains('app_lada:generation', RedisFacade::connection('cache')->keys('lada:*'));
@@ -45,7 +44,7 @@ class FlushWithConnectionPrefixTest extends TestCase
 
         $cache->invalidate(['t1']);
 
-        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k1', ['t1'], SchemaVersion::fixed('test', '1')));
+        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k1', ['t1']));
     }
 
     public function testFlushDeletesAllEntriesAndKeepsOnlyTheGenerationKey(): void
@@ -57,9 +56,7 @@ class FlushWithConnectionPrefixTest extends TestCase
 
         $cache->flush();
 
-        $keys = RedisFacade::connection('cache')->keys('lada:*');
-        sort($keys);
-        $this->assertSame(['app_lada:generation', 'app_lada:schema:test'], $keys);
+        $this->assertSame(['app_lada:generation'], RedisFacade::connection('cache')->keys('lada:*'));
     }
 
     private function freshCache(): Cache
@@ -74,7 +71,7 @@ class FlushWithConnectionPrefixTest extends TestCase
      */
     private function seedEntry(Cache $cache, string $key, array $tags, array $rows): void
     {
-        $miss = $cache->lookup($key, $tags, SchemaVersion::fixed('test', '1'));
+        $miss = $cache->lookup($key, $tags);
         $this->assertInstanceOf(CacheMiss::class, $miss);
         $cache->store($miss, $rows);
     }

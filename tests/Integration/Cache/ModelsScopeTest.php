@@ -85,7 +85,7 @@ final class ModelsScopeTest extends TestCase
 
         return count(array_filter(
             DB::getQueryLog(),
-            static fn (array $entry): bool => str_starts_with(strtolower($entry['query']), 'select') && ! str_contains($entry['query'], 'migrations'),
+            static fn (array $entry): bool => str_starts_with(strtolower($entry['query']), 'select'),
         ));
     }
 }

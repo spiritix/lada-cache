@@ -10,7 +10,6 @@ use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\Encoder;
 use Spiritix\LadaCache\ExpirationPolicy;
 use Spiritix\LadaCache\Redis;
-use Spiritix\LadaCache\SchemaVersion;
 use Spiritix\LadaCache\Tests\TestCase;
 
 final class ExpirationPolicyTest extends TestCase
@@ -67,10 +66,10 @@ final class ExpirationPolicyTest extends TestCase
         $ttls = [];
 
         for ($entry = 0; $entry < 20; $entry++) {
-            $miss = $cache->lookup("k{$entry}", ["t{$entry}"], SchemaVersion::fixed('test', '1'));
+            $miss = $cache->lookup("k{$entry}", ["t{$entry}"]);
             $this->assertInstanceOf(CacheMiss::class, $miss);
             $cache->store($miss, ['row']);
-            $ttls[] = (int) $redis->ttl("jitter:{$miss->generation->id}:e:1:k{$entry}");
+            $ttls[] = (int) $redis->ttl("jitter:{$miss->generation->id}:e:k{$entry}");
             $ttls[] = (int) $redis->ttl("jitter:{$miss->generation->id}:v:t{$entry}");
         }
 

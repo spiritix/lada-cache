@@ -11,39 +11,21 @@ namespace Spiritix\LadaCache;
  * prepended by `Redis::evaluate()`, and builds keys itself, so all keys share one layout
  * regardless of the Redis client:
  *
- * - `<base>generation`                       current generation id
- * - `<base>schema:<database>`                 schema version of a database, read from its
- *                                              migrations table and kept for a few seconds
- * - `<base><generation>:e:<schema>:<hash>`    entry: 40 character fingerprint, then the payload
- * - `<base><generation>:v:<tag>`              current version token of a tag
+ * - `<base>generation`             current generation id
+ * - `<base><generation>:e:<hash>`  entry: 40 character fingerprint followed by the payload
+ * - `<base><generation>:v:<tag>`   current version token of a tag
  *
  * An entry is valid only while the fingerprint of its tags' current tokens matches the one
  * captured before the query ran, so a result read before a concurrent write is never served.
- * Entries live under the schema version they were read with, so once a migration is recorded
- * every host stops reading entries of the previous schema within the schema TTL, even when
- * nothing retired the generation. Version tokens are shared across schema versions, so a
- * write invalidates entries of every schema version.
  */
 final class LuaScripts
 {
     /**
-     * ARGV: base, entry hash, fresh token, ttl seconds, database, schema candidate, schema ttl, tags...
-     * Returns 0 when the schema version is unknown and the candidate is empty; the caller then
-     * reads it from the database and retries with it as candidate. Otherwise returns
-     * {generation, schema, fingerprint} on a miss and {generation, schema, fingerprint, payload}
-     * on a hit.
+     * ARGV: base, entry hash, fresh token, ttl seconds, tags...
+     * Returns {generation, fingerprint} on a miss and {generation, fingerprint, payload} on a hit.
      */
     public const string LOOKUP = <<<'LUA'
         local base, fresh, ttl = ARGV[1], ARGV[3], tonumber(ARGV[4])
-        local schemaKey = base .. 'schema:' .. ARGV[5]
-        local schema = redis.call('GET', schemaKey)
-        if not schema then
-            if ARGV[6] == '' then
-                return 0
-            end
-            redis.call('SET', schemaKey, ARGV[6], 'EX', tonumber(ARGV[7]))
-            schema = ARGV[6]
-        end
         local generationKey = base .. 'generation'
         local generation = redis.call('GET', generationKey)
         if not generation then
@@ -52,7 +34,7 @@ final class LuaScripts
         end
         local scope = base .. generation .. ':'
         local tokens = {}
-        for i = 8, #ARGV do
+        for i = 5, #ARGV do
             local versionKey = scope .. 'v:' .. ARGV[i]
             local token = redis.call('GET', versionKey)
             if not token then
@@ -66,24 +48,24 @@ final class LuaScripts
             tokens[#tokens + 1] = token
         end
         local fingerprint = redis.sha1hex(table.concat(tokens, ':'))
-        local entry = redis.call('GET', scope .. 'e:' .. schema .. ':' .. ARGV[2])
+        local entry = redis.call('GET', scope .. 'e:' .. ARGV[2])
         if entry and string.sub(entry, 1, 40) == fingerprint then
-            return {generation, schema, fingerprint, string.sub(entry, 41)}
+            return {generation, fingerprint, string.sub(entry, 41)}
         end
-        return {generation, schema, fingerprint}
+        return {generation, fingerprint}
         LUA;
 
     /**
-     * ARGV: base, generation, schema, entry hash, fingerprint, ttl seconds, payload
+     * ARGV: base, generation, entry hash, fingerprint, ttl seconds, payload
      * Returns 1 when stored and 0 when the generation was retired meanwhile.
      */
     public const string STORE = <<<'LUA'
-        local base, generation, ttl = ARGV[1], ARGV[2], tonumber(ARGV[6])
+        local base, generation, ttl = ARGV[1], ARGV[2], tonumber(ARGV[5])
         if redis.call('GET', base .. 'generation') ~= generation then
             return 0
         end
-        local entryKey = base .. generation .. ':e:' .. ARGV[3] .. ':' .. ARGV[4]
-        local value = ARGV[5] .. ARGV[7]
+        local entryKey = base .. generation .. ':e:' .. ARGV[3]
+        local value = ARGV[4] .. ARGV[6]
         if ttl > 0 then
             redis.call('SET', entryKey, value, 'EX', ttl)
         else
@@ -123,14 +105,13 @@ final class LuaScripts
 
     /**
      * ARGV: base, cursor, batch size
-     * Deletes one SCAN batch of keys that belong to no current entry, version or schema version.
+     * Deletes one SCAN batch of keys that belong to no current entry or version.
      * Returns {next cursor, deleted count}.
      */
     public const string PRUNE_BATCH = <<<'LUA'
         local base = ARGV[1]
         local pattern = string.gsub(base, '([%*%?%[%]\\])', '\\%1') .. '*'
         local generationKey = base .. 'generation'
-        local schemaPrefix = base .. 'schema:'
         local generation = redis.call('GET', generationKey)
         local entryPrefix, versionPrefix
         if generation then
@@ -142,7 +123,7 @@ final class LuaScripts
         for _, key in ipairs(scan[2]) do
             local current = generation ~= false and generation ~= nil
                 and (string.sub(key, 1, #entryPrefix) == entryPrefix or string.sub(key, 1, #versionPrefix) == versionPrefix)
-            if key ~= generationKey and string.sub(key, 1, #schemaPrefix) ~= schemaPrefix and not current then
+            if key ~= generationKey and not current then
                 stale[#stale + 1] = key
             end
         end

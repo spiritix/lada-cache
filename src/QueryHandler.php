@@ -118,12 +118,6 @@ final class QueryHandler
             return $queryClosure();
         }
 
-        $connection = $this->builder->getConnection();
-
-        if (! $connection instanceof Connection) {
-            return $queryClosure();
-        }
-
         try {
             $reflector = new Reflector($this->builder);
             $cacheable = (new Manager($reflector))->shouldCache();
@@ -139,7 +133,7 @@ final class QueryHandler
             return $queryClosure();
         }
 
-        $lookup = $this->lookup($key, $tags, SchemaVersion::ofConnection($connection));
+        $lookup = $this->lookup($key, $tags);
 
         if ($lookup instanceof CacheHit) {
             $this->stopCollector($reflector, $tags, $key, 'Hit');
@@ -189,10 +183,10 @@ final class QueryHandler
     /**
      * @param  array<string>  $tags
      */
-    private function lookup(string $key, array $tags, SchemaVersion $schema): CacheHit|CacheMiss|null
+    private function lookup(string $key, array $tags): CacheHit|CacheMiss|null
     {
         try {
-            return $this->cache->lookup($key, $tags, $schema);
+            return $this->cache->lookup($key, $tags);
         } catch (Throwable $exception) {
             FailureReporter::report(CacheOperation::Read, $exception, ['key' => $key]);
 

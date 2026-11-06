@@ -14,7 +14,6 @@
 - Removed `Invalidator` and the `lada.invalidator` binding; invalidation is part of `Cache`
 - An invalid `lada-cache.scope`, `expiration_time` or `expiration_jitter` disables Lada Cache with a logged error instead of failing the application boot
 - Subquery tables are tracked on the builder that owns them instead of on the shared query handler, which also lets `include_tables`/`exclude_tables` see them
-- Entries are also scoped by the schema version of their database (highest migrations id, re-read at most every two seconds), so hosts stop serving entries of a previous schema within two seconds of a recorded migration even when nothing retired the generation, for example when the migration job runs without Lada Cache or cannot reach Redis
 - `schema:load`, `migrate:fresh`/`refresh` and raw DDL retire the generation; retiring after a schema change retries for about a second and ignores the failure cooldown, and a schema change inside a transaction retires again when it ends
 - The failure cooldown is shared across PHP-FPM requests and processes through APCu when available; under FrankenPHP worker mode and Octane it lasts for the worker. Pending transaction invalidations are held per connection object, so purged connections in long-lived workers leave nothing behind
 - Lua scripts run by SHA (`EVALSHA`, falling back to `EVAL` after `SCRIPT FLUSH`), so their source is no longer sent with every query

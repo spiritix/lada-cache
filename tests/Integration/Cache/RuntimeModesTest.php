@@ -13,7 +13,6 @@ use Spiritix\LadaCache\CacheUnavailableException;
 use Spiritix\LadaCache\Encoder;
 use Spiritix\LadaCache\ExpirationPolicy;
 use Spiritix\LadaCache\Redis;
-use Spiritix\LadaCache\SchemaVersion;
 use Spiritix\LadaCache\Support\RedisAvailability;
 use Spiritix\LadaCache\Tests\TestCase;
 use Throwable;
@@ -39,12 +38,11 @@ final class RuntimeModesTest extends TestCase
     public function testScriptsAreReloadedAfterRedisForgetsThem(): void
     {
         $cache = new Cache(new Redis(), new Encoder(), new ExpirationPolicy(0));
-        $schema = SchemaVersion::fixed('db', '1');
-        $cache->store($this->miss($cache, $schema), [['id' => 1]]);
+        $cache->store($this->miss($cache), [['id' => 1]]);
 
         RedisFacade::connection((string) config('lada-cache.redis_connection'))->command('script', ['flush']);
 
-        $this->assertInstanceOf(CacheHit::class, $cache->lookup('k', ['t'], $schema));
+        $this->assertInstanceOf(CacheHit::class, $cache->lookup('k', ['t']));
     }
 
     public function testCooldownOutlivesTheRequestWhenApcuIsAvailable(): void
@@ -131,9 +129,9 @@ final class RuntimeModesTest extends TestCase
         return null;
     }
 
-    private function miss(Cache $cache, SchemaVersion $schema): CacheMiss
+    private function miss(Cache $cache): CacheMiss
     {
-        $lookup = $cache->lookup('k', ['t'], $schema);
+        $lookup = $cache->lookup('k', ['t']);
         $this->assertInstanceOf(CacheMiss::class, $lookup);
 
         return $lookup;

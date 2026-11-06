@@ -11,7 +11,6 @@ use Spiritix\LadaCache\Encoder;
 use Spiritix\LadaCache\ExpirationPolicy;
 use Spiritix\LadaCache\Manager;
 use Spiritix\LadaCache\Redis as LadaRedis;
-use Spiritix\LadaCache\SchemaVersion;
 use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Tagger;
 use Spiritix\LadaCache\Tests\TestCase;
@@ -75,11 +74,11 @@ class ConfigurationBehaviourTest extends TestCase
         $redis = new LadaRedis();
         $cache = new Cache($redis, new Encoder(), new ExpirationPolicy(60));
 
-        $miss = $cache->lookup('expire-key', ['tag'], SchemaVersion::fixed('test', '1'));
+        $miss = $cache->lookup('expire-key', ['tag']);
         $this->assertInstanceOf(CacheMiss::class, $miss);
         $cache->store($miss, ['x' => 1]);
 
-        $entryTtl = (int) $redis->ttl($redis->prefix($miss->generation->id.':e:1:expire-key'));
+        $entryTtl = (int) $redis->ttl($redis->prefix($miss->generation->id.':e:expire-key'));
         $versionTtl = (int) $redis->ttl($redis->prefix($miss->generation->id.':v:tag'));
         $this->assertGreaterThan(0, $entryTtl);
         $this->assertLessThanOrEqual(60, $entryTtl);

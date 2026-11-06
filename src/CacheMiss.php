@@ -12,7 +12,6 @@ final readonly class CacheMiss
 
     public function __construct(
         public Generation $generation,
-        public string $schema,
         public string $key,
         public string $fingerprint,
     ) {
