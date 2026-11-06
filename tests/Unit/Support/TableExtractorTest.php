@@ -34,6 +34,17 @@ class TableExtractorTest extends TestCase
         $this->assertContains('cars', $tables);
     }
 
+    public function testExtractTablesFromFromSubWithAliasThatIsNotATable(): void
+    {
+        $sub = DB::table('cars')->join('drivers', 'drivers.id', '=', 'cars.driver_id')->select('cars.id');
+        $b = DB::query()->fromSub(DB::query()->fromSub($sub, 'inner_cars'), 'outer_cars');
+
+        $tables = TableExtractor::extractTables($b);
+
+        $this->assertContains('cars', $tables);
+        $this->assertContains('drivers', $tables);
+    }
+
     public function testExtractTablesFromExistsSubquery(): void
     {
         $b = DB::table('cars')->whereExists(function ($q): void {

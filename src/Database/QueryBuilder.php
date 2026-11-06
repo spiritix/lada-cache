@@ -14,6 +14,7 @@ use Illuminate\Database\Query\Grammars\Grammar;
 use Illuminate\Database\Query\Processors\Processor;
 use Spiritix\LadaCache\QueryHandler;
 use Spiritix\LadaCache\Reflector;
+use Spiritix\LadaCache\Support\TableExtractor;
 
 /**
  * LadaCache Query Builder for Laravel 12+
@@ -29,6 +30,11 @@ class QueryBuilder extends Builder
     private readonly ?Model $model;
 
     private bool $cacheBypassed = false;
+
+    /**
+     * @var array<int, string>
+     */
+    private array $fromSubTables = [];
 
     public function __construct(
         ConnectionInterface $connection,
@@ -128,6 +134,27 @@ class QueryBuilder extends Builder
             });
     }
 
+    /**
+     * @return array<int, string>
+     */
+    public function getFromSubTables(): array
+    {
+        return $this->fromSubTables;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @param  Closure|Builder|EloquentBuilder<*>|Relation<*, *, *>|string  $query
+     */
+    public function fromSub($query, $as)
+    {
+        $subQuery = $this->resolveSubQuery($query);
+        $this->fromSubTables = $subQuery instanceof Builder ? TableExtractor::extractTables($subQuery) : [];
+
+        return parent::fromSub($subQuery, $as);
+    }
+
     /** {@inheritDoc} */
     public function selectSub($query, $as)
     {
@@ -156,18 +183,24 @@ class QueryBuilder extends Builder
             return parent::whereIn($column, $values, $boolean, $not);
         }
 
-        if ($values instanceof Closure) {
-            $callback = $values;
-            $callback($values = $this->forSubQuery());
-        }
+        $subQuery = $this->resolveSubQuery($values);
+        parent::whereIn($column, $subQuery, $boolean, $not);
 
-        parent::whereIn($column, $values, $boolean, $not);
-        $query = $values instanceof EloquentBuilder || $values instanceof Relation ? $values->toBase() : $values;
-        if ($query instanceof Builder) {
-            $this->wheres[array_key_last($this->wheres)]['query'] = $query;
+        if ($subQuery instanceof Builder) {
+            $this->wheres[array_key_last($this->wheres)]['query'] = $subQuery;
         }
 
         return $this;
+    }
+
+    private function resolveSubQuery(mixed $query): mixed
+    {
+        if ($query instanceof Closure) {
+            $callback = $query;
+            $callback($query = $this->forSubQuery());
+        }
+
+        return $query instanceof EloquentBuilder || $query instanceof Relation ? $query->toBase() : $query;
     }
 
     /** {@inheritDoc} */
