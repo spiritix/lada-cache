@@ -34,6 +34,17 @@ final class RawStatementInvalidationTest extends TestCase
         $this->assertSame('raw', DB::table('cars')->where('id', 1)->first()?->name);
     }
 
+    public function testExplainAnalyzeOfADeleteRefreshesCachedCounts(): void
+    {
+        $this->requireDatabaseDriver('pgsql');
+        DB::table('cars')->insert(['id' => 1, 'name' => 'gone', 'engine_id' => null, 'driver_id' => null]);
+        $this->assertSame(1, DB::table('cars')->count());
+
+        DB::select('explain analyze delete from cars where id = ?', [1]);
+
+        $this->assertSame(0, DB::table('cars')->count());
+    }
+
     public function testRawDeleteRefreshesCachedCounts(): void
     {
         DB::table('cars')->insert(['id' => 1, 'name' => 'gone', 'engine_id' => null, 'driver_id' => null]);

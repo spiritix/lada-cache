@@ -31,6 +31,9 @@ final class RawStatementClassifierTest extends TestCase
         yield 'truncate restart identity' => ['truncate cars restart identity', 'cars'];
         yield 'leading comment' => ["-- backfill\n/* job 4 */ update cars set name = ?", 'cars'];
         yield 'table prefix stripped' => ['update app_cars set name = ?', 'cars'];
+        yield 'explain analyze runs the write (postgres)' => ['explain analyze delete from cars where id = ?', 'cars'];
+        yield 'explain with analyze option (postgres)' => ['EXPLAIN (ANALYZE, BUFFERS) update cars set name = ?', 'cars'];
+        yield 'explain analyse spelling' => ['explain analyse verbose insert into cars (name) values (?)', 'cars'];
     }
 
     #[DataProvider('singleTableWrites')]
@@ -59,6 +62,7 @@ final class RawStatementClassifierTest extends TestCase
         yield 'stored procedure' => ['call recalculate_prices()'];
         yield 'writable cte' => ['with moved as (delete from cars returning *) insert into archive select * from moved'];
         yield 'two statements' => ['update cars set name = 1; drop table drivers'];
+        yield 'explain analyze of an unrecognized statement' => ['explain analyze call recalculate_prices()'];
         yield 'merge' => ['merge into cars using drivers on (cars.id = drivers.id) when matched then update set name = drivers.name'];
     }
 
@@ -80,6 +84,11 @@ final class RawStatementClassifierTest extends TestCase
         yield 'drop temporary table' => ['drop temporary table report_rows'];
         yield 'lock' => ['lock tables cars write'];
         yield 'analyze' => ['analyze table cars'];
+        yield 'explain plans a write without running it' => ['explain delete from cars'];
+        yield 'explain with options' => ['EXPLAIN (COSTS OFF, FORMAT JSON) update cars set name = ?'];
+        yield 'explain analyze of a read' => ['explain analyze select * from cars'];
+        yield 'explain a table (mysql)' => ['explain cars'];
+        yield 'explain format (mysql)' => ['explain format=json delete from cars'];
         yield 'empty' => ['  ;  '];
         yield 'semicolon in literal' => ["set @label = 'a;b'"];
     }

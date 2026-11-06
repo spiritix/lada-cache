@@ -180,7 +180,7 @@ Raw statements run through Laravel invalidate too. Every statement passing throu
 
 Writes also invalidate the tables the database changes along with them: foreign keys with `ON DELETE` / `ON UPDATE` `CASCADE`, `SET NULL` or `SET DEFAULT`, followed transitively. The foreign keys are read from the schema with a single query the first time a write needs them in each cache generation, so a migration that changes them is picked up automatically. Changes the schema does not declare, such as tables written by triggers, are listed in `lada-cache.dependent_tables`.
 
-Queries whose result depends on when or by whom they run are never cached: SQL calling `NOW()`, `CURRENT_TIMESTAMP`, `CURRENT_DATE`, `RAND()`, `UUID()`, `date('now')` and similar functions. Pass such values as bindings (for example `now()` from PHP) to keep the query cacheable.
+Queries whose result depends on when or by whom they run are never cached: SQL calling `NOW()`, `CURRENT_TIMESTAMP`, `CURRENT_DATE`, `RAND()`, `UUID()`, `date('now')` and similar functions. Pass such values as bindings (for example `now()` from PHP) to keep the query cacheable. Reads are assumed to have no side effects: a query calling your own database functions that write or depend on state outside its tables must use `withoutCache()`.
 
 On connections with read replicas (a `read` section in the connection config), results read from a replica are not cached for `lada-cache.replica_lag` seconds (2 by default) after a write to one of their tables, because the replica may not have the write yet. Reads on the write connection, sticky reads after a write, and reads with `useWritePdo()` are cached as usual.
 

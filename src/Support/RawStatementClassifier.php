@@ -25,6 +25,8 @@ final class RawStatementClassifier
         '/^truncate\s+(?:table\s+)?(?:only\s+)?'.self::TABLE.'(?:\s+(?:restart|continue)\s+identity)?(?:\s+restrict)?\s*$/i',
     ];
 
+    private const string EXPLAIN_PATTERN = '/^explain\s+(?<options>\([^)]*\)\s*|(?:(?:analy[sz]e|verbose|costs|buffers|timing|summary|settings|generic_plan|memory|serialize|wal|extended|partitions|format\s*=?\s*\w+)\s+)*)(?<statement>(?:select|insert|update|delete|replace|merge|with|values|table|execute|create|declare)\b.*)$/is';
+
     /**
      * Classifies any SQL run outside the query builder: anything not known to be side-effect
      * free or a write to a single table changes everything.
@@ -43,6 +45,10 @@ final class RawStatementClassifier
 
         $keyword = self::firstKeyword($statement);
 
+        if ($keyword === 'explain') {
+            return self::classifyExplain($statement, $tablePrefix);
+        }
+
         if (in_array($keyword, self::SIDE_EFFECT_FREE_KEYWORDS, true) || self::isTemporaryTableStatement($statement)) {
             return RawStatementEffect::none();
         }
@@ -54,6 +60,21 @@ final class RawStatementClassifier
         }
 
         return self::classifyWrite($statement, $tablePrefix);
+    }
+
+    /**
+     * EXPLAIN only plans a statement, except with ANALYZE, which runs it (PostgreSQL even runs
+     * writes this way).
+     */
+    private static function classifyExplain(string $statement, string $tablePrefix): RawStatementEffect
+    {
+        $analyzes = static fn (string $sql): bool => preg_match('/\banaly[sz]e\b/i', $sql) === 1;
+
+        if (preg_match(self::EXPLAIN_PATTERN, $statement, $matches) !== 1) {
+            return $analyzes($statement) ? RawStatementEffect::everything() : RawStatementEffect::none();
+        }
+
+        return $analyzes($matches['options']) ? self::classify($matches['statement'], $tablePrefix) : RawStatementEffect::none();
     }
 
     private static function classifyWrite(string $statement, string $tablePrefix): RawStatementEffect
