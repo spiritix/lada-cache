@@ -44,10 +44,6 @@ final class QueryHandler
 {
     private const int MAX_REPLAYED_INVALIDATION_SIZE = 1000;
 
-    private ?QueryBuilder $builder = null;
-
-    private ?CacheCollector $collector = null;
-
     private readonly PendingInvalidations $pending;
 
     private readonly FailedInvalidations $failed;
@@ -60,29 +56,17 @@ final class QueryHandler
         $this->failed = $failed ?? FailedInvalidations::processLocal();
     }
 
-    public function setBuilder(QueryBuilder $builder): self
-    {
-        $this->builder = $builder;
-
-        return $this;
-    }
-
     /**
      * @param  string  $statementType  One of Reflector::QUERY_TYPE_*
      * @param  array<string, mixed>  $values  Values used by the grammar to compile the SQL (e.g., update sets)
      */
-    public function invalidateQuery(string $statementType, array $values = [], AssignedRows $assignedRows = new AssignedRows): void
+    public function invalidateQuery(QueryBuilder $builder, string $statementType, array $values = [], AssignedRows $assignedRows = new AssignedRows): void
     {
-        $this->startCollector();
-
-        if ($this->builder === null) {
-            return;
-        }
-
-        $connection = $this->builder->getConnection();
+        $collector = $this->startCollector();
+        $connection = $builder->getConnection();
 
         try {
-            $reflector = new Reflector($this->builder, $statementType, $values);
+            $reflector = new Reflector($builder, $statementType, $values);
 
             if (! (new Manager($reflector))->shouldInvalidate()) {
                 return;
@@ -104,7 +88,7 @@ final class QueryHandler
         }
 
         $deferred = $this->invalidate($connection, $invalidation);
-        $this->stopCollector($reflector, $tags, [], $deferred ? "Invalidation queued ({$statementType})" : "Invalidation ({$statementType})");
+        $collector?->endMeasuring($deferred ? "Invalidation queued ({$statementType})" : "Invalidation ({$statementType})", [], $tags, $reflector->getSql(), $reflector->getParameters());
     }
 
     public function invalidateRawStatement(Connection $connection, RawStatementEffect $effect): void
@@ -122,7 +106,7 @@ final class QueryHandler
                 return;
             }
 
-            $this->setBuilder($builder)->invalidateQuery(Reflector::QUERY_TYPE_TRUNCATE);
+            $this->invalidateQuery($builder, Reflector::QUERY_TYPE_TRUNCATE);
         }
     }
 
@@ -141,48 +125,48 @@ final class QueryHandler
     }
 
     /**
-     * @param  Closure(): array<mixed>  $queryClosure
+     * Runs the builder's select through the cache. The query closure receives the compiled SQL,
+     * so it is compiled once for both the cache key and the database.
+     *
+     * @param  Closure(string): array<mixed>  $runQuery
      * @return array<mixed>
      */
-    public function cacheQuery(Closure $queryClosure): array
+    public function cacheQuery(QueryBuilder $builder, Closure $runQuery): array
     {
-        $this->startCollector();
-
-        if ($this->builder === null) {
-            return $queryClosure();
-        }
+        $collector = $this->startCollector();
 
         try {
-            $reflector = new Reflector($this->builder);
+            $reflector = new Reflector($builder);
+            $sql = $reflector->getSql();
             $cacheable = (new Manager($reflector))->shouldCache();
             $key = $cacheable ? (new Hasher($reflector))->getHash() : '';
             $tags = $cacheable ? (new Tagger($reflector))->getTags() : [];
         } catch (Throwable $exception) {
             FailureReporter::report(CacheOperation::Analyze, $exception);
 
-            return $queryClosure();
+            return $runQuery($builder->toSql());
         }
 
         if (! $cacheable || ! $this->replayFailedInvalidations()) {
-            return $queryClosure();
+            return $runQuery($sql);
         }
 
         $lookup = $this->lookup($key, $tags);
 
         if ($lookup instanceof CacheHit) {
-            $this->stopCollector($reflector, $tags, $key, 'Hit');
+            $collector?->endMeasuring('Hit', [$key], $tags, $sql, $reflector->getParameters());
 
             return $lookup->rows;
         }
 
-        $rows = $queryClosure();
+        $rows = $runQuery($sql);
 
         if ($lookup instanceof CacheMiss) {
-            $readFromReplica = ReplicaReads::readsFromReplica($this->builder->getConnection(), $this->builder->useWritePdo);
+            $readFromReplica = ReplicaReads::readsFromReplica($builder->getConnection(), $builder->useWritePdo);
             $this->store($lookup, $rows, $readFromReplica ? $tags : []);
         }
 
-        $this->stopCollector($reflector, $tags, $key, $lookup instanceof CacheMiss ? 'Miss' : 'Bypass');
+        $collector?->endMeasuring($lookup instanceof CacheMiss ? 'Miss' : 'Bypass', [$key], $tags, $sql, $reflector->getParameters());
 
         return $rows;
     }
@@ -333,28 +317,11 @@ final class QueryHandler
         return $connection->transactionLevel() > 0;
     }
 
-    private function startCollector(): void
+    private function startCollector(): ?CacheCollector
     {
-        $this->collector = App::bound('lada.collector') ? App::make('lada.collector') : null;
-        $this->collector?->startMeasuring();
-    }
+        $collector = App::bound('lada.collector') ? App::make('lada.collector') : null;
+        $collector?->startMeasuring();
 
-    /**
-     * @param  array<string>  $tags
-     * @param  array<string>|string  $hashes
-     */
-    private function stopCollector(Reflector $reflector, array $tags, string|array $hashes, string $action): void
-    {
-        if ($this->collector === null) {
-            return;
-        }
-
-        $this->collector->endMeasuring(
-            $action,
-            (array) $hashes,
-            $tags,
-            $reflector->getSql(),
-            $reflector->getParameters()
-        );
+        return $collector;
     }
 }

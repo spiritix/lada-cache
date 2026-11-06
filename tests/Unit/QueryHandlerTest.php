@@ -53,8 +53,8 @@ class QueryHandlerTest extends TestCase
             return [['id' => 1, 'name' => 'car']];
         };
 
-        $first = $handler->setBuilder($builder)->cacheQuery($query);
-        $second = $handler->setBuilder($builder)->cacheQuery($query);
+        $first = $handler->cacheQuery($builder, $query);
+        $second = $handler->cacheQuery($builder, $query);
 
         $this->assertSame(1, $executions);
         $this->assertSame([['id' => 1, 'name' => 'car']], $first);
@@ -65,9 +65,9 @@ class QueryHandlerTest extends TestCase
     {
         $handler = new QueryHandler($this->cache);
         $builder = DB::table('cars')->where('id', 1);
-        $handler->setBuilder($builder)->cacheQuery(fn (): array => [['id' => 1]]);
+        $handler->cacheQuery($builder, fn (): array => [['id' => 1]]);
 
-        $commands = $this->recordRedisCommands(fn () => $handler->setBuilder($builder)->cacheQuery(fn (): array => [['id' => 1]]));
+        $commands = $this->recordRedisCommands(fn () => $handler->cacheQuery($builder, fn (): array => [['id' => 1]]));
 
         $this->assertSame(['evalsha'], $commands);
     }
@@ -76,11 +76,11 @@ class QueryHandlerTest extends TestCase
     {
         $handler = new QueryHandler($this->cache);
         $builder = DB::table('cars')->where('id', 1);
-        $handler->setBuilder(DB::table('drivers'))->cacheQuery(fn (): array => []);
-        $handler->setBuilder(DB::table('drivers'))->invalidateQuery('update', ['name' => 'warm up foreign keys']);
+        $handler->cacheQuery(DB::table('drivers'), fn (): array => []);
+        $handler->invalidateQuery(DB::table('drivers'), 'update', ['name' => 'warm up foreign keys']);
 
-        $missCommands = $this->recordRedisCommands(fn () => $handler->setBuilder($builder)->cacheQuery(fn (): array => [['id' => 1]]));
-        $invalidationCommands = $this->recordRedisCommands(fn () => $handler->setBuilder(DB::table('cars')->where('id', 1))->invalidateQuery('update', ['name' => 'x']));
+        $missCommands = $this->recordRedisCommands(fn () => $handler->cacheQuery($builder, fn (): array => [['id' => 1]]));
+        $invalidationCommands = $this->recordRedisCommands(fn () => $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', ['name' => 'x']));
 
         $this->assertSame(['evalsha', 'evalsha'], $missCommands);
         $this->assertSame(['evalsha'], $invalidationCommands);
@@ -91,9 +91,9 @@ class QueryHandlerTest extends TestCase
         $handler = new QueryHandler($this->cache);
         $builder = DB::table('cars');
 
-        $handler->setBuilder($builder)->cacheQuery(fn (): array => [['id' => 1, 'name' => 'stale-schema']]);
+        $handler->cacheQuery($builder, fn (): array => [['id' => 1, 'name' => 'stale-schema']]);
         $this->cache->flush();
-        $result = $handler->setBuilder($builder)->cacheQuery(fn (): array => [['id' => 1, 'name' => 'fresh-schema']]);
+        $result = $handler->cacheQuery($builder, fn (): array => [['id' => 1, 'name' => 'fresh-schema']]);
 
         $this->assertSame([['id' => 1, 'name' => 'fresh-schema']], $result);
     }
@@ -103,12 +103,12 @@ class QueryHandlerTest extends TestCase
         $handler = new QueryHandler($this->cache);
         $builder = DB::table('cars');
 
-        $staleResult = $handler->setBuilder($builder)->cacheQuery(function (): array {
+        $staleResult = $handler->cacheQuery($builder, function (): array {
             $this->cache->flush();
 
             return [['id' => 1, 'name' => 'read-before-migration']];
         });
-        $result = $handler->setBuilder($builder)->cacheQuery(fn (): array => [['id' => 1, 'name' => 'read-after-migration']]);
+        $result = $handler->cacheQuery($builder, fn (): array => [['id' => 1, 'name' => 'read-after-migration']]);
 
         $this->assertSame([['id' => 1, 'name' => 'read-before-migration']], $staleResult);
         $this->assertSame([['id' => 1, 'name' => 'read-after-migration']], $result);
@@ -119,12 +119,12 @@ class QueryHandlerTest extends TestCase
         $handler = new QueryHandler($this->cache);
         $builder = DB::table('cars')->where('id', 1);
 
-        $handler->setBuilder($builder)->cacheQuery(function () use ($handler): array {
-            $handler->setBuilder(DB::table('cars')->where('id', 1))->invalidateQuery('update', ['name' => 'after']);
+        $handler->cacheQuery($builder, function () use ($handler): array {
+            $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', ['name' => 'after']);
 
             return [['id' => 1, 'name' => 'before']];
         });
-        $result = $handler->setBuilder($builder)->cacheQuery(fn (): array => [['id' => 1, 'name' => 'after']]);
+        $result = $handler->cacheQuery($builder, fn (): array => [['id' => 1, 'name' => 'after']]);
 
         $this->assertSame([['id' => 1, 'name' => 'after']], $result);
     }
@@ -135,7 +135,7 @@ class QueryHandlerTest extends TestCase
         $attempts = 0;
 
         try {
-            $handler->setBuilder(DB::table('cars'))->cacheQuery(function () use (&$attempts): array {
+            $handler->cacheQuery(DB::table('cars'), function () use (&$attempts): array {
                 $attempts++;
 
                 return DB::select('select * from table_that_does_not_exist');
@@ -157,8 +157,8 @@ class QueryHandlerTest extends TestCase
             return [['id' => 1]];
         };
 
-        $first = $handler->setBuilder(DB::table('cars'))->cacheQuery($query);
-        $second = $handler->setBuilder(DB::table('cars'))->cacheQuery($query);
+        $first = $handler->cacheQuery(DB::table('cars'), $query);
+        $second = $handler->cacheQuery(DB::table('cars'), $query);
 
         $this->assertSame([['id' => 1]], $first);
         $this->assertSame([['id' => 1]], $second);
@@ -172,9 +172,9 @@ class QueryHandlerTest extends TestCase
         $handler = $this->handlerWithUnreachableRedis();
 
         for ($query = 0; $query < 5; $query++) {
-            $handler->setBuilder(DB::table('cars'))->cacheQuery(fn (): array => []);
+            $handler->cacheQuery(DB::table('cars'), fn (): array => []);
         }
-        $handler->setBuilder(DB::table('cars')->where('id', 1))->invalidateQuery('update', ['name' => 'x']);
+        $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', ['name' => 'x']);
 
         Log::shouldHaveReceived('warning')->once()->withArgs(fn (string $message): bool => ! str_contains($message, 'cooldown'));
         Log::shouldHaveReceived('error')->once()->withArgs(fn (string $message): bool => str_contains($message, 'cooldown'));
@@ -185,8 +185,8 @@ class QueryHandlerTest extends TestCase
         Log::spy();
         $handler = $this->handlerWithUnreachableRedis();
 
-        $handler->setBuilder(DB::table('cars')->where('id', 1))->invalidateQuery('update', ['name' => 'x']);
-        $handler->setBuilder(DB::table('cars')->where('id', 1))->invalidateQuery('update', ['name' => 'y']);
+        $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', ['name' => 'x']);
+        $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', ['name' => 'y']);
 
         Log::shouldHaveReceived('error')->twice();
     }

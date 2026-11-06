@@ -117,20 +117,18 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
         // those callbacks before reflecting SQL for cache keys and tags.
         $this->applyBeforeQueryCallbacks();
 
-        return $this->handler
-            ->setBuilder($this)
-            ->cacheQuery(fn () => $this->runStatement(fn () => $this->connection->select(
-                $this->toSql(),
-                $this->getBindings(),
-                ! $this->useWritePdo
-            )));
+        return $this->handler->cacheQuery($this, fn (string $sql): array => $this->runStatement(fn () => $this->connection->select(
+            $sql,
+            $this->getBindings(),
+            ! $this->useWritePdo
+        )));
     }
 
     /** {@inheritDoc} */
     public function insert(array $values)
     {
         $result = $this->runStatement(fn () => parent::insert($values));
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy($values));
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy($values));
 
         return $result;
     }
@@ -139,7 +137,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function insertUsing(array $columns, $query)
     {
         $result = $this->runStatement(fn () => $this->withoutTrackingCompiledSubQueries(fn () => parent::insertUsing($columns, $query)));
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, [], AssignedRows::unknown());
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, [], AssignedRows::unknown());
 
         return $result;
     }
@@ -148,7 +146,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function insertOrIgnoreUsing(array $columns, $query)
     {
         $result = $this->runStatement(fn () => $this->withoutTrackingCompiledSubQueries(fn () => parent::insertOrIgnoreUsing($columns, $query)));
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, [], AssignedRows::unknown());
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, [], AssignedRows::unknown());
 
         return $result;
     }
@@ -157,7 +155,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function updateFrom(array $values)
     {
         $result = $this->runStatement(fn () => parent::updateFrom($values));
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_UPDATE, $values, $this->rowsAssignedBy($values));
+        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, $values, $this->rowsAssignedBy($values));
 
         return $result;
     }
@@ -166,7 +164,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function insertGetId(array $values, $sequence = null)
     {
         $id = $this->runStatement(fn () => parent::insertGetId($values, $sequence));
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy([$this->getPrimaryKeyName() => $id]));
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy([$this->getPrimaryKeyName() => $id]));
 
         return $id;
     }
@@ -175,7 +173,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function update(array $values)
     {
         $count = $this->runStatement(fn () => parent::update($values));
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_UPDATE, $values, $this->rowsAssignedBy($values));
+        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, $values, $this->rowsAssignedBy($values));
 
         return $count;
     }
@@ -184,7 +182,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function upsert(array $values, $uniqueBy, $update = null)
     {
         $result = $this->runStatement(fn () => parent::upsert($values, $uniqueBy, $update));
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_UPDATE, $values);
+        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, $values);
 
         return $result;
     }
@@ -193,7 +191,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function insertOrIgnore(array $values)
     {
         $result = $this->runStatement(fn () => parent::insertOrIgnore($values));
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy($values));
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy($values));
 
         return $result;
     }
@@ -206,7 +204,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function insertOrIgnoreReturning(array $values, array $returning = ['*'], array|string|null $uniqueBy = null)
     {
         $result = $this->runStatement(fn () => parent::insertOrIgnoreReturning($values, $returning, $uniqueBy));
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy($values));
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy($values));
 
         return $result;
     }
@@ -215,7 +213,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function delete($id = null)
     {
         $count = $this->runStatement(fn () => parent::delete($id));
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_DELETE, [$this->getPrimaryKeyName() => $id]);
+        $this->invalidate(Reflector::QUERY_TYPE_DELETE, [$this->getPrimaryKeyName() => $id]);
 
         return $count;
     }
@@ -224,7 +222,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function truncate()
     {
         $this->runStatement(fn () => parent::truncate());
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_TRUNCATE);
+        $this->invalidate(Reflector::QUERY_TYPE_TRUNCATE);
     }
 
     /**
@@ -240,13 +238,9 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
             : $statement();
     }
 
-    private function invalidateUnlessBypassed(string $queryType, array $values = [], AssignedRows $assignedRows = new AssignedRows): void
+    private function invalidate(string $queryType, array $values = [], AssignedRows $assignedRows = new AssignedRows): void
     {
-        if ($this->cacheBypassed) {
-            return;
-        }
-
-        $this->handler->setBuilder($this)->invalidateQuery($queryType, $values, $assignedRows);
+        $this->handler->invalidateQuery($this, $queryType, $values, $assignedRows);
     }
 
     /**

@@ -122,13 +122,13 @@ final class SoundnessTest extends TestCase
         $working = new QueryHandler(app('lada.cache'), $failed);
         $unreachable = new QueryHandler($this->unreachableCache(), $failed);
         DB::table('cars')->insert(['id' => 1, 'name' => 'before', 'engine_id' => null, 'driver_id' => null]);
-        $read = fn (): array => $working->setBuilder(DB::table('cars')->where('id', 1))->cacheQuery(
+        $read = fn (): array => $working->cacheQuery(DB::table('cars')->where('id', 1), 
             fn (): array => DB::connection()->select('select name from cars where id = 1')
         );
         $this->assertSame('before', $read()[0]->name);
 
         DB::connection()->getPdo()->exec("update cars set name = 'after' where id = 1");
-        $unreachable->setBuilder(DB::table('cars')->where('id', 1))->invalidateQuery('update', ['name' => 'after']);
+        $unreachable->invalidateQuery(DB::table('cars')->where('id', 1), 'update', ['name' => 'after']);
 
         $this->assertTrue($failed->hasPending());
         $this->assertSame('after', $read()[0]->name);
@@ -161,7 +161,7 @@ final class SoundnessTest extends TestCase
         $handler = new QueryHandler($this->unreachableCache(), $failed);
         $executions = 0;
 
-        $handler->setBuilder(DB::table('cars'))->cacheQuery(function () use (&$executions): array {
+        $handler->cacheQuery(DB::table('cars'), function () use (&$executions): array {
             $executions++;
 
             return [];
@@ -179,7 +179,7 @@ final class SoundnessTest extends TestCase
         $generation = $this->generationId();
 
         $unreachable->schemaChanged(DB::connection());
-        $working->setBuilder(DB::table('cars'))->cacheQuery(fn (): array => []);
+        $working->cacheQuery(DB::table('cars'), fn (): array => []);
 
         $this->assertNotSame($generation, $this->generationId());
     }

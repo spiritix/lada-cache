@@ -27,7 +27,7 @@ class WithoutCacheTest extends TestCase
         $this->assertCacheMissing($key, $tags, 'withoutCache should not populate Redis on read');
     }
 
-    public function testWithoutCacheBypassesUpdateInvalidation(): void
+    public function testWithoutCacheStillRunsTheUpdateInvalidation(): void
     {
         // Arrange: warm cache for the row
         DB::table('cars')->insert(['id' => 2020, 'name' => 'OriginalName', 'engine_id' => null, 'driver_id' => null]);
@@ -37,14 +37,12 @@ class WithoutCacheTest extends TestCase
         [$key, $tags] = $this->cacheKeyAndTags($builder);
         $this->assertCacheHas($key, $tags);
 
-        // Act: update with withoutCache() — invalidation must not fire
         DB::table('cars')->where('id', 2020)->withoutCache()->update(['name' => 'WithoutCacheWrite']);
 
-        // Assert: cache still has the (now-stale) key
-        $this->assertCacheHas($key, $tags, 'withoutCache write must not queue/fire invalidation');
+        $this->assertCacheMissing($key, $tags, "Writes with withoutCache() must still invalidate, or other readers see stale rows");
     }
 
-    public function testWithoutCacheBypassesInsertInvalidation(): void
+    public function testWithoutCacheStillRunsTheInsertInvalidation(): void
     {
         // Warm cache on a "named row missing" query
         $builder = DB::table('cars')->where('name', 'InsertBypass');
@@ -55,10 +53,10 @@ class WithoutCacheTest extends TestCase
         DB::table('cars')->withoutCache()
             ->insert(['id' => 2030, 'name' => 'InsertBypass', 'engine_id' => null, 'driver_id' => null]);
 
-        $this->assertCacheHas($key, $tags, 'withoutCache insert must not invalidate');
+        $this->assertCacheMissing($key, $tags, "Writes with withoutCache() must still invalidate, or other readers see stale rows");
     }
 
-    public function testWithoutCacheBypassesInsertGetIdInvalidation(): void
+    public function testWithoutCacheStillRunsTheInsertGetIdInvalidation(): void
     {
         $builder = DB::table('cars')->where('name', 'InsertGetIdBypass');
         $builder->get();
@@ -68,10 +66,10 @@ class WithoutCacheTest extends TestCase
         DB::table('cars')->withoutCache()
             ->insertGetId(['name' => 'InsertGetIdBypass', 'engine_id' => null, 'driver_id' => null]);
 
-        $this->assertCacheHas($key, $tags, 'withoutCache insertGetId must not invalidate');
+        $this->assertCacheMissing($key, $tags, "Writes with withoutCache() must still invalidate, or other readers see stale rows");
     }
 
-    public function testWithoutCacheBypassesInsertOrIgnoreInvalidation(): void
+    public function testWithoutCacheStillRunsTheInsertOrIgnoreInvalidation(): void
     {
         $builder = DB::table('cars')->where('name', 'InsertOrIgnoreBypass');
         $builder->get();
@@ -81,10 +79,10 @@ class WithoutCacheTest extends TestCase
         DB::table('cars')->withoutCache()
             ->insertOrIgnore(['id' => 2040, 'name' => 'InsertOrIgnoreBypass', 'engine_id' => null, 'driver_id' => null]);
 
-        $this->assertCacheHas($key, $tags, 'withoutCache insertOrIgnore must not invalidate');
+        $this->assertCacheMissing($key, $tags, "Writes with withoutCache() must still invalidate, or other readers see stale rows");
     }
 
-    public function testWithoutCacheBypassesUpsertInvalidation(): void
+    public function testWithoutCacheStillRunsTheUpsertInvalidation(): void
     {
         DB::table('cars')->insert(['id' => 2050, 'name' => 'UpsertBypassOriginal', 'engine_id' => null, 'driver_id' => null]);
         $builder = DB::table('cars')->where('id', 2050);
@@ -95,10 +93,10 @@ class WithoutCacheTest extends TestCase
         DB::table('cars')->withoutCache()
             ->upsert([['id' => 2050, 'name' => 'UpsertBypassNew']], ['id'], ['name']);
 
-        $this->assertCacheHas($key, $tags, 'withoutCache upsert must not invalidate');
+        $this->assertCacheMissing($key, $tags, "Writes with withoutCache() must still invalidate, or other readers see stale rows");
     }
 
-    public function testWithoutCacheBypassesUpdateOrInsertInvalidation(): void
+    public function testWithoutCacheStillRunsTheUpdateOrInsertInvalidation(): void
     {
         $builder = DB::table('cars')->where('id', 2060);
         $builder->get();
@@ -108,10 +106,10 @@ class WithoutCacheTest extends TestCase
         DB::table('cars')->where('id', 2060)->withoutCache()
             ->updateOrInsert(['id' => 2060], ['name' => 'UpdateOrInsertBypass']);
 
-        $this->assertCacheHas($key, $tags, 'withoutCache updateOrInsert must not invalidate');
+        $this->assertCacheMissing($key, $tags, "Writes with withoutCache() must still invalidate, or other readers see stale rows");
     }
 
-    public function testWithoutCacheBypassesDeleteInvalidation(): void
+    public function testWithoutCacheStillRunsTheDeleteInvalidation(): void
     {
         DB::table('cars')->insert(['id' => 2070, 'name' => 'DeleteBypass', 'engine_id' => null, 'driver_id' => null]);
         $builder = DB::table('cars')->where('id', 2070);
@@ -121,10 +119,10 @@ class WithoutCacheTest extends TestCase
 
         DB::table('cars')->where('id', 2070)->withoutCache()->delete();
 
-        $this->assertCacheHas($key, $tags, 'withoutCache delete must not invalidate');
+        $this->assertCacheMissing($key, $tags, "Writes with withoutCache() must still invalidate, or other readers see stale rows");
     }
 
-    public function testWithoutCacheBypassesTruncateInvalidation(): void
+    public function testWithoutCacheStillRunsTheTruncateInvalidation(): void
     {
         DB::table('cars')->insert(['id' => 2080, 'name' => 'TruncateBypass', 'engine_id' => null, 'driver_id' => null]);
         $builder = DB::table('cars')->where('id', 2080);
@@ -134,7 +132,7 @@ class WithoutCacheTest extends TestCase
 
         DB::table('cars')->withoutCache()->truncate();
 
-        $this->assertCacheHas($key, $tags, 'withoutCache truncate must not invalidate');
+        $this->assertCacheMissing($key, $tags, "Writes with withoutCache() must still invalidate, or other readers see stale rows");
     }
 
     public function testNormalWriteStillInvalidates(): void

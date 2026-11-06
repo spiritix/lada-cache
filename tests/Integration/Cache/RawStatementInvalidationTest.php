@@ -135,14 +135,15 @@ final class RawStatementInvalidationTest extends TestCase
         $this->assertSame(['evalsha'], $commands);
     }
 
-    public function testWithoutCacheWritesStayUninvalidated(): void
+    public function testWithoutCacheWritesInvalidateExactlyOnce(): void
     {
         DB::table('cars')->insert(['id' => 1, 'name' => 'before', 'engine_id' => null, 'driver_id' => null]);
         DB::table('cars')->where('id', 1)->value('name');
+        DB::table('drivers')->update(['name' => 'warm up foreign keys']);
 
         $commands = $this->recordRedisCommands(fn () => DB::table('cars')->withoutCache()->where('id', 1)->update(['name' => 'after']));
 
-        $this->assertSame([], $commands);
+        $this->assertSame(['evalsha'], $commands);
     }
 
     private function currentGeneration(): string
