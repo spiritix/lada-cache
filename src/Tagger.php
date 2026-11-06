@@ -51,7 +51,7 @@ final readonly class Tagger
         }
 
         if (! $this->considerRows) {
-            return $this->prefix($tables, $databaseTag);
+            return $this->prefix($this->prefix($tables, self::PREFIX_TABLE_UNSPECIFIC), $databaseTag);
         }
 
         /** @var array<string, array<int, scalar>> $rows */
@@ -72,6 +72,23 @@ final readonly class Tagger
         }
 
         return $this->prefix($tags, $databaseTag);
+    }
+
+    /**
+     * Prefixes that, followed by a table name, form every tag a read of that table can carry
+     * at table level, so appending a table name invalidates all its cached reads.
+     *
+     * @return list<string>
+     */
+    public static function tableWideTagPrefixes(string $database): array
+    {
+        $databaseTag = self::PREFIX_DATABASE.$database;
+
+        if (! (bool) config('lada-cache.consider_rows', true)) {
+            return [$databaseTag.self::PREFIX_TABLE_UNSPECIFIC];
+        }
+
+        return [$databaseTag.self::PREFIX_TABLE_SPECIFIC, $databaseTag.self::PREFIX_TABLE_UNSPECIFIC];
     }
 
     private function getTableTags(array $tables, array $rows): array
