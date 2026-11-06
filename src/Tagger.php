@@ -5,16 +5,15 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use Spiritix\LadaCache\Support\AssignedRows;
+use Spiritix\LadaCache\Support\RowKeys;
 
 /**
  * Generates cache tags for queries based on database, tables, and targeted rows.
  *
- * Purpose:
- * - Build a deterministic set of tags for cache storage and invalidation.
- * - Respect configuration such as `lada-cache.consider_rows` to include row-level tags.
- *
- * Architectural notes:
- * - This class is marked `readonly` as its state is fully initialized during construction.
+ * A read pinned to rows carries `table_specific` and one tag per row; any other read carries
+ * `table_unspecific`. A write bumps `table_unspecific` and the tags of the rows it pins or
+ * assigns, or both table tags when it cannot name its rows. With `consider_rows` disabled
+ * every query only uses `table_unspecific`.
  */
 final readonly class Tagger
 {
@@ -26,52 +25,42 @@ final readonly class Tagger
 
     private const string PREFIX_ROW = ':row:';
 
-    private Reflector $reflector;
-
     private bool $considerRows;
 
-    public function __construct(Reflector $reflector, private AssignedRows $assignedRows = new AssignedRows)
-    {
-        $this->reflector = $reflector;
+    public function __construct(
+        private Reflector $reflector,
+        private AssignedRows $assignedRows = new AssignedRows,
+    ) {
         $this->considerRows = (bool) config('lada-cache.consider_rows', true);
     }
 
+    /**
+     * @return list<string>
+     */
     public function getTags(): array
     {
-        $databaseTag = $this->prefix($this->reflector->getDatabase(), self::PREFIX_DATABASE);
-        // Normalize tables to strings only, ignoring any non-string artifacts
-        $rawTables = $this->reflector->getTables();
-        $tables = [];
-        foreach ($rawTables as $t) {
-            if (is_string($t)) {
-                $tables[] = $t;
-            } elseif (is_scalar($t)) {
-                $tables[] = (string) $t;
-            }
-        }
+        $databaseTag = self::PREFIX_DATABASE.$this->reflector->getDatabase();
+        $tables = array_values(array_filter($this->reflector->getTables(), 'is_string'));
 
         if (! $this->considerRows) {
-            return $this->prefix($this->prefix($tables, self::PREFIX_TABLE_UNSPECIFIC), $databaseTag);
+            return array_map(static fn (string $table): string => $databaseTag.self::PREFIX_TABLE_UNSPECIFIC.$table, $tables);
         }
 
-        /** @var array<string, array<int, scalar>> $rows */
-        $rows = $this->reflector->getRows();
-        $tags = $this->getTableTags($tables, $rows);
+        $pinnedRows = $this->reflector->getRows();
+        $type = $this->reflector->getType();
+        $tags = [];
 
         foreach ($tables as $table) {
-            $tableRows = array_merge($rows[$table] ?? [], $this->assignedRows->forTable($table));
+            $stringKeys = $this->reflector->usesStringKeys($table);
+            $pinned = RowKeys::canonical($pinnedRows[$table] ?? [], $stringKeys);
+            $assigned = $this->assignedRows->complete ? RowKeys::canonical($this->assignedRows->forTable($table), $stringKeys) : null;
 
-            if ($tableRows === []) {
-                continue;
+            foreach ($this->tableTags($type, $table, $pinned, $assigned) as $tag) {
+                $tags[$databaseTag.$tag] = true;
             }
-
-            $tablePrefix = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
-            $rowPrefix = $this->prefix(self::PREFIX_ROW, $tablePrefix);
-
-            $tags = array_merge($tags, $this->prefix(array_unique($tableRows), $rowPrefix));
         }
 
-        return $this->prefix($tags, $databaseTag);
+        return array_map('strval', array_keys($tags));
     }
 
     /**
@@ -91,79 +80,35 @@ final readonly class Tagger
         return [$databaseTag.self::PREFIX_TABLE_SPECIFIC, $databaseTag.self::PREFIX_TABLE_UNSPECIFIC];
     }
 
-    private function getTableTags(array $tables, array $rows): array
+    /**
+     * @param  list<string>|null  $pinned  rows the query's conditions restrict it to; null when unrepresentable
+     * @param  list<string>|null  $assigned  rows the write assigns keys to; null when unknown or unrepresentable
+     * @return list<string>
+     */
+    private function tableTags(string $type, string $table, ?array $pinned, ?array $assigned): array
     {
-        $tags = [];
-        $type = $this->reflector->getType();
+        $specific = self::PREFIX_TABLE_SPECIFIC.$table;
+        $unspecific = self::PREFIX_TABLE_UNSPECIFIC.$table;
+        $isPinned = $pinned !== null && $pinned !== [];
 
-        foreach ($tables as $table) {
-            if (! is_string($table)) {
-                continue;
-            }
-
-            $hasSpecificRows = ! empty($rows[$table] ?? []);
-
-            if ($type === Reflector::QUERY_TYPE_SELECT) {
-                if ($hasSpecificRows) {
-                    // Specific reads: only table_specific (isolation preserved)
-                    $tags[] = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
-                } else {
-                    // Broad reads: table_unspecific
-                    $tags[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
-                }
-            }
-
-            if (in_array($type, [Reflector::QUERY_TYPE_UPDATE, Reflector::QUERY_TYPE_DELETE], true)) {
-                if ($hasSpecificRows) {
-                    // Specific mutations: invalidate aggregate queries but preserve row isolation.
-                    // Row-level tags are added separately in getTags().
-                    $tags[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
-                } else {
-                    // Broad mutations: invalidate both specific and unspecific caches for the table
-                    $tags[] = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
-                    $tags[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
-                }
-            }
-
-            if ($type === Reflector::QUERY_TYPE_INSERT) {
-                $tags[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
-
-                if (! $this->assignedRows->complete) {
-                    $tags[] = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
-                }
-            }
-
-            if ($type === Reflector::QUERY_TYPE_TRUNCATE) {
-                // Truncate: invalidate all cache entries linked to the table
-                $tags[] = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
-                $tags[] = $this->prefix($table, self::PREFIX_TABLE_UNSPECIFIC);
-            }
-        }
-
-        return array_unique($tags);
+        return match ($type) {
+            Reflector::QUERY_TYPE_SELECT => $isPinned ? [$specific, ...$this->rowTags($table, $pinned)] : [$unspecific],
+            Reflector::QUERY_TYPE_UPDATE, Reflector::QUERY_TYPE_DELETE => $isPinned && $assigned !== null
+                ? [$unspecific, ...$this->rowTags($table, [...$pinned, ...$assigned])]
+                : [$specific, $unspecific],
+            Reflector::QUERY_TYPE_INSERT => $assigned !== null
+                ? [$unspecific, ...$this->rowTags($table, $assigned)]
+                : [$specific, $unspecific],
+            default => [$specific, $unspecific],
+        };
     }
 
-    private function prefix(string|array $value, string $prefix): string|array
+    /**
+     * @param  list<string>  $keys
+     * @return list<string>
+     */
+    private function rowTags(string $table, array $keys): array
     {
-        if (is_array($value)) {
-            $out = [];
-            foreach ($value as $item) {
-                if (is_scalar($item)) {
-                    $out[] = $prefix.(string) $item;
-
-                    continue;
-                }
-                if (is_object($item) && method_exists($item, '__toString')) {
-                    $out[] = $prefix.(string) $item;
-
-                    continue;
-                }
-                // Skip unstringable items (e.g., Query Expressions). TableExtractor already normalizes names.
-            }
-
-            return $out;
-        }
-
-        return $prefix.$value;
+        return array_map(static fn (string $key): string => self::PREFIX_TABLE_SPECIFIC.$table.self::PREFIX_ROW.$key, $keys);
     }
 }

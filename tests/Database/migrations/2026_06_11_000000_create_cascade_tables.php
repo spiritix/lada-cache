@@ -30,7 +30,7 @@ return new class extends Migration
 
         Schema::create('owner_notes', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('owner_id')->nullable()->constrained('owners')->nullOnDelete();
+            $table->foreignId('owner_id')->nullable()->constrained('owners')->nullOnDelete()->cascadeOnUpdate();
             $table->string('body');
         });
 

@@ -47,6 +47,6 @@ final class DifferentialFuzzTest extends TestCase
         $workload->run($iterations, self::SWEEP_INTERVAL);
 
         $this->assertGreaterThan(0, $workload->comparisons());
-        $this->assertSame([], $workload->writesAlwaysRejected(3), 'These writes never succeeded, so the workload does not exercise them');
+        $this->assertSame([], $workload->writesAlwaysRejected(5), 'These writes never succeeded, so the workload does not exercise them');
     }
 }

@@ -55,6 +55,13 @@ final class Reflector
         return $this->queryBuilder->getModel() !== null;
     }
 
+    public function usesStringKeys(string $table): bool
+    {
+        $model = $this->queryBuilder->getModel();
+
+        return $model !== null && $model->getTable() === $table && $model->getKeyType() !== 'int';
+    }
+
     public function getTables(): array
     {
         return TableExtractor::extractTables($this->queryBuilder);

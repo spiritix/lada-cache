@@ -155,7 +155,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function updateFrom(array $values)
     {
         $result = $this->runStatement(fn () => parent::updateFrom($values));
-        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, $values, $this->rowsAssignedBy($values));
+        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, $values, $this->rowsReassignedBy($values));
 
         return $result;
     }
@@ -173,7 +173,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function update(array $values)
     {
         $count = $this->runStatement(fn () => parent::update($values));
-        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, $values, $this->rowsAssignedBy($values));
+        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, $values, $this->rowsReassignedBy($values));
 
         return $count;
     }
@@ -241,6 +241,25 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     private function invalidate(string $queryType, array $values = [], AssignedRows $assignedRows = new AssignedRows): void
     {
         $this->handler->invalidateQuery($this, $queryType, $values, $assignedRows);
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $values
+     */
+    private function rowsReassignedBy(array $values): AssignedRows
+    {
+        $primaryKey = $this->getPrimaryKeyName();
+        $assignsKey = false;
+
+        foreach (array_keys($values) as $column) {
+            if ($column === $primaryKey) {
+                $assignsKey = true;
+            } elseif (is_string($column) && str_ends_with($column, '.'.$primaryKey)) {
+                return AssignedRows::unknown();
+            }
+        }
+
+        return $assignsKey ? $this->rowsAssignedBy($values) : new AssignedRows;
     }
 
     /**

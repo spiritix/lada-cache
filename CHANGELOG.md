@@ -25,6 +25,7 @@
 - Queries calling time-, randomness- or session-dependent SQL functions such as `NOW()` or `RAND()` are no longer cached
 - Raw statements are classified once where every statement passes through the connection, so driver-specific overrides are covered
 - With `consider_rows` disabled, tags separate database and table names, so database `a` with table `bc` and database `ab` with table `c` no longer share tags
+- Row tags treat primary keys the way databases compare them: "05", 5 and 5.0 share a tag, string keys of models ignore ASCII case, and keys a database may cast or collate differently, or more than 100 per table, fall back to table tags so a query never reads or writes an unbounded number of tags
 - `exists()` caches `select 1` instead of whole rows
 - Lada connections no longer open the primary and read PDO connections when resolved, only when first used
 - The debug collector lookup no longer throws and catches an exception for every query when Debugbar is not installed
@@ -39,6 +40,8 @@
 - Raw statements (`DB::insert/update/delete/statement/affectingStatement/unprepared`, and writes through `DB::select()`) never invalidated anything
 - Raw `DB::insert()` on MySQL bypassed raw statement invalidation, because MySQL's connection overrides `insert()`
 - Writes cascading through foreign keys left cached reads of the cascaded tables stale
+- A read keyed `where id = '05'` stayed stale after a write keyed `where id = 5`, and string keys differing only in case missed each other on case-insensitive collations
+- Updates that set the primary key to an expression did not invalidate cached reads of the new key
 - `insertOrIgnoreReturning()` never invalidated anything
 - `updateOrInsert()` with callback values failed with a `TypeError`
 - A nested transaction commit flushed invalidations before the outer transaction committed, letting other hosts cache uncommitted-era results, and a savepoint rollback discarded the invalidations of the enclosing transaction
