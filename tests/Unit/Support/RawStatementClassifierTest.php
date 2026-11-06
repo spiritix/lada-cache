@@ -36,7 +36,7 @@ final class RawStatementClassifierTest extends TestCase
     #[DataProvider('singleTableWrites')]
     public function testSingleTableWritesInvalidateThatTable(string $sql, string $table): void
     {
-        $effect = RawStatementClassifier::classifyStatement($sql, str_contains($sql, 'app_') ? 'app_' : '');
+        $effect = RawStatementClassifier::classify($sql, str_contains($sql, 'app_') ? 'app_' : '');
 
         $this->assertSame([$table], $effect->tables);
         $this->assertFalse($effect->changesEverything);
@@ -65,7 +65,7 @@ final class RawStatementClassifierTest extends TestCase
     #[DataProvider('statementsThatChangeEverything')]
     public function testUnscopedStatementsChangeEverything(string $sql): void
     {
-        $this->assertTrue(RawStatementClassifier::classifyStatement($sql, '')->changesEverything);
+        $this->assertTrue(RawStatementClassifier::classify($sql, '')->changesEverything);
     }
 
     /**
@@ -87,16 +87,18 @@ final class RawStatementClassifierTest extends TestCase
     #[DataProvider('sideEffectFreeStatements')]
     public function testSideEffectFreeStatementsInvalidateNothing(string $sql): void
     {
-        $this->assertTrue(RawStatementClassifier::classifyStatement($sql, '')->isNone());
+        $this->assertTrue(RawStatementClassifier::classify($sql, '')->isNone());
     }
 
-    public function testQueriesAreReadsUnlessTheyClearlyWrite(): void
+    public function testReadsInvalidateNothingAndProceduresChangeEverything(): void
     {
-        $this->assertTrue(RawStatementClassifier::classifyQuery('select * from cars', '')->isNone());
-        $this->assertTrue(RawStatementClassifier::classifyQuery('(select 1) union (select 2)', '')->isNone());
-        $this->assertTrue(RawStatementClassifier::classifyQuery('with recent as (select 1) select * from recent', '')->isNone());
-        $this->assertTrue(RawStatementClassifier::classifyQuery('call report_prices()', '')->isNone());
-        $this->assertEquals(RawStatementEffect::writesTable('cars'), RawStatementClassifier::classifyQuery('insert into cars (name) values (?) returning id', ''));
-        $this->assertEquals(RawStatementEffect::writesTable('cars'), RawStatementClassifier::classifyQuery('delete from cars where id = ? returning *', ''));
+        $this->assertTrue(RawStatementClassifier::classify('select * from cars', '')->isNone());
+        $this->assertTrue(RawStatementClassifier::classify('(select 1) union (select 2)', '')->isNone());
+        $this->assertTrue(RawStatementClassifier::classify('with recent as (select 1) select * from recent', '')->isNone());
+        $this->assertTrue(RawStatementClassifier::classify('call report_prices()', '')->changesEverything);
+        $this->assertTrue(RawStatementClassifier::classify('with recent as (select 1) update cars set name = 1', '')->changesEverything);
+        $this->assertTrue(RawStatementClassifier::classify('table cars', '')->isNone());
+        $this->assertEquals(RawStatementEffect::writesTable('cars'), RawStatementClassifier::classify('insert into cars (name) values (?) returning id', ''));
+        $this->assertEquals(RawStatementEffect::writesTable('cars'), RawStatementClassifier::classify('delete from cars where id = ? returning *', ''));
     }
 }

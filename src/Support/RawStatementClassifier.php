@@ -8,10 +8,10 @@ final class RawStatementClassifier
 {
     private const string TABLE = '(?<table>[`"\[]?[\w$]+[`"\]]?(?:\.[`"\[]?[\w$]+[`"\]]?)?)';
 
-    private const array WRITE_KEYWORDS = ['insert', 'replace', 'update', 'delete', 'merge'];
+    private const string WRITE_KEYWORD_PATTERN = '/\b(?:insert|replace|update|delete|merge|truncate)\b/i';
 
     private const array SIDE_EFFECT_FREE_KEYWORDS = [
-        'select', 'show', 'explain', 'describe', 'desc', 'values', 'set', 'begin', 'start', 'commit',
+        'select', 'show', 'explain', 'describe', 'desc', 'values', 'table', 'set', 'begin', 'start', 'commit',
         'rollback', 'savepoint', 'release', 'use', 'pragma', 'analyze', 'optimize', 'check', 'checksum',
         'lock', 'unlock', 'vacuum', 'reset', 'discard', 'listen', 'unlisten', 'notify', 'prepare',
         'deallocate', 'xa',
@@ -26,23 +26,10 @@ final class RawStatementClassifier
     ];
 
     /**
-     * Classifies SQL passed to `select()` and friends: reads unless it clearly writes.
+     * Classifies any SQL run outside the query builder: anything not known to be side-effect
+     * free or a write to a single table changes everything.
      */
-    public static function classifyQuery(string $sql, string $tablePrefix): RawStatementEffect
-    {
-        $statement = self::normalize($sql);
-        if (! in_array(self::firstKeyword($statement), self::WRITE_KEYWORDS, true)) {
-            return RawStatementEffect::none();
-        }
-
-        return self::classifyWrite($statement, $tablePrefix);
-    }
-
-    /**
-     * Classifies SQL passed to `statement()`, `affectingStatement()` and `unprepared()`: anything
-     * not known to be side-effect free or a write to a single table changes everything.
-     */
-    public static function classifyStatement(string $sql, string $tablePrefix): RawStatementEffect
+    public static function classify(string $sql, string $tablePrefix): RawStatementEffect
     {
         $statement = self::normalize($sql);
 
@@ -58,6 +45,12 @@ final class RawStatementClassifier
 
         if (in_array($keyword, self::SIDE_EFFECT_FREE_KEYWORDS, true) || self::isTemporaryTableStatement($statement)) {
             return RawStatementEffect::none();
+        }
+
+        if ($keyword === 'with') {
+            return preg_match(self::WRITE_KEYWORD_PATTERN, $statement) === 1
+                ? RawStatementEffect::everything()
+                : RawStatementEffect::none();
         }
 
         return self::classifyWrite($statement, $tablePrefix);

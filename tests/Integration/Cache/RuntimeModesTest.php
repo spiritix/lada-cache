@@ -87,7 +87,7 @@ final class RuntimeModesTest extends TestCase
         DB::disableQueryLog();
 
         $queries = array_column(DB::getQueryLog(), 'query');
-        $carQueries = array_values(array_filter($queries, static fn (string $query): bool => str_contains($query, '"cars"')));
+        $carQueries = array_values(array_filter($queries, static fn (string $query): bool => str_contains($query, 'cars')));
         $this->assertCount(1, $carQueries);
         $this->assertStringContainsString('1 as lada_exists', $carQueries[0]);
     }
@@ -104,6 +104,7 @@ final class RuntimeModesTest extends TestCase
 
     public function testInsertOrIgnoreReturningInvalidates(): void
     {
+        $this->requireDatabaseDriver('sqlite');
         $this->assertNull(DB::table('cars')->where('id', 1)->first());
 
         DB::table('cars')->insertOrIgnoreReturning(['id' => 1, 'name' => 'returned'], ['id'], 'id');

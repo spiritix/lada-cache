@@ -43,9 +43,21 @@ class TestCase extends BaseTestCase
         ];
     }
 
+    protected static function databaseDriver(): string
+    {
+        return (string) env('DB_CONNECTION', 'sqlite');
+    }
+
+    protected function requireDatabaseDriver(string ...$drivers): void
+    {
+        if (! in_array(self::databaseDriver(), $drivers, true)) {
+            $this->markTestSkipped(sprintf('Needs %s, running on %s.', implode(' or ', $drivers), self::databaseDriver()));
+        }
+    }
+
     protected function getEnvironmentSetUp($app): void
     {
-        $driver = env('DB_CONNECTION', 'sqlite');
+        $driver = self::databaseDriver();
 
         if ($driver === 'mysql') {
             $app['config']->set('database.default', 'mysql_testing');
@@ -62,12 +74,27 @@ class TestCase extends BaseTestCase
                 'strict' => true,
                 'engine' => null,
             ]);
+        } elseif ($driver === 'pgsql') {
+            $app['config']->set('database.default', 'pgsql_testing');
+            $app['config']->set('database.connections.pgsql_testing', [
+                'driver' => 'pgsql',
+                'host' => env('DB_HOST', 'postgres'),
+                'port' => env('DB_PORT', '5432'),
+                'database' => env('DB_DATABASE', 'test'),
+                'username' => env('DB_USERNAME', 'postgres'),
+                'password' => env('DB_PASSWORD', 'secret'),
+                'charset' => 'utf8',
+                'prefix' => '',
+                'search_path' => 'public',
+                'sslmode' => 'disable',
+            ]);
         } else {
             $app['config']->set('database.default', 'testing');
             $app['config']->set('database.connections.testing', [
                 'driver'   => 'sqlite',
                 'database' => ':memory:',
                 'prefix'   => '',
+                'foreign_key_constraints' => true,
             ]);
         }
 

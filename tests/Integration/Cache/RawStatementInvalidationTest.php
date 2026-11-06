@@ -46,6 +46,7 @@ final class RawStatementInvalidationTest extends TestCase
 
     public function testInsertReturningThroughSelectRefreshesCachedReads(): void
     {
+        $this->requireDatabaseDriver('sqlite');
         $this->assertSame(0, DB::table('cars')->count());
 
         DB::select("insert into cars (name) values ('returned') returning id");
@@ -97,7 +98,11 @@ final class RawStatementInvalidationTest extends TestCase
         $generation = $this->currentGeneration();
 
         DB::select('select * from drivers');
-        DB::statement('PRAGMA foreign_keys = ON');
+        DB::statement(match (self::databaseDriver()) {
+            'sqlite' => 'PRAGMA foreign_keys = ON',
+            'pgsql' => "SET application_name = 'lada'",
+            default => 'SET @lada_probe = 1',
+        });
         DB::statement('create temporary table report_rows (id integer)');
 
         $this->assertSame($generation, $this->currentGeneration());
@@ -123,6 +128,7 @@ final class RawStatementInvalidationTest extends TestCase
     {
         DB::table('cars')->insert(['id' => 1, 'name' => 'before', 'engine_id' => null, 'driver_id' => null]);
         DB::table('cars')->where('id', 1)->value('name');
+        DB::table('drivers')->update(['name' => 'warm up foreign keys']);
 
         $commands = $this->recordRedisCommands(fn () => DB::table('cars')->where('id', 1)->update(['name' => 'after']));
 

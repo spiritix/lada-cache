@@ -7,7 +7,6 @@ namespace Spiritix\LadaCache\Database;
 use Closure;
 use Spiritix\LadaCache\QueryHandler;
 use Spiritix\LadaCache\Support\RawStatementClassifier;
-use Spiritix\LadaCache\Support\RawStatementEffect;
 
 trait InvalidatesRawStatements
 {
@@ -31,51 +30,20 @@ trait InvalidatesRawStatements
     }
 
     /** {@inheritDoc} */
-    public function select($query, $bindings = [], $useReadPdo = true, array $fetchUsing = [])
+    protected function run($query, $bindings, Closure $callback)
     {
-        $result = parent::select($query, $bindings, $useReadPdo, $fetchUsing);
-        $this->invalidateForRawStatement(fn (): RawStatementEffect => RawStatementClassifier::classifyQuery($query, $this->getTablePrefix()));
+        $result = parent::run($query, $bindings, $callback);
 
-        return $result;
-    }
-
-    /** {@inheritDoc} */
-    public function statement($query, $bindings = [])
-    {
-        $result = parent::statement($query, $bindings);
-        $this->invalidateForRawStatement(fn (): RawStatementEffect => RawStatementClassifier::classifyStatement($query, $this->getTablePrefix()));
-
-        return $result;
-    }
-
-    /** {@inheritDoc} */
-    public function affectingStatement($query, $bindings = [])
-    {
-        $result = parent::affectingStatement($query, $bindings);
-        $this->invalidateForRawStatement(fn (): RawStatementEffect => RawStatementClassifier::classifyStatement($query, $this->getTablePrefix()));
-
-        return $result;
-    }
-
-    /** {@inheritDoc} */
-    public function unprepared($query)
-    {
-        $result = parent::unprepared($query);
-        $this->invalidateForRawStatement(fn (): RawStatementEffect => RawStatementClassifier::classifyStatement($query, $this->getTablePrefix()));
-
-        return $result;
-    }
-
-    /**
-     * @param  Closure(): RawStatementEffect  $classify
-     */
-    private function invalidateForRawStatement(Closure $classify): void
-    {
-        if ($this->builderStatementDepth > 0 || $this->pretending() || ! (bool) config('lada-cache.active', true)) {
-            return;
+        if ($this->builderStatementDepth === 0 && ! $this->pretending() && (bool) config('lada-cache.active', true)) {
+            $this->invalidateForRawStatement((string) $query);
         }
 
-        $effect = $classify();
+        return $result;
+    }
+
+    private function invalidateForRawStatement(string $query): void
+    {
+        $effect = RawStatementClassifier::classify($query, $this->getTablePrefix());
 
         if ($effect->isNone()) {
             return;

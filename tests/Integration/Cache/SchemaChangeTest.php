@@ -29,7 +29,7 @@ final class SchemaChangeTest extends TestCase
         DB::disableQueryLog();
 
         $this->assertSame(
-            ['select "name" from "cars" where "id" = ? limit 1'],
+            [DB::table('cars')->select('name')->where('id', 1)->limit(1)->toSql()],
             array_column(DB::getQueryLog(), 'query'),
         );
     }
