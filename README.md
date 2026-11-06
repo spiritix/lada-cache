@@ -156,6 +156,14 @@ DB::table('users')->where('id', $id)->withoutCache()->update(['name' => 'New']);
 
 This is useful for freshness-critical reads, diagnostics, or ad-hoc cache busting without touching the configuration.
 
+### Caching only selected models
+
+By default every query on a Lada connection is cached. Set `LADA_CACHE_SCOPE=models` to cache only reads issued by models that use `LadaCacheTrait`. `DB::table()` reads and models without the trait then always hit the database, while writes from any builder still invalidate, so cached models never go stale through code paths that are not cached themselves.
+
+```env
+LADA_CACHE_SCOPE=models
+```
+
 ## Console Commands
 
 ```bash

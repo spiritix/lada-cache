@@ -18,6 +18,8 @@ final readonly class Manager
 {
     private bool $cacheActive;
 
+    private CacheScope $scope;
+
     /** @var string[] */
     private array $includeTables;
 
@@ -27,6 +29,7 @@ final readonly class Manager
     public function __construct(private Reflector $reflector)
     {
         $this->cacheActive = (bool) Config::get('lada-cache.active', true);
+        $this->scope = CacheScope::fromConfig(Config::get('lada-cache.scope', CacheScope::All->value));
         $this->includeTables = (array) Config::get('lada-cache.include_tables', []);
         $this->excludeTables = (array) Config::get('lada-cache.exclude_tables', []);
     }
@@ -36,6 +39,10 @@ final readonly class Manager
         // Avoid caching while a DB transaction is active to prevent serving
         // stale data within the same transaction (invalidations flush on commit).
         if ($this->reflector->inTransaction()) {
+            return false;
+        }
+
+        if ($this->scope === CacheScope::Models && ! $this->reflector->isModelQuery()) {
             return false;
         }
 

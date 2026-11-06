@@ -94,6 +94,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
 
         // Only register when active to avoid bootstrap overhead when disabled
         if ((bool) config('lada-cache.active', true)) {
+            CacheScope::fromConfig(config('lada-cache.scope', CacheScope::All->value));
             $this->registerSingletons();
             $this->registerDatabaseDecorator();
         }

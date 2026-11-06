@@ -3,6 +3,7 @@
 ## [Unreleased]
 ### Added
 - Added `withoutCache()` for per-query bypass of read caching and write invalidation (see https://github.com/spiritix/lada-cache/pull/151)
+- Added `lada-cache.scope` (`LADA_CACHE_SCOPE`): `models` caches only reads from models using `LadaCacheTrait`, while writes from any builder still invalidate
 
 ## [6.1.1] - 2026-05-22
 ### Fixed
