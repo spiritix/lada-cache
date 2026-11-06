@@ -14,4 +14,11 @@ final class TableName
     {
         return $prefix !== '' && str_starts_with($table, $prefix) ? substr($table, strlen($prefix)) : $table;
     }
+
+    public static function unqualified(string $table): string
+    {
+        $position = strrpos($table, '.');
+
+        return $position === false ? $table : substr($table, $position + 1);
+    }
 }

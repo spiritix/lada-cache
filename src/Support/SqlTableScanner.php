@@ -22,6 +22,7 @@ final class SqlTableScanner
 
     /**
      * Every identifier following FROM or JOIN, and each item of a comma-separated FROM list.
+     * Names keep their database or schema qualifier, without quotes and table prefix.
      *
      * @return list<string>
      */
@@ -66,7 +67,9 @@ final class SqlTableScanner
         $tables = [];
         foreach ($qualifiedNames as $qualified) {
             preg_match_all('/'.self::IDENTIFIER.'/', $qualified, $segments);
-            $tables[TableName::withoutPrefix(trim((string) end($segments[0]), '`"[]'), $tablePrefix)] = true;
+            $unquoted = array_map(static fn (string $segment): string => trim($segment, '`"[]'), $segments[0]);
+            $table = (string) array_pop($unquoted);
+            $tables[implode('.', [...$unquoted, TableName::withoutPrefix($table, $tablePrefix)])] = true;
         }
 
         return array_map('strval', array_keys($tables));

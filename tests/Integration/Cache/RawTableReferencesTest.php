@@ -46,6 +46,17 @@ final class RawTableReferencesTest extends TestCase
         $this->assertSame(['rex'], $petNames());
     }
 
+    public function testSchemaQualifiedRawReadsRefreshAfterWritesToTheTable(): void
+    {
+        $this->requireDatabaseDriver('pgsql');
+        $names = fn (): array => DB::query()->fromRaw('public.'.DB::connection()->getTablePrefix().'pets')->pluck('name')->all();
+        $this->assertSame([], $names());
+
+        DB::table('pets')->insert(['id' => 1, 'owner_id' => 1, 'name' => 'rex']);
+
+        $this->assertSame(['rex'], $names());
+    }
+
     public function testFromRawRefreshesAfterWriteToItsTable(): void
     {
         $names = fn (): array => DB::query()->fromRaw(DB::connection()->getTablePrefix().'pets')->pluck('name')->all();

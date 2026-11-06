@@ -48,7 +48,7 @@ final class DependentTables
 
         foreach (self::triggerBodies($connection) as [$table, $body]) {
             foreach (SqlTableScanner::writtenTables($body, $prefix) as $target) {
-                $everyWrite[TableName::withoutPrefix($table, $prefix)][$target] = true;
+                $everyWrite[TableName::withoutPrefix($table, $prefix)][TableName::unqualified($target)] = true;
             }
         }
 
@@ -108,7 +108,7 @@ final class DependentTables
                 $view = (array) $view;
 
                 foreach (SqlTableScanner::tables((string) $view['sql'], '') as $table) {
-                    $pairs[] = [$table, (string) $view['name']];
+                    $pairs[] = [TableName::unqualified($table), (string) $view['name']];
                 }
             }
 

@@ -35,6 +35,16 @@ final class CrossDatabaseTest extends TestCase
         $this->assertSame('after', $name());
     }
 
+    public function testQualifiedRawReadsRefreshAfterWritesOnAConnectionToThatDatabase(): void
+    {
+        $name = fn (): ?string => DB::query()->fromRaw(self::OTHER_DATABASE.'.items')->where('id', 1)->value('name');
+        $this->assertSame('before', $name());
+
+        DB::connection('other_database')->table('items')->where('id', 1)->update(['name' => 'after']);
+
+        $this->assertSame('after', $name());
+    }
+
     public function testReadsOnAConnectionRefreshAfterQualifiedWritesFromAnother(): void
     {
         $name = fn (): ?string => DB::connection('other_database')->table('items')->where('id', 1)->value('name');
