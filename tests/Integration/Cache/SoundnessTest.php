@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Integration\Cache;
 
+use APCUIterator;
 use Closure;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -156,6 +157,52 @@ final class SoundnessTest extends TestCase
         $this->assertFalse(FailedInvalidations::detect('lada-cache:test-failed:', 60)->hasPending());
     }
 
+    public function testLargeBacklogsCollapseIntoRetiringTheCache(): void
+    {
+        $failed = FailedInvalidations::processLocal();
+        foreach (range(0, FailedInvalidations::MAX_PENDING) as $tag) {
+            $failed->record(Invalidation::of(["tag-{$tag}"]));
+        }
+
+        $failed->replay(function (Invalidation $invalidation) use (&$replayed): void {
+            $replayed = $invalidation;
+        });
+
+        $this->assertTrue($replayed->retiresEverything);
+        $this->assertSame([], $replayed->tags());
+    }
+
+    public function testSharedBacklogStaysBoundedDuringLongOutages(): void
+    {
+        $this->requireApcu();
+        $failed = FailedInvalidations::detect('lada-cache:test-bounded:', 60);
+
+        foreach (range(0, FailedInvalidations::MAX_PENDING + 50) as $tag) {
+            $failed->record(Invalidation::of(["tag-{$tag}"]));
+        }
+
+        $this->assertLessThanOrEqual(FailedInvalidations::MAX_PENDING + 1, iterator_count(new APCUIterator('/^lada-cache:test-bounded:/')) - 1);
+        FailedInvalidations::detect('lada-cache:test-bounded:', 60)->replay(function (Invalidation $invalidation) use (&$replayed): void {
+            $replayed = $invalidation;
+        });
+        $this->assertTrue($replayed->retiresEverything);
+    }
+
+    public function testUnreadableSharedInvalidationsRetireTheCache(): void
+    {
+        $this->requireApcu();
+        FailedInvalidations::detect('lada-cache:test-corrupt:', 60)->record(Invalidation::of(['t']));
+        foreach (new APCUIterator('/^lada-cache:test-corrupt:item:/') as $item) {
+            apcu_store((string) $item['key'], 'not a serialized invalidation');
+        }
+
+        FailedInvalidations::detect('lada-cache:test-corrupt:', 60)->replay(function (Invalidation $invalidation) use (&$replayed): void {
+            $replayed = $invalidation;
+        });
+
+        $this->assertTrue($replayed->retiresEverything);
+    }
+
     public function testFailingReplayKeepsInvalidationsPendingAndBypassesTheCache(): void
     {
         $failed = FailedInvalidations::processLocal();
@@ -216,6 +263,13 @@ final class SoundnessTest extends TestCase
         $working->cacheQuery(DB::table('cars'), fn (): array => []);
 
         $this->assertNotSame($generation, $this->generationId());
+    }
+
+    private function requireApcu(): void
+    {
+        if (! function_exists('apcu_enabled') || ! apcu_enabled()) {
+            $this->markTestSkipped('Needs APCu with apc.enable_cli=1, as PHP-FPM pools use it across requests.');
+        }
     }
 
     private function unreachableCache(): Cache

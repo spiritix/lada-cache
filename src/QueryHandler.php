@@ -43,8 +43,6 @@ use Throwable;
  */
 final class QueryHandler
 {
-    private const int MAX_REPLAYED_INVALIDATION_SIZE = 1000;
-
     private readonly PendingInvalidations $pending;
 
     private readonly FailedInvalidations $failed;
@@ -277,9 +275,7 @@ final class QueryHandler
             return;
         }
 
-        $this->failed->replay(function (Invalidation $invalidation): void {
-            $this->apply($invalidation->size() > self::MAX_REPLAYED_INVALIDATION_SIZE ? Invalidation::everything() : $invalidation);
-        });
+        $this->failed->replay($this->apply(...));
     }
 
     private function apply(Invalidation $invalidation): void

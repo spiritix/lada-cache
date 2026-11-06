@@ -6,16 +6,20 @@ namespace Spiritix\LadaCache\Support;
 
 use APCUIterator;
 use Closure;
+use RuntimeException;
 
 /**
  * Invalidations that could not reach Redis, kept until Redis accepts them again.
  *
  * They are always kept by the current object, which lives for the whole worker in FrankenPHP
  * worker mode or Octane. When APCu is available they are also kept in APCu, so the next request
- * of a PHP-FPM pool replays them even though every request starts fresh.
+ * of a PHP-FPM pool replays them even though every request starts fresh. A backlog larger than
+ * MAX_PENDING collapses into retiring the whole cache, which bounds memory during long outages.
  */
 final class FailedInvalidations
 {
+    public const int MAX_PENDING = 1000;
+
     private Invalidation $local;
 
     private function __construct(
@@ -42,12 +46,10 @@ final class FailedInvalidations
             return;
         }
 
-        $this->local = $this->local->merge($invalidation);
+        $this->local = self::bounded($this->local->merge($invalidation));
 
         if ($this->shared) {
-            apcu_store($this->sharedPrefix.'item:'.bin2hex(random_bytes(8)), serialize($invalidation), $this->ttlSeconds);
-            apcu_add($this->counterKey(), 0);
-            apcu_inc($this->counterKey());
+            $this->recordShared($invalidation);
         }
     }
 
@@ -73,26 +75,21 @@ final class FailedInvalidations
         $merged = $this->local;
 
         if ($this->shared) {
-            foreach (new APCUIterator('/^'.preg_quote($this->sharedPrefix.'item:', '/').'/') as $item) {
-                $invalidation = unserialize((string) $item['value'], ['allowed_classes' => [Invalidation::class]]);
+            if (apcu_exists($this->everythingKey())) {
+                $merged = Invalidation::everything();
+                $sharedKeys[] = $this->everythingKey();
+            }
 
-                if ($invalidation instanceof Invalidation) {
-                    $merged = $merged->merge($invalidation);
-                }
-
+            foreach (new APCUIterator('/^'.preg_quote($this->itemPrefix(), '/').'/') as $item) {
+                $invalidation = @unserialize((string) $item['value'], ['allowed_classes' => [Invalidation::class]]);
+                $merged = self::bounded($merged->merge($invalidation instanceof Invalidation ? $invalidation : Invalidation::everything()));
                 $sharedKeys[] = (string) $item['key'];
             }
         }
 
-        if ($merged->isEmpty()) {
-            if ($this->shared) {
-                apcu_cas($this->counterKey(), $counter, 0);
-            }
-
-            return;
+        if (! $merged->isEmpty()) {
+            $replay($merged);
         }
-
-        $replay($merged);
 
         $this->local = Invalidation::none();
 
@@ -102,8 +99,38 @@ final class FailedInvalidations
         }
     }
 
+    private function recordShared(Invalidation $invalidation): void
+    {
+        apcu_add($this->counterKey(), 0);
+        $pending = (int) apcu_inc($this->counterKey());
+
+        $kept = $invalidation->retiresEverything || $pending > self::MAX_PENDING
+            ? apcu_store($this->everythingKey(), true, $this->ttlSeconds)
+            : apcu_store($this->itemPrefix().bin2hex(random_bytes(8)), serialize($invalidation), $this->ttlSeconds)
+                || apcu_store($this->everythingKey(), true, $this->ttlSeconds);
+
+        if (! $kept) {
+            FailureReporter::report(CacheOperation::Invalidate, new RuntimeException('APCu is full, so other PHP-FPM requests cannot replay this failed invalidation'));
+        }
+    }
+
+    private static function bounded(Invalidation $invalidation): Invalidation
+    {
+        return $invalidation->retiresEverything || $invalidation->size() > self::MAX_PENDING ? Invalidation::everything() : $invalidation;
+    }
+
     private function counterKey(): string
     {
         return $this->sharedPrefix.'count';
+    }
+
+    private function itemPrefix(): string
+    {
+        return $this->sharedPrefix.'item:';
+    }
+
+    private function everythingKey(): string
+    {
+        return $this->sharedPrefix.'everything';
     }
 }
