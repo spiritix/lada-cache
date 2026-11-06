@@ -43,6 +43,7 @@
 - A read keyed `where id = '05'` stayed stale after a write keyed `where id = 5`, and string keys differing only in case missed each other on case-insensitive collations
 - Updates that set the primary key to an expression did not invalidate cached reads of the new key
 - `EXPLAIN ANALYZE` of a write, which PostgreSQL executes, did not invalidate
+- `fetchUsing()` fetch modes were dropped on Lada connections, and their results would have been cached under the default mode's key
 - Equally named databases on different servers shared cache entries, so one could serve the other's rows; entries are now keyed by driver, host, port and socket as well
 - `insertOrIgnoreReturning()` never invalidated anything
 - `updateOrInsert()` with callback values failed with a `TypeError`

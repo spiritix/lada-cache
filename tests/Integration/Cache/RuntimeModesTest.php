@@ -6,6 +6,7 @@ namespace Spiritix\LadaCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis as RedisFacade;
+use PDO;
 use Spiritix\LadaCache\Cache;
 use Spiritix\LadaCache\CacheHit;
 use Spiritix\LadaCache\CacheMiss;
@@ -100,6 +101,16 @@ final class RuntimeModesTest extends TestCase
         DB::table('cars')->updateOrInsert(['id' => 1], static fn (bool $exists): array => ['name' => $exists ? 'updated' : 'inserted']);
 
         $this->assertSame('updated', DB::table('cars')->where('id', 1)->value('name'));
+    }
+
+    public function testFetchModesBypassTheCacheAndReachPdo(): void
+    {
+        DB::table('cars')->insert(['id' => 1, 'name' => 'first', 'engine_id' => null, 'driver_id' => null]);
+        DB::table('cars')->select('id', 'name')->get();
+
+        $pairs = DB::table('cars')->select('id', 'name')->fetchUsing(PDO::FETCH_KEY_PAIR)->get()->all();
+
+        $this->assertSame([1 => 'first'], $pairs);
     }
 
     public function testInsertOrIgnoreReturningInvalidates(): void

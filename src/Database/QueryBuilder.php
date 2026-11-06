@@ -106,15 +106,10 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     /** {@inheritDoc} */
     protected function runSelect()
     {
-        // Do not cache queries that use pessimistic locks (lockForUpdate/sharedLock).
-        // Laravel stores lock intent in $this->lock; when present we should always hit the DB.
-        // Also bypass when the caller opted out via withoutCache().
-        if ($this->lock !== null || $this->cacheBypassed) {
+        if ($this->lock !== null || $this->cacheBypassed || $this->fetchUsing !== []) {
             return $this->runStatement(fn () => parent::runSelect());
         }
 
-        // Laravel can defer query mutations until just before execution. Finalize
-        // those callbacks before reflecting SQL for cache keys and tags.
         $this->applyBeforeQueryCallbacks();
 
         return $this->handler->cacheQuery($this, fn (string $sql): array => $this->runStatement(fn () => $this->connection->select(
