@@ -67,6 +67,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Expiration Jitter
+    |--------------------------------------------------------------------------
+    |
+    | Spreads each expiration randomly by up to this percentage of the
+    | expiration time in either direction, so entries cached together do
+    | not all expire, and hit the database, at the same moment. Set to 0
+    | to expire every entry after exactly the configured time.
+    |
+    */
+    'expiration_jitter' => env('LADA_CACHE_EXPIRATION_JITTER', 15),
+
+    /*
+    |--------------------------------------------------------------------------
     | Cache Granularity
     |--------------------------------------------------------------------------
     |

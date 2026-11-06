@@ -107,7 +107,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
         );
 
         // Only register when active to avoid bootstrap overhead when disabled
-        if ((bool) config('lada-cache.active', true) && $this->hasValidScope()) {
+        if ((bool) config('lada-cache.active', true) && $this->hasValidConfiguration()) {
             $this->registerSingletons();
             $this->registerDatabaseDecorator();
         }
@@ -115,10 +115,11 @@ final class LadaCacheServiceProvider extends ServiceProvider
         $this->registerCommands();
     }
 
-    private function hasValidScope(): bool
+    private function hasValidConfiguration(): bool
     {
         try {
             CacheScope::fromConfig(config('lada-cache.scope', CacheScope::All->value));
+            ExpirationPolicy::fromConfig();
 
             return true;
         } catch (InvalidArgumentException $exception) {

@@ -43,9 +43,22 @@ final class DegradedModeTest extends TestCase
 
     public function testInvalidScopeDisablesTheCacheInsteadOfCrashing(): void
     {
+        $this->assertInvalidConfigurationDisablesTheCache(['lada-cache.scope' => 'everything']);
+    }
+
+    public function testInvalidExpirationJitterDisablesTheCacheInsteadOfCrashing(): void
+    {
+        $this->assertInvalidConfigurationDisablesTheCache(['lada-cache.expiration_jitter' => 150]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $invalidConfiguration
+     */
+    private function assertInvalidConfigurationDisablesTheCache(array $invalidConfiguration): void
+    {
         Log::spy();
         DB::table('cars')->insert(['id' => 1, 'name' => 'plain', 'engine_id' => null, 'driver_id' => null]);
-        config(['lada-cache.scope' => 'everything']);
+        config($invalidConfiguration);
 
         (new LadaCacheServiceProvider($this->app))->register();
 

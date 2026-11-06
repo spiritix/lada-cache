@@ -9,6 +9,7 @@ use Spiritix\LadaCache\Cache;
 use Spiritix\LadaCache\CacheHit;
 use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\Encoder;
+use Spiritix\LadaCache\ExpirationPolicy;
 use Spiritix\LadaCache\Redis;
 use Spiritix\LadaCache\Tests\TestCase;
 
@@ -62,7 +63,7 @@ class FlushWithConnectionPrefixTest extends TestCase
     {
         RedisFacade::purge('cache');
 
-        return new Cache(new Redis(), new Encoder(), 0);
+        return new Cache(new Redis(), new Encoder(), new ExpirationPolicy(0));
     }
 
     /**

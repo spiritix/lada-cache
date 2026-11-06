@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Redis as RedisFacade;
 use Spiritix\LadaCache\Cache;
 use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\Encoder;
+use Spiritix\LadaCache\ExpirationPolicy;
 use Spiritix\LadaCache\Manager;
 use Spiritix\LadaCache\Redis as LadaRedis;
 use Spiritix\LadaCache\Reflector;
@@ -71,7 +72,7 @@ class ConfigurationBehaviourTest extends TestCase
     {
         config(['lada-cache.prefix' => 'cfg:']);
         $redis = new LadaRedis();
-        $cache = new Cache($redis, new Encoder(), 60);
+        $cache = new Cache($redis, new Encoder(), new ExpirationPolicy(60));
 
         $miss = $cache->lookup('expire-key', ['tag']);
         $this->assertInstanceOf(CacheMiss::class, $miss);
@@ -90,6 +91,7 @@ class ConfigurationBehaviourTest extends TestCase
         $packageConfig = require dirname(__DIR__, 3).'/config/lada-cache.php';
 
         $this->assertSame(604800, $packageConfig['expiration_time']);
+        $this->assertSame(15, $packageConfig['expiration_jitter']);
     }
 
     public function testRedisConnectionRespected(): void

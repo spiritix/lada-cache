@@ -174,6 +174,8 @@ Every tag carries a random version token. A read captures the tokens of its tags
 
 Lada Cache never breaks database access. If Redis is unreachable or a cache operation fails, the failure is logged and the query runs against the database as if Lada Cache were not installed. After a failure, Redis is skipped for 30 seconds per process, so an outage costs at most one connection attempt per process in that window; set short `timeout` and `read_timeout` values on the Redis connection Lada Cache uses to bound that attempt. Failed invalidations are logged as errors because other hosts may serve the previous results until they expire (`LADA_CACHE_EXPIRATION`, 7 days by default).
 
+Each expiration is spread randomly by up to `LADA_CACHE_EXPIRATION_JITTER` percent (15 by default) in either direction, so entries cached together, for example right after a deploy, do not all expire and hit the database at the same moment. Set it to 0 for exact expiration times.
+
 ## Console Commands
 
 ```bash

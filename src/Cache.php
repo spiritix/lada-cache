@@ -22,14 +22,14 @@ final class Cache
 {
     private const int PRUNE_BATCH_SIZE = 1000;
 
-    private readonly int $expirationTime;
+    private readonly ExpirationPolicy $expiration;
 
     public function __construct(
         private readonly Redis $redis,
         private readonly Encoder $encoder,
-        ?int $expirationTime = null,
+        ?ExpirationPolicy $expiration = null,
     ) {
-        $this->expirationTime = $expirationTime ?? (int) config('lada-cache.expiration_time');
+        $this->expiration = $expiration ?? ExpirationPolicy::fromConfig();
     }
 
     /**
@@ -40,7 +40,7 @@ final class Cache
         $reply = $this->redis->evaluate(LuaScripts::LOOKUP, [
             $key,
             self::freshToken(),
-            $this->expirationTime,
+            $this->expiration->nextTtl(),
             ...self::canonicalTags($tags),
         ]);
 
@@ -65,7 +65,7 @@ final class Cache
             $miss->generation->id,
             $miss->key,
             $miss->fingerprint,
-            $this->expirationTime,
+            $this->expiration->nextTtl(),
             $this->encoder->encode($data),
         ]);
     }
@@ -81,7 +81,7 @@ final class Cache
 
         $this->redis->evaluate(LuaScripts::INVALIDATE, [
             self::freshToken(),
-            $this->expirationTime,
+            $this->expiration->nextTtl(),
             ...self::canonicalTags($tags),
         ]);
     }

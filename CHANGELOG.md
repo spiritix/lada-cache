@@ -4,6 +4,7 @@
 ### Added
 - Added `withoutCache()` for per-query bypass of read caching and write invalidation (see https://github.com/spiritix/lada-cache/pull/151)
 - Added `lada-cache.scope` (`LADA_CACHE_SCOPE`): `models` caches only reads from models using `LadaCacheTrait`, while writes from any builder still invalidate
+- Added `lada-cache.expiration_jitter` (`LADA_CACHE_EXPIRATION_JITTER`, default 15): spreads each expiration by up to that percentage so entries cached together do not expire together (based on https://github.com/spiritix/lada-cache/pull/154)
 
 ### Changed
 - Cache entries are scoped by a random generation id stored in Redis. Each completed migration and every flush replace it atomically, so results read before a schema change are never served afterwards, even if the migration batch fails midway or Redis is emptied. Retired generations are pruned in bounded `SCAN` batches when a migration batch finishes instead of a blocking `KEYS` scan. Existing entries from earlier versions are ignored and removed on the next prune
@@ -11,10 +12,16 @@
 - Cache failures never affect database access: they are logged (errors for failed invalidations) and the query runs uncached; after a failure Redis is skipped for 30 seconds per process. Redis is no longer contacted when query builders are created
 - `expiration_time` defaults to 7 days so invalidated entries leave Redis
 - Removed `Invalidator` and the `lada.invalidator` binding; invalidation is part of `Cache`
-- An invalid `lada-cache.scope` disables Lada Cache with a logged error instead of failing the application boot
+- An invalid `lada-cache.scope`, `expiration_time` or `expiration_jitter` disables Lada Cache with a logged error instead of failing the application boot
+- Subquery tables are tracked on the builder that owns them instead of on the shared query handler, which also lets `include_tables`/`exclude_tables` see them
 
 ### Fixed
 - A failing SQL query was executed twice, and a successful query ran again when storing its result failed
+- Tables read by subqueries Laravel compiles to raw SQL were not tagged, so writes to them never invalidated the cached result: `whereIn()`/`whereNotIn()` subqueries (https://github.com/spiritix/lada-cache/pull/157), `fromSub()` (https://github.com/spiritix/lada-cache/pull/160), subquery columns in `where()`/`whereBetween()`, `orderBy()` subqueries, `crossJoinSub()`, `joinLateral()`, subqueries inside join closures, `selectSub()`/`joinSub()` with a closure or Eloquent builder, and unions with an Eloquent builder
+- `selectSub()`/`joinSub()` subquery tags were handed to whichever query ran next instead of the query they belonged to
+- Top-level `OR` and `whereNot` queries were scoped to the primary-key rows of one branch, leaving them stale after writes to other rows (https://github.com/spiritix/lada-cache/pull/156)
+- `findMany()`, `whereKey([...])` and BelongsTo eager loads were tagged table-wide and evicted by every write to the table (https://github.com/spiritix/lada-cache/pull/158)
+- Cached lookups of a missing row survived writes that created that row: `insertGetId()` and inserts with an explicit key (https://github.com/spiritix/lada-cache/pull/155), inserts without a key, `insertOrIgnore()`, `insertUsing()`, `insertOrIgnoreUsing()`, and updates that change the primary key
 
 ## [6.1.1] - 2026-05-22
 ### Fixed

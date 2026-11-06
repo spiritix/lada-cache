@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis as RedisFacade;
 use Spiritix\LadaCache\Cache;
 use Spiritix\LadaCache\Encoder;
+use Spiritix\LadaCache\ExpirationPolicy;
 use Spiritix\LadaCache\QueryHandler;
 use Spiritix\LadaCache\Redis;
 use Spiritix\LadaCache\Tests\TestCase;
@@ -37,7 +38,7 @@ class QueryHandlerTest extends TestCase
 
         config(['lada-cache.prefix' => 'p:']);
 
-        $this->cache = new Cache(new Redis(), new Encoder(), 0);
+        $this->cache = new Cache(new Redis(), new Encoder(), new ExpirationPolicy(0));
     }
 
     public function testMissRunsQueryOnceAndHitServesStoredRows(): void
@@ -191,7 +192,7 @@ class QueryHandlerTest extends TestCase
     {
         config(['lada-cache.redis_connection' => 'unreachable']);
 
-        return new QueryHandler(new Cache(new Redis(), new Encoder(), 0));
+        return new QueryHandler(new Cache(new Redis(), new Encoder(), new ExpirationPolicy(0)));
     }
 
     /**

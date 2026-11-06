@@ -9,6 +9,7 @@ use Spiritix\LadaCache\Cache;
 use Spiritix\LadaCache\CacheHit;
 use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\Encoder;
+use Spiritix\LadaCache\ExpirationPolicy;
 use Spiritix\LadaCache\Redis;
 use Spiritix\LadaCache\Tests\TestCase;
 
@@ -25,7 +26,7 @@ class CacheTest extends TestCase
         config(['lada-cache.prefix' => 'p:']);
 
         $this->redis = new Redis();
-        $this->cache = new Cache($this->redis, new Encoder(), 0);
+        $this->cache = new Cache($this->redis, new Encoder(), new ExpirationPolicy(0));
     }
 
     public function testFirstLookupCreatesAStableGeneration(): void
@@ -154,7 +155,7 @@ class CacheTest extends TestCase
     {
         config(['lada-cache.prefix' => 'g[1]*:']);
         $redis = new Redis();
-        $cache = new Cache($redis, new Encoder(), 0);
+        $cache = new Cache($redis, new Encoder(), new ExpirationPolicy(0));
         $cache->retireCurrentGeneration();
         $redis->set('g1:foreign-application-key', 'keep');
         $redis->set('g[1]*:legacy-key', 'drop');
@@ -178,7 +179,7 @@ class CacheTest extends TestCase
 
     public function testEntriesAndVersionsExpireWithTheConfiguredTtl(): void
     {
-        $cache = new Cache($this->redis, new Encoder(), 60);
+        $cache = new Cache($this->redis, new Encoder(), new ExpirationPolicy(60));
         $miss = $cache->lookup('k', ['t']);
         $this->assertInstanceOf(CacheMiss::class, $miss);
         $cache->store($miss, ['row']);
