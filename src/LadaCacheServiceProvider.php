@@ -45,6 +45,8 @@ final class LadaCacheServiceProvider extends ServiceProvider
 {
     public const CONFIG_FILE = 'lada-cache.php';
 
+    private const array SINGLETONS = ['lada.redis', 'lada.cache', 'lada.handler'];
+
     public function boot(): void
     {
         $this->publishes([
@@ -68,6 +70,8 @@ final class LadaCacheServiceProvider extends ServiceProvider
         if (! (bool) config('lada-cache.active', true)) {
             return;
         }
+
+        $this->warmSingletonsUnderOctane();
 
         config(['lada-cache.exclude_tables' => array_values(array_unique([
             ...(array) config('lada-cache.exclude_tables', []),
@@ -145,11 +149,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
      */
     public function provides(): array
     {
-        return [
-            'lada.redis',
-            'lada.cache',
-            'lada.handler',
-        ];
+        return self::SINGLETONS;
     }
 
     private function registerSingletons(): void
@@ -191,6 +191,20 @@ final class LadaCacheServiceProvider extends ServiceProvider
         }
 
         return $lada;
+    }
+
+    /**
+     * Octane, which also runs FrankenPHP worker mode, resolves services in a per-request copy of
+     * the container unless they are warmed. Warming keeps the failure cooldown and invalidations
+     * awaiting replay alive across requests, as they are meant to be in long-lived workers.
+     */
+    private function warmSingletonsUnderOctane(): void
+    {
+        if (! is_array(config('octane.warm'))) {
+            return;
+        }
+
+        config(['octane.warm' => array_values(array_unique([...config('octane.warm'), ...self::SINGLETONS]))]);
     }
 
     private function registerDatabaseDecorator(): void

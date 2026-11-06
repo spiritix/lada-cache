@@ -16,6 +16,7 @@
 - Added `lada-cache.max_entry_size` (`LADA_CACHE_MAX_ENTRY_SIZE`, default 8 MB): larger results are returned but not cached
 - Invalidations Redis rejects are kept, shared through APCu under PHP-FPM, and replayed before the cache is used again; reads bypass the cache until then
 - Tables Laravel writes on nearly every request when sessions, cache or queues use the database are excluded from caching automatically, saving a lookup and store per request for entries the next write discards
+- Under Laravel Octane, including FrankenPHP worker mode, Lada's services are added to `octane.warm`, so the failure cooldown and invalidations awaiting replay live as long as the worker instead of one request
 - Invalidations merged over large transactions or backlogs collapse into table tags past 1000 row tags, so a bulk import commits with one small script instead of setting a version key per row
 - Fuzz and multi-process test suites, and a test matrix over SQLite, MySQL and PostgreSQL with both Redis clients
 
