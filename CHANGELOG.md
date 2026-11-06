@@ -44,6 +44,7 @@
 - Cached lookups of a missing row survived writes that created that row: `insertGetId()` and inserts with an explicit key (https://github.com/spiritix/lada-cache/pull/155), inserts without a key, `insertOrIgnore()`, `insertUsing()`, `insertOrIgnoreUsing()`, and updates that change the primary key
 - Raw statements (`DB::insert/update/delete/statement/affectingStatement/unprepared`, and writes through `DB::select()`) never invalidated anything
 - Raw `DB::insert()` on MySQL bypassed raw statement invalidation, because MySQL's connection overrides `insert()`
+- `lada-cache:enable` left results cached before Lada was disabled in place, although writes made while it was disabled never invalidated them; enabling now retires them
 - Writes cascading through foreign keys left cached reads of the cascaded tables stale
 - A read keyed `where id = '05'` stayed stale after a write keyed `where id = 5`, and string keys differing only in case missed each other on case-insensitive collations
 - Updates that set the primary key to an expression did not invalidate cached reads of the new key
