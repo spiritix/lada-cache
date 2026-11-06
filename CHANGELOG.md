@@ -45,6 +45,7 @@
 - `EXPLAIN ANALYZE` of a write, which PostgreSQL executes, did not invalidate
 - `fetchUsing()` fetch modes were dropped on Lada connections, and their results would have been cached under the default mode's key
 - Reads inside `DB::pretend()` cached the empty result pretending returns, so later real reads returned nothing
+- Reads naming tables only inside raw SQL (`whereRaw`, `selectRaw`, raw joins, `fromRaw`) were never invalidated by writes to those tables
 - Writes to tables in `exclude_tables` or missing from `include_tables` did not invalidate, so foreign key actions carrying them into cached tables left those stale
 - Equally named databases on different servers shared cache entries, so one could serve the other's rows; entries are now keyed by driver, host, port and socket as well
 - `insertOrIgnoreReturning()` never invalidated anything

@@ -103,6 +103,7 @@ final class CompiledSubQueryTablesTest extends TestCase
 
     public function testJoinLateralTagsTheTablesItReads(): void
     {
+        $this->requireDatabaseDriver('mysql', 'pgsql');
         $builder = DB::table('drivers')->joinLateral(
             DB::table('cars')->whereColumn('cars.driver_id', 'drivers.id')->limit(1),
             'first_car'

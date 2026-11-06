@@ -8,6 +8,7 @@ use Illuminate\Database\Connection;
 use RuntimeException;
 use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Support\RowExtractor;
+use Spiritix\LadaCache\Support\SqlTableScanner;
 use Spiritix\LadaCache\Support\TableExtractor;
 
 /**
@@ -92,9 +93,18 @@ final class Reflector
         return $model !== null && $model->getTable() === $table && $model->getKeyType() !== 'int';
     }
 
+    /**
+     * Tables the query reads or writes. Reads also include tables named only inside raw SQL,
+     * so a write to them still invalidates the read.
+     */
     public function getTables(): array
     {
-        return $this->tables ??= TableExtractor::extractTables($this->queryBuilder);
+        return $this->tables ??= $this->sqlOperation === self::QUERY_TYPE_SELECT
+            ? array_values(array_unique([
+                ...TableExtractor::extractTables($this->queryBuilder),
+                ...SqlTableScanner::tables($this->getSql(), $this->queryBuilder->getConnection()->getTablePrefix()),
+            ]))
+            : TableExtractor::extractTables($this->queryBuilder);
     }
 
     public function getRows(): array

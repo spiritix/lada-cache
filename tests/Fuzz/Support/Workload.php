@@ -328,6 +328,10 @@ final class Workload
             'drivers with car count' => fn () => static fn (bool $cached): array => ($cached ? Driver::query() : Driver::query()->withoutCache())->withCount('cars')->orderBy('id')->get(['id'])->map(static fn (Driver $driver): array => [$driver->id, $driver->cars_count])->all(),
             'drivers having cars named' => fn (int $id, string $name) => static fn (bool $cached): array => ($cached ? Driver::query() : Driver::query()->withoutCache())->whereHas('cars', static fn (EloquentBuilder $query) => $query->where('name', $name))->orderBy('id')->pluck('id')->all(),
             'trashed cars' => fn () => static fn (bool $cached): array => ($cached ? Car::onlyTrashed() : Car::onlyTrashed()->withoutCache())->orderBy('id')->pluck('id')->all(),
+            'owners with raw pet exists' => fn () => $rows(fn () => DB::table('owners')->whereRaw("exists (select 1 from {$this->table('pets')} where {$this->table('pets')}.owner_id = {$this->table('owners')}.id)")->orderBy('id')->select('id')),
+            'raw pet count per owner' => fn (int $id) => $rows(fn () => DB::table('owners')->where('id', $id)->selectRaw("id, (select count(*) from {$this->table('pets')} where owner_id = {$this->table('owners')}.id) as pet_count")),
+            'raw join toys' => fn () => $rows(fn () => DB::table('pets')->join(DB::raw($this->table('pet_toys')), 'pet_toys.pet_id', '=', 'pets.id')->orderBy('pet_toys.id')->select('pet_toys.id', 'pets.name')),
+            'notes from raw' => fn () => $rows(fn () => DB::query()->fromRaw($this->table('owner_notes'))->orderBy('id')->select('id', 'owner_id')),
             'car material pairs' => fn () => $rows(fn () => DB::table('car_material')->orderBy('car_id')->orderBy('material_id')->select('car_id', 'material_id')),
         ];
     }
