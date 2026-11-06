@@ -27,7 +27,10 @@ use Spiritix\LadaCache\Database\SqliteConnection as LadaSqliteConnection;
 use Spiritix\LadaCache\Database\SqlServerConnection as LadaSqlServerConnection;
 use Spiritix\LadaCache\Debug\CacheCollector;
 use Spiritix\LadaCache\Support\CacheOperation;
+use Spiritix\LadaCache\Support\FailedInvalidations;
 use Spiritix\LadaCache\Support\FailureReporter;
+use Spiritix\LadaCache\Support\ForeignKeyDependents;
+use Spiritix\LadaCache\Support\ReplicaReads;
 use Throwable;
 
 /**
@@ -118,6 +121,8 @@ final class LadaCacheServiceProvider extends ServiceProvider
         try {
             CacheScope::fromConfig(config('lada-cache.scope', CacheScope::All->value));
             ExpirationPolicy::fromConfig();
+            ReplicaReads::configuredLagSeconds();
+            ForeignKeyDependents::configured();
 
             return true;
         } catch (InvalidArgumentException $exception) {
@@ -147,8 +152,14 @@ final class LadaCacheServiceProvider extends ServiceProvider
         $this->app->singleton('lada.cache', static fn (Application $app) => new Cache($app->make('lada.redis'), new Encoder)
         );
 
-        $this->app->singleton('lada.handler', static fn (Application $app) => new QueryHandler($app->make('lada.cache'))
-        );
+        $this->app->singleton('lada.handler', static function (Application $app): QueryHandler {
+            $redis = $app->make('lada.redis');
+
+            return new QueryHandler(
+                $app->make('lada.cache'),
+                FailedInvalidations::detect($redis->processStateKey('failed'), ExpirationPolicy::fromConfig()->seconds),
+            );
+        });
     }
 
     /**

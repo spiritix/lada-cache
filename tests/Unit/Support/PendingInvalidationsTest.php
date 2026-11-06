@@ -7,21 +7,26 @@ namespace Spiritix\LadaCache\Tests\Unit\Support;
 use Illuminate\Database\SQLiteConnection;
 use PDO;
 use PHPUnit\Framework\TestCase;
+use Spiritix\LadaCache\Support\Invalidation;
 use Spiritix\LadaCache\Support\PendingInvalidations;
 
 final class PendingInvalidationsTest extends TestCase
 {
     public function testStateBelongsToTheConnectionObjectNotItsName(): void
     {
-        $pending = new PendingInvalidations();
+        $pending = new PendingInvalidations;
         $purged = new SQLiteConnection(new PDO('sqlite::memory:'), ':memory:', '', ['name' => 'sqlite']);
         $reconnected = new SQLiteConnection(new PDO('sqlite::memory:'), ':memory:', '', ['name' => 'sqlite']);
 
-        $pending->addTags($purged, ['a', 'b', 'a']);
-        $pending->requestRetire($purged);
+        $pending->add($purged, Invalidation::of(['a', 'b'], 'db', 'sqlite', [], 0));
+        $pending->add($purged, Invalidation::of(['a'], 'db', 'sqlite', ['cars'], 0));
+        $pending->add($purged, Invalidation::everything());
 
-        $this->assertSame(['tags' => [], 'retire' => false], $pending->take($reconnected));
-        $this->assertSame(['tags' => ['a', 'b'], 'retire' => true], $pending->take($purged));
-        $this->assertSame(['tags' => [], 'retire' => false], $pending->take($purged));
+        $this->assertTrue($pending->take($reconnected)->isEmpty());
+        $taken = $pending->take($purged);
+        $this->assertSame(['a', 'b'], $taken->tags());
+        $this->assertSame(['db' => ['cars']], $taken->cascadeSources());
+        $this->assertTrue($taken->retiresEverything);
+        $this->assertTrue($pending->take($purged)->isEmpty());
     }
 }

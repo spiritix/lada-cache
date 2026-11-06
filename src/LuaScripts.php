@@ -11,9 +11,11 @@ namespace Spiritix\LadaCache;
  * prepended by `Redis::evaluate()`, and builds keys itself, so all keys share one layout
  * regardless of the Redis client:
  *
- * - `<base>generation`             current generation id
- * - `<base><generation>:e:<hash>`  entry: 40 character fingerprint followed by the payload
- * - `<base><generation>:v:<tag>`   current version token of a tag
+ * - `<base>generation`                  current generation id
+ * - `<base><generation>:e:<hash>`       entry: 40 character fingerprint followed by the payload
+ * - `<base><generation>:v:<tag>`        current version token of a tag
+ * - `<base><generation>:w:<tag>`        present while reads of the tag may come from a lagging replica
+ * - `<base><generation>:fk:<database>`  hash of table => newline separated tables changed along with it
  *
  * An entry is valid only while the fingerprint of its tags' current tokens matches the one
  * captured before the query ran, so a result read before a concurrent write is never served.
@@ -56,15 +58,22 @@ final class LuaScripts
         LUA;
 
     /**
-     * ARGV: base, generation, entry hash, fingerprint, ttl seconds, payload
-     * Returns 1 when stored and 0 when the generation was retired meanwhile.
+     * ARGV: base, generation, entry hash, fingerprint, ttl seconds, payload, tags read from a replica...
+     * Returns 1 when stored, 0 when the generation was retired meanwhile and -1 when one of the
+     * tags was written too recently for a replica read to be trusted.
      */
     public const string STORE = <<<'LUA'
         local base, generation, ttl = ARGV[1], ARGV[2], tonumber(ARGV[5])
         if redis.call('GET', base .. 'generation') ~= generation then
             return 0
         end
-        local entryKey = base .. generation .. ':e:' .. ARGV[3]
+        local scope = base .. generation .. ':'
+        for i = 7, #ARGV do
+            if redis.call('EXISTS', scope .. 'w:' .. ARGV[i]) == 1 then
+                return -1
+            end
+        end
+        local entryKey = scope .. 'e:' .. ARGV[3]
         local value = ARGV[4] .. ARGV[6]
         if ttl > 0 then
             redis.call('SET', entryKey, value, 'EX', ttl)
@@ -75,24 +84,91 @@ final class LuaScripts
         LUA;
 
     /**
-     * ARGV: base, fresh token, ttl seconds, tags...
-     * Returns the number of tags whose version was replaced.
+     * ARGV: base, fresh token, ttl seconds, replica lag seconds, tag count, tags...,
+     *       group count, then per group: database, prefix count, prefixes..., table count, tables...
+     * Replaces the tokens of the tags, and of every table-wide tag of the tables the database
+     * changes along with each group's tables. Returns {0} when nothing was ever cached, else
+     * {generation, databases whose dependents are not known yet...}.
      */
     public const string INVALIDATE = <<<'LUA'
-        local base, fresh, ttl = ARGV[1], ARGV[2], tonumber(ARGV[3])
+        local base, fresh, ttl, lag = ARGV[1], ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4])
         local generation = redis.call('GET', base .. 'generation')
         if not generation then
-            return 0
+            return {0}
         end
-        local scope = base .. generation .. ':v:'
-        for i = 4, #ARGV do
+        local scope = base .. generation .. ':'
+        local function replace(tag)
             if ttl > 0 then
-                redis.call('SET', scope .. ARGV[i], fresh, 'EX', ttl)
+                redis.call('SET', scope .. 'v:' .. tag, fresh, 'EX', ttl)
             else
-                redis.call('SET', scope .. ARGV[i], fresh)
+                redis.call('SET', scope .. 'v:' .. tag, fresh)
+            end
+            if lag > 0 then
+                redis.call('SET', scope .. 'w:' .. tag, '1', 'EX', lag)
             end
         end
-        return #ARGV - 3
+        local index = 5
+        local tagCount = tonumber(ARGV[index])
+        index = index + 1
+        for _ = 1, tagCount do
+            replace(ARGV[index])
+            index = index + 1
+        end
+        local result = {generation}
+        local groupCount = tonumber(ARGV[index])
+        index = index + 1
+        for _ = 1, groupCount do
+            local database = ARGV[index]
+            local prefixCount = tonumber(ARGV[index + 1])
+            index = index + 2
+            local prefixes = {}
+            for p = 1, prefixCount do
+                prefixes[p] = ARGV[index]
+                index = index + 1
+            end
+            local tableCount = tonumber(ARGV[index])
+            index = index + 1
+            local dependentsKey = scope .. 'fk:' .. database
+            local known = redis.call('EXISTS', dependentsKey) == 1
+            if not known then
+                result[#result + 1] = database
+            end
+            for _ = 1, tableCount do
+                if known then
+                    local dependents = redis.call('HGET', dependentsKey, ARGV[index])
+                    if dependents then
+                        for dependent in string.gmatch(dependents, '[^\n]+') do
+                            for p = 1, prefixCount do
+                                replace(prefixes[p] .. dependent)
+                            end
+                        end
+                    end
+                end
+                index = index + 1
+            end
+        end
+        return result
+        LUA;
+
+    /**
+     * ARGV: base, generation, database, ttl seconds, then pairs of table and newline separated dependents
+     * Returns 1 when stored and 0 when the generation was retired meanwhile.
+     */
+    public const string STORE_DEPENDENTS = <<<'LUA'
+        local base, generation, ttl = ARGV[1], ARGV[2], tonumber(ARGV[4])
+        if redis.call('GET', base .. 'generation') ~= generation then
+            return 0
+        end
+        local dependentsKey = base .. generation .. ':fk:' .. ARGV[3]
+        redis.call('DEL', dependentsKey)
+        redis.call('HSET', dependentsKey, '', '')
+        for i = 5, #ARGV, 2 do
+            redis.call('HSET', dependentsKey, ARGV[i], ARGV[i + 1])
+        end
+        if ttl > 0 then
+            redis.call('EXPIRE', dependentsKey, ttl)
+        end
+        return 1
         LUA;
 
     /**
@@ -105,7 +181,7 @@ final class LuaScripts
 
     /**
      * ARGV: base, cursor, batch size
-     * Deletes one SCAN batch of keys that belong to no current entry or version.
+     * Deletes one SCAN batch of keys that belong to no current generation.
      * Returns {next cursor, deleted count}.
      */
     public const string PRUNE_BATCH = <<<'LUA'
@@ -113,16 +189,11 @@ final class LuaScripts
         local pattern = string.gsub(base, '([%*%?%[%]\\])', '\\%1') .. '*'
         local generationKey = base .. 'generation'
         local generation = redis.call('GET', generationKey)
-        local entryPrefix, versionPrefix
-        if generation then
-            entryPrefix = base .. generation .. ':e:'
-            versionPrefix = base .. generation .. ':v:'
-        end
+        local currentPrefix = generation and (base .. generation .. ':') or nil
         local scan = redis.call('SCAN', ARGV[2], 'MATCH', pattern, 'COUNT', ARGV[3])
         local stale = {}
         for _, key in ipairs(scan[2]) do
-            local current = generation ~= false and generation ~= nil
-                and (string.sub(key, 1, #entryPrefix) == entryPrefix or string.sub(key, 1, #versionPrefix) == versionPrefix)
+            local current = currentPrefix ~= nil and string.sub(key, 1, #currentPrefix) == currentPrefix
             if key ~= generationKey and not current then
                 stale[#stale + 1] = key
             end

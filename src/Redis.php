@@ -28,6 +28,8 @@ final class Redis
 {
     private readonly string $prefix;
 
+    private readonly string $connectionName;
+
     private readonly RedisAvailability $availability;
 
     private ?string $keyBase = null;
@@ -37,14 +39,21 @@ final class Redis
         ?RedisAvailability $availability = null,
     ) {
         $this->prefix = (string) config('lada-cache.prefix', 'lada:');
-        $this->availability = $availability ?? RedisAvailability::detect(
-            'lada-cache:unavailable:'.$this->connectionName().':'.$this->prefix
-        );
+        $this->connectionName = $connection?->getName() ?? (string) config('lada-cache.redis_connection', 'cache');
+        $this->availability = $availability ?? RedisAvailability::detect($this->processStateKey('unavailable'));
     }
 
     public function prefix(string $key): string
     {
         return $this->prefix.$key;
+    }
+
+    /**
+     * Key for state kept outside Redis about this Redis connection and prefix, such as in APCu.
+     */
+    public function processStateKey(string $purpose): string
+    {
+        return 'lada-cache:'.$purpose.':'.$this->connectionName.':'.$this->prefix;
     }
 
     private function keyBase(): string
@@ -142,7 +151,7 @@ final class Redis
 
     public function getConnection(): Connection
     {
-        return $this->connection ??= RedisFacade::connection((string) config('lada-cache.redis_connection', 'cache'));
+        return $this->connection ??= RedisFacade::connection($this->connectionName);
     }
 
     private function connectionPrefix(): string
@@ -161,10 +170,5 @@ final class Redis
         $client = $this->connection?->client();
 
         return $client instanceof PhpRedisClient ? (string) $client->getLastError() : 'no error reported';
-    }
-
-    private function connectionName(): string
-    {
-        return $this->connection?->getName() ?? (string) config('lada-cache.redis_connection', 'cache');
     }
 }

@@ -11,6 +11,7 @@ use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\Encoder;
 use Spiritix\LadaCache\ExpirationPolicy;
 use Spiritix\LadaCache\Redis;
+use Spiritix\LadaCache\Support\Invalidation;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class FlushWithConnectionPrefixTest extends TestCase
@@ -42,7 +43,7 @@ class FlushWithConnectionPrefixTest extends TestCase
         $cache = $this->freshCache();
         $this->seedEntry($cache, 'k1', ['t1'], ['row']);
 
-        $cache->invalidate(['t1']);
+        $cache->invalidate(Invalidation::of(['t1'], 'db', 'default', [], 0));
 
         $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k1', ['t1']));
     }

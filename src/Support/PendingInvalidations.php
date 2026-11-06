@@ -15,7 +15,7 @@ use WeakMap;
  */
 final class PendingInvalidations
 {
-    /** @var WeakMap<ConnectionInterface, array{tags: array<string, true>, retire: bool}> */
+    /** @var WeakMap<ConnectionInterface, Invalidation> */
     private WeakMap $pending;
 
     public function __construct()
@@ -23,35 +23,16 @@ final class PendingInvalidations
         $this->pending = new WeakMap;
     }
 
-    /**
-     * @param  array<string>  $tags
-     */
-    public function addTags(ConnectionInterface $connection, array $tags): void
+    public function add(ConnectionInterface $connection, Invalidation $invalidation): void
     {
-        $entry = $this->pending[$connection] ?? ['tags' => [], 'retire' => false];
-
-        foreach ($tags as $tag) {
-            $entry['tags'][$tag] = true;
-        }
-
-        $this->pending[$connection] = $entry;
+        $this->pending[$connection] = ($this->pending[$connection] ?? Invalidation::none())->merge($invalidation);
     }
 
-    public function requestRetire(ConnectionInterface $connection): void
+    public function take(ConnectionInterface $connection): Invalidation
     {
-        $entry = $this->pending[$connection] ?? ['tags' => [], 'retire' => false];
-        $entry['retire'] = true;
-        $this->pending[$connection] = $entry;
-    }
-
-    /**
-     * @return array{tags: list<string>, retire: bool}
-     */
-    public function take(ConnectionInterface $connection): array
-    {
-        $entry = $this->pending[$connection] ?? ['tags' => [], 'retire' => false];
+        $invalidation = $this->pending[$connection] ?? Invalidation::none();
         unset($this->pending[$connection]);
 
-        return ['tags' => array_keys($entry['tags']), 'retire' => $entry['retire']];
+        return $invalidation;
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache;
 
+use Spiritix\LadaCache\Support\Invalidation;
 use Throwable;
 use UnexpectedValueException;
 
@@ -64,8 +65,9 @@ final class Cache
 
     /**
      * @param  array<mixed>  $rows
+     * @param  array<string>  $tagsReadFromReplica  tags of a result read from a possibly lagging replica
      */
-    public function store(CacheMiss $miss, array $rows): void
+    public function store(CacheMiss $miss, array $rows, array $tagsReadFromReplica = []): void
     {
         $this->redis->evaluate(LuaScripts::STORE, [
             $miss->generation->id,
@@ -73,23 +75,63 @@ final class Cache
             $miss->fingerprint,
             $this->expiration->nextTtl(),
             $this->encoder->encode($rows),
+            ...self::canonicalTags($tagsReadFromReplica),
         ]);
     }
 
     /**
-     * @param  array<string>  $tags
+     * Replaces the version tokens of the invalidation's tags and of the tables its cascade
+     * sources change. Returns the databases whose dependent tables are not known in the
+     * current generation yet; their cascades were skipped.
+     *
+     * @return array{generation: Generation|null, databasesWithUnknownDependents: list<string>}
      */
-    public function invalidate(array $tags): void
+    public function invalidate(Invalidation $invalidation): array
     {
-        if ($tags === []) {
-            return;
-        }
-
-        $this->redis->evaluate(LuaScripts::INVALIDATE, [
+        $arguments = [
             self::freshToken(),
             $this->expiration->nextTtl(),
-            ...self::canonicalTags($tags),
-        ]);
+            $invalidation->replicaLagSeconds,
+            count($invalidation->tags()),
+            ...$invalidation->tags(),
+            count($invalidation->cascadeSources()),
+        ];
+
+        foreach ($invalidation->cascadeSources() as $database => $tables) {
+            $prefixes = Tagger::tableWideTagPrefixes($database);
+            array_push($arguments, $database, count($prefixes), ...$prefixes);
+            array_push($arguments, count($tables), ...$tables);
+        }
+
+        $reply = $this->redis->evaluate(LuaScripts::INVALIDATE, $arguments);
+
+        if (! is_array($reply) || ! isset($reply[0])) {
+            throw new UnexpectedValueException('Malformed Lada Cache invalidation reply');
+        }
+
+        if ($reply[0] === 0 || $reply[0] === '0') {
+            return ['generation' => null, 'databasesWithUnknownDependents' => []];
+        }
+
+        return [
+            'generation' => new Generation((string) $reply[0]),
+            'databasesWithUnknownDependents' => array_map('strval', array_slice($reply, 1)),
+        ];
+    }
+
+    /**
+     * @param  array<string, list<string>>  $dependents  table => tables changed along with it
+     * @return bool Whether they were stored, false when the generation was retired meanwhile
+     */
+    public function storeDependents(Generation $generation, string $database, array $dependents): bool
+    {
+        $arguments = [$generation->id, $database, $this->expiration->nextTtl()];
+
+        foreach ($dependents as $table => $tables) {
+            array_push($arguments, $table, implode("\n", $tables));
+        }
+
+        return (int) $this->redis->evaluate(LuaScripts::STORE_DEPENDENTS, $arguments) === 1;
     }
 
     public function flush(): void

@@ -80,6 +80,34 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Replica Lag
+    |--------------------------------------------------------------------------
+    |
+    | Only applies to connections with separate read replicas (a "read"
+    | section in the connection config). For this many seconds after a
+    | write, results read from a replica for the written tables are
+    | returned but not cached, since the replica may not have the write
+    | yet. Set it to the replication lag you want to tolerate.
+    |
+    */
+    'replica_lag' => env('LADA_CACHE_REPLICA_LAG', 2),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Dependent Tables
+    |--------------------------------------------------------------------------
+    |
+    | Writes to a table also invalidate the tables the database changes
+    | along with it through foreign keys with ON DELETE / ON UPDATE
+    | CASCADE, SET NULL or SET DEFAULT; these are read from the schema
+    | automatically. List changes the schema does not declare here, such
+    | as tables written by triggers: 'orders' => ['order_totals'].
+    |
+    */
+    'dependent_tables' => [],
+
+    /*
+    |--------------------------------------------------------------------------
     | Cache Granularity
     |--------------------------------------------------------------------------
     |

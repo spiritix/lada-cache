@@ -11,6 +11,7 @@ use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\Encoder;
 use Spiritix\LadaCache\ExpirationPolicy;
 use Spiritix\LadaCache\Redis;
+use Spiritix\LadaCache\Support\Invalidation;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class CacheTest extends TestCase
@@ -43,9 +44,9 @@ class CacheTest extends TestCase
         $this->cache->store($this->miss('k', ['t1', 't2']), ['row']);
 
         $hit = $this->cache->lookup('k', ['t1', 't2']);
-        $this->cache->invalidate(['unrelated']);
+        $this->cache->invalidate(Invalidation::of(['unrelated'], 'db', 'default', [], 0));
         $stillHit = $this->cache->lookup('k', ['t1', 't2']);
-        $this->cache->invalidate(['t2']);
+        $this->cache->invalidate(Invalidation::of(['t2'], 'db', 'default', [], 0));
 
         $this->assertInstanceOf(CacheHit::class, $hit);
         $this->assertSame(['row'], $hit->rows);
@@ -64,7 +65,7 @@ class CacheTest extends TestCase
     {
         $capturedBeforeWrite = $this->miss('k', ['t']);
 
-        $this->cache->invalidate(['t']);
+        $this->cache->invalidate(Invalidation::of(['t'], 'db', 'default', [], 0));
         $this->cache->store($capturedBeforeWrite, ['stale']);
 
         $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t']));

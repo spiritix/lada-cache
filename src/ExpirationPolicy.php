@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use InvalidArgumentException;
+use Spiritix\LadaCache\Support\IntegerConfig;
 
 final readonly class ExpirationPolicy
 {
@@ -24,8 +25,8 @@ final readonly class ExpirationPolicy
     public static function fromConfig(): self
     {
         return new self(
-            self::integerConfig('lada-cache.expiration_time'),
-            self::integerConfig('lada-cache.expiration_jitter'),
+            IntegerConfig::read('lada-cache.expiration_time', 0),
+            IntegerConfig::read('lada-cache.expiration_jitter', 0),
         );
     }
 
@@ -38,16 +39,5 @@ final readonly class ExpirationPolicy
         $spread = intdiv($this->seconds * $this->jitterPercent, 100);
 
         return max(1, random_int($this->seconds - $spread, $this->seconds + $spread));
-    }
-
-    private static function integerConfig(string $key): int
-    {
-        $value = config($key, 0);
-
-        if (filter_var($value, FILTER_VALIDATE_INT) === false) {
-            throw new InvalidArgumentException(sprintf('Invalid %s "%s", expected an integer', $key, is_scalar($value) ? (string) $value : get_debug_type($value)));
-        }
-
-        return (int) $value;
     }
 }

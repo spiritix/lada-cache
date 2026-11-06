@@ -77,6 +77,7 @@ class QueryHandlerTest extends TestCase
         $handler = new QueryHandler($this->cache);
         $builder = DB::table('cars')->where('id', 1);
         $handler->setBuilder(DB::table('drivers'))->cacheQuery(fn (): array => []);
+        $handler->setBuilder(DB::table('drivers'))->invalidateQuery('update', ['name' => 'warm up foreign keys']);
 
         $missCommands = $this->recordRedisCommands(fn () => $handler->setBuilder($builder)->cacheQuery(fn (): array => [['id' => 1]]));
         $invalidationCommands = $this->recordRedisCommands(fn () => $handler->setBuilder(DB::table('cars')->where('id', 1))->invalidateQuery('update', ['name' => 'x']));
