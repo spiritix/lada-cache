@@ -6,6 +6,7 @@ namespace Spiritix\LadaCache\Tests\Integration\Cache;
 
 use Closure;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 use Spiritix\LadaCache\Cache;
 use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\Encoder;
@@ -169,6 +170,24 @@ final class SoundnessTest extends TestCase
 
         $this->assertSame(1, $executions);
         $this->assertTrue($failed->hasPending());
+    }
+
+    public function testUnreadableForeignKeysRetireTheCacheInsteadOfBlockingIt(): void
+    {
+        $failed = FailedInvalidations::processLocal();
+        $handler = new QueryHandler(app('lada.cache'), $failed);
+        $handler->cacheQuery(DB::table('cars'), fn (): array => []);
+        $generation = $this->generationId();
+        DB::connection()->beforeExecuting(static function (string $query): void {
+            if (preg_match('/referential_constraints|pg_constraint|pragma_foreign_key_list/i', $query) === 1) {
+                throw new RuntimeException('permission denied for the foreign key catalog');
+            }
+        });
+
+        $handler->invalidateQuery(DB::table('owners')->where('id', 1), 'delete');
+
+        $this->assertNotSame($generation, $this->generationId());
+        $this->assertFalse($failed->hasPending());
     }
 
     public function testRejectedSchemaChangeRetiresTheGenerationOnceRedisIsBack(): void

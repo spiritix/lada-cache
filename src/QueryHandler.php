@@ -300,7 +300,14 @@ final class QueryHandler
 
         $stored = [];
         foreach ($unknown as $database) {
-            $dependents = ForeignKeyDependents::load(DB::connection($invalidation->connectionOf($database)));
+            try {
+                $dependents = ForeignKeyDependents::load(DB::connection($invalidation->connectionOf($database)));
+            } catch (Throwable $exception) {
+                FailureReporter::report(CacheOperation::Invalidate, $exception, ['database' => $database, 'reading' => 'foreign keys']);
+                $this->cache->retireAfterSchemaChange();
+
+                return;
+            }
 
             if ($this->cache->storeDependents($generation, $database, $dependents)) {
                 $stored[] = $database;
