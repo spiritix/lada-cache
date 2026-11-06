@@ -130,6 +130,26 @@ This file allows you to fine-tune cache behavior, such as:
 
 The default configuration is already optimized for most Laravel applications, so you typically won’t need to modify it unless you want more granular control.
 
+### Redis connection
+
+Lada Cache uses the Redis connection named by `LADA_CACHE_REDIS_CONNECTION` (`cache` by default). A Redis that stops answering without closing connections stalls every query for as long as the client waits, so give the connection Lada Cache uses short timeouts; a dedicated connection keeps them away from the rest of the application:
+
+```php
+// config/database.php, inside 'redis'
+'lada' => [
+    'host' => env('REDIS_HOST', '127.0.0.1'),
+    'port' => env('REDIS_PORT', '6379'),
+    'database' => env('REDIS_CACHE_DB', '1'),
+    'timeout' => 1.0,            // connect, both clients
+    'read_timeout' => 1.0,       // phpredis
+    'read_write_timeout' => 1.0, // Predis
+],
+```
+
+```dotenv
+LADA_CACHE_REDIS_CONNECTION=lada
+```
+
 ## Usage
 
 After installation, Lada Cache works **automatically**.  
