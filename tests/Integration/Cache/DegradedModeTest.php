@@ -51,6 +51,14 @@ final class DegradedModeTest extends TestCase
         $this->assertInvalidConfigurationDisablesTheCache(['lada-cache.expiration_jitter' => 150]);
     }
 
+    public function testConfigurationOfAnEarlierVersionDisablesTheCacheNamingTheRenamedKeys(): void
+    {
+        $this->assertInvalidConfigurationDisablesTheCache(['lada-cache.expiration-time' => 3600, 'lada-cache.consider-rows' => true]);
+
+        Log::shouldHaveReceived('error')->withArgs(static fn (string $message): bool => str_contains($message, 'lada-cache.expiration-time was renamed to lada-cache.expiration_time')
+            && str_contains($message, 'lada-cache.consider-rows was renamed to lada-cache.consider_rows'));
+    }
+
     /**
      * @param  array<string, mixed>  $invalidConfiguration
      */
