@@ -80,9 +80,21 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
         return $this->model;
     }
 
-    public function getPrimaryKeyName(): string
+    /**
+     * The primary key column of a table the query names. Only the model's own table has a known
+     * key; every other table is assumed to use the conventional key, the same one any builder
+     * without a model assumes, so reads and writes of a table always agree on its row tags.
+     */
+    public function primaryKeyOf(string $table): string
     {
-        return $this->model?->getKeyName() ?? self::DEFAULT_PRIMARY_KEY_NAME;
+        return $this->model !== null && $this->model->getTable() === $table
+            ? $this->model->getKeyName()
+            : self::DEFAULT_PRIMARY_KEY_NAME;
+    }
+
+    private function primaryKeyOfTarget(): ?string
+    {
+        return is_string($this->from) ? $this->primaryKeyOf(SqlAliasParser::stripAlias($this->from)) : null;
     }
 
     /** {@inheritDoc} */
@@ -159,7 +171,8 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function insertGetId(array $values, $sequence = null)
     {
         $id = $this->runStatement(fn () => parent::insertGetId($values, $sequence));
-        $this->invalidate(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy([$this->getPrimaryKeyName() => $id]));
+        $primaryKey = $this->primaryKeyOfTarget();
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, $values, $primaryKey === null ? AssignedRows::unknown() : $this->rowsAssignedBy([$primaryKey => $id]));
 
         return $id;
     }
@@ -208,7 +221,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function delete($id = null)
     {
         $count = $this->runStatement(fn () => parent::delete($id));
-        $this->invalidate(Reflector::QUERY_TYPE_DELETE, [$this->getPrimaryKeyName() => $id]);
+        $this->invalidate(Reflector::QUERY_TYPE_DELETE);
 
         return $count;
     }
@@ -243,7 +256,12 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
      */
     private function rowsReassignedBy(array $values): AssignedRows
     {
-        $primaryKey = $this->getPrimaryKeyName();
+        $primaryKey = $this->primaryKeyOfTarget();
+
+        if ($primaryKey === null) {
+            return AssignedRows::unknown();
+        }
+
         $assignsKey = false;
 
         foreach (array_keys($values) as $column) {
@@ -262,11 +280,12 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
      */
     private function rowsAssignedBy(array $values): AssignedRows
     {
-        if (! is_string($this->from)) {
+        $primaryKey = $this->primaryKeyOfTarget();
+
+        if ($primaryKey === null) {
             return AssignedRows::unknown();
         }
 
-        $primaryKey = $this->getPrimaryKeyName();
         $ids = [];
         $complete = true;
 

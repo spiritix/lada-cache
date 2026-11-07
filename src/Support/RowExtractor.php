@@ -7,6 +7,7 @@ namespace Spiritix\LadaCache\Support;
 use Illuminate\Database\Query\Builder as BaseBuilder;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Query\JoinClause;
+use Spiritix\LadaCache\Database\QueryBuilder;
 
 /**
  * Utility to extract targeted primary-key rows per table from a Query Builder.
@@ -26,14 +27,11 @@ final class RowExtractor
         $everyWherePinsRows = true;
 
         $aliasMap = self::resolveAliasMap($builder);
-        $pk = method_exists($builder, 'getPrimaryKeyName')
-            ? $builder->getPrimaryKeyName()
-            : 'id';
 
         foreach ($builder->wheres ?? [] as $where) {
             $hasOr = $hasOr || str_starts_with(self::boolean($where), 'or');
 
-            $match = self::matchPrimaryKey($builder, $where, $aliasMap, $pk);
+            $match = self::matchPrimaryKey($builder, $where, $aliasMap);
             if ($match === null) {
                 $everyWherePinsRows = false;
 
@@ -62,7 +60,7 @@ final class RowExtractor
      * @param  array<string, string>  $aliasMap
      * @return array{0: string, 1: array<int, scalar>}|null
      */
-    private static function matchPrimaryKey(BaseBuilder $builder, array $where, array $aliasMap, string $pk): ?array
+    private static function matchPrimaryKey(BaseBuilder $builder, array $where, array $aliasMap): ?array
     {
         if (! isset($where['column']) || str_contains(self::boolean($where), 'not')) {
             return null;
@@ -84,7 +82,7 @@ final class RowExtractor
         if ($table !== null && isset($aliasMap[$table])) {
             $table = $aliasMap[$table];
         }
-        if ($table === null || $column !== $pk) {
+        if ($table === null || $column !== self::primaryKeyOf($builder, $table)) {
             return null;
         }
 
@@ -96,6 +94,11 @@ final class RowExtractor
 
         $values = in_array($where['type'] ?? null, ['In', 'InRaw'], true) && is_array($where['values'] ?? null) ? $where['values'] : [];
         return [$table, array_filter($values, 'is_scalar') === $values ? array_values($values) : []];
+    }
+
+    private static function primaryKeyOf(BaseBuilder $builder, string $table): string
+    {
+        return $builder instanceof QueryBuilder ? $builder->primaryKeyOf($table) : QueryBuilder::DEFAULT_PRIMARY_KEY_NAME;
     }
 
     /**
