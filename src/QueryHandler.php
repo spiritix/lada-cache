@@ -98,7 +98,18 @@ final class QueryHandler
             return;
         }
 
-        foreach ($effect->tables as $table) {
+        $this->invalidateTables($connection, $effect->tables);
+    }
+
+    /**
+     * Invalidates every cached read of the tables, and of the tables the database changes along
+     * with them, as a write to each table would.
+     *
+     * @param  list<string>  $tables
+     */
+    public function invalidateTables(ConnectionInterface $connection, array $tables): void
+    {
+        foreach ($tables as $table) {
             $builder = $connection->query()->from($table);
 
             if (! $builder instanceof QueryBuilder) {

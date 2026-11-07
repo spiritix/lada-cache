@@ -1,0 +1,72 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Spiritix\LadaCache\Console;
+
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+use Spiritix\LadaCache\Database\QueryBuilder;
+use Spiritix\LadaCache\QueryHandler;
+use Throwable;
+
+/**
+ * Invalidates the cached reads of specific tables, for changes made outside Laravel's database
+ * connection such as imports or manual fixes, without retiring the whole cache.
+ */
+final class InvalidateCommand extends Command
+{
+    protected $signature = 'lada-cache:invalidate
+        {tables* : Tables whose cached reads to invalidate}
+        {--connection= : Database connection of the tables, the default connection when omitted}';
+
+    protected $description = 'Invalidate the Lada Cache entries of specific tables.';
+
+    public function handle(): int
+    {
+        if (! (bool) config('lada-cache.active', true)) {
+            $this->error('Lada Cache is disabled. Nothing was invalidated.');
+
+            return self::FAILURE;
+        }
+
+        try {
+            $connection = DB::connection($this->option('connection'));
+        } catch (Throwable $exception) {
+            $this->error('Unknown database connection: '.$exception->getMessage());
+
+            return self::FAILURE;
+        }
+
+        if (! $connection->query() instanceof QueryBuilder) {
+            $this->error("Connection {$connection->getName()} does not use Lada Cache.");
+
+            return self::FAILURE;
+        }
+
+        /** @var list<string> $tables */
+        $tables = array_values(array_unique((array) $this->argument('tables')));
+        $schema = $connection->getSchemaBuilder();
+        $unknown = array_values(array_filter($tables, static fn (string $table): bool => ! $schema->hasTable($table)));
+
+        if ($unknown !== []) {
+            $this->error("Unknown tables on connection {$connection->getName()}: ".implode(', ', $unknown));
+
+            return self::FAILURE;
+        }
+
+        /** @var QueryHandler $handler */
+        $handler = app('lada.handler');
+        $handler->invalidateTables($connection, $tables);
+
+        if (! $handler->replayFailedInvalidations()) {
+            $this->error('Redis rejected the invalidation; it is kept and replayed once Redis accepts it.');
+
+            return self::FAILURE;
+        }
+
+        $this->info('Invalidated the cached reads of: '.implode(', ', $tables));
+
+        return self::SUCCESS;
+    }
+}

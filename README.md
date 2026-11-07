@@ -220,6 +220,9 @@ Each expiration is spread randomly by up to `LADA_CACHE_EXPIRATION_JITTER` perce
 # Flush all cached entries
 php artisan lada-cache:flush
 
+# Invalidate the cached reads of specific tables, after changes made outside Laravel
+php artisan lada-cache:invalidate users orders [--connection=mysql]
+
 # Temporarily disable cache
 php artisan lada-cache:disable
 
@@ -237,7 +240,7 @@ php artisan lada-cache:enable
 - Redis Cluster is not supported, because each cache operation is one Lua script touching keys of several tags. Use a standalone Redis, optionally with replicas and Sentinel.
 - A restarted Redis or a promoted replica may have lost the newest invalidations. Lada Cache records the Redis server's run id and retires the cache the first time a store or invalidation reaches a different server; cached reads served before that first store or write anywhere may still be stale.
 - Give Redis an eviction policy such as `allkeys-lru` or `volatile-lru`. Evicted entries and version tokens only cause misses, but under `noeviction` a full Redis rejects invalidations, and `volatile-ttl` evicts the short-lived replica lag markers first.
-- Writes that bypass Laravel's connection (other applications, database consoles, `DB::connection()->getPdo()`) are not seen; flush with `php artisan lada-cache:flush` after such changes.
+- Writes that bypass Laravel's connection (other applications, database consoles, `DB::connection()->getPdo()`) are not seen; run `php artisan lada-cache:invalidate <tables>` (or `lada-cache:flush`) after such changes.
 
 ## Contributing
 
