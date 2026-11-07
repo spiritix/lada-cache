@@ -109,7 +109,10 @@ final class Reflector
 
     public function getRows(): array
     {
-        return $this->rows ??= RowExtractor::extractRows($this->queryBuilder);
+        return $this->rows ??= RowExtractor::extractRows(
+            $this->queryBuilder,
+            SqlTableScanner::tableReferenceCounts($this->getSql(), $this->queryBuilder->getConnection()->getTablePrefix()),
+        );
     }
 
     public function getType(): string

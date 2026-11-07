@@ -14,13 +14,19 @@ use Spiritix\LadaCache\Database\QueryBuilder;
  *
  * Returns an associative map of table => list of primary key values when
  * they can be statically determined from Basic or In wheres.
+ *
+ * A table the statement reads more than once, because it is joined to itself or named again in a
+ * subquery, is left out: such a query reads rows its conditions do not pin, so pinning any of
+ * them would leave the result stale when one of the others changes.
  */
 final class RowExtractor
 {
     /**
+     * @param  array<string, int>  $referenceCounts  how often the statement reads each table, see
+     *                                               `SqlTableScanner::tableReferenceCounts()`
      * @return array<string, array<int, scalar>>
      */
-    public static function extractRows(BaseBuilder $builder): array
+    public static function extractRows(BaseBuilder $builder, array $referenceCounts = []): array
     {
         $rows = [];
         $hasOr = false;
@@ -44,6 +50,12 @@ final class RowExtractor
         }
         if ($hasOr && (! $everyWherePinsRows || count($rows) > 1)) {
             return [];
+        }
+
+        foreach (array_keys($rows) as $table) {
+            if (($referenceCounts[$table] ?? 1) > 1) {
+                unset($rows[$table]);
+            }
         }
 
         return $rows;

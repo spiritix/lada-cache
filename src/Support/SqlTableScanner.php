@@ -28,6 +28,18 @@ final class SqlTableScanner
      */
     public static function tables(string $sql, string $tablePrefix): array
     {
+        return array_map('strval', array_keys(self::tableReferenceCounts($sql, $tablePrefix)));
+    }
+
+    /**
+     * How often the SQL reads each table, counting every FROM and JOIN item of the statement and
+     * of its subqueries. A table read more than once, such as one joined to itself or named again
+     * inside a subquery, is not limited to the rows a query's conditions pin.
+     *
+     * @return array<string, int>
+     */
+    public static function tableReferenceCounts(string $sql, string $tablePrefix): array
+    {
         $item = self::QUALIFIED.'(?:\s+(?:as\s+)?(?!(?:where|on|using|join|inner|left|right|full|cross|natural|straight_join|group|order|limit|having|union|window|for|lateral)\b)'.self::IDENTIFIER.')?';
 
         preg_match_all('/\b(?:from|join|straight_join)\s+(?<list>'.$item.'(?:\s*,\s*'.$item.')*)/i', self::withoutLiterals($sql), $matches);
@@ -38,7 +50,12 @@ final class SqlTableScanner
             array_push($names, ...$items['name']);
         }
 
-        return self::tableNames($names, $tablePrefix);
+        $counts = [];
+        foreach (self::tableNames($names, $tablePrefix) as $name) {
+            $counts[$name] = ($counts[$name] ?? 0) + 1;
+        }
+
+        return $counts;
     }
 
     /**
@@ -50,7 +67,7 @@ final class SqlTableScanner
     {
         preg_match_all(self::WRITE, self::withoutLiterals($sql), $matches);
 
-        return self::tableNames($matches['name'], $tablePrefix);
+        return array_values(array_unique(self::tableNames($matches['name'], $tablePrefix)));
     }
 
     private static function withoutLiterals(string $sql): string
@@ -60,7 +77,7 @@ final class SqlTableScanner
 
     /**
      * @param  list<string>  $qualifiedNames
-     * @return list<string>
+     * @return list<string> One name per identifier, in order and with repeats
      */
     private static function tableNames(array $qualifiedNames, string $tablePrefix): array
     {
@@ -69,9 +86,9 @@ final class SqlTableScanner
             preg_match_all('/'.self::IDENTIFIER.'/', $qualified, $segments);
             $unquoted = array_map(static fn (string $segment): string => trim($segment, '`"[]'), $segments[0]);
             $table = (string) array_pop($unquoted);
-            $tables[implode('.', [...$unquoted, TableName::withoutPrefix($table, $tablePrefix)])] = true;
+            $tables[] = implode('.', [...$unquoted, TableName::withoutPrefix($table, $tablePrefix)]);
         }
 
-        return array_map('strval', array_keys($tables));
+        return $tables;
     }
 }
