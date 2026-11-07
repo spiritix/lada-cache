@@ -19,6 +19,7 @@ A **Redis-based**, fully automated, and scalable query cache layer for Laravel.
 - [Why?](#why)
 - [Why only Redis?](#why-only-redis)
 - [Installation](#installation)
+- [Upgrading from 5.x](#upgrading-from-5x)
 - [Configuration](#configuration)
 - [Usage](#usage)
 - [Console Commands](#console-commands)
@@ -118,6 +119,20 @@ class Car extends Model
 ```
 
 > 💡 It’s best to add the trait in a shared `BaseModel` class that all models extend.
+
+### Upgrading from 5.x
+
+Entries are kept under a new key layout, so a deploy is safe to run side by side for as long as you make the old version's entries invalid too:
+
+1. Point the `spiritix/lada-cache` requirement at this version.
+2. Publish the new `config/lada-cache.php`. The old file's keys were renamed (`expiration-time` to `expiration_time`, `consider-rows` to `consider_rows`, `include-tables`/`exclude-tables` to `include_tables`/`exclude_tables`, `enable-debugbar` to `enable_debugbar`); a file still using the old names disables the cache with an error naming them, rather than silently running with defaults.
+3. Set `LADA_CACHE_LEGACY_INVALIDATION=true` and deploy (see [Rolling deployments](#rolling-deployments)). Pods on 5.x then stop serving results this version invalidated.
+4. Keep `lada-cache.scope` at `models` while the rollout lasts if you want the same reads cached as before; switch it to `all` once you have checked the wider set (see [Caching only selected models](#caching-only-selected-models)).
+5. Give the Redis connection named by `LADA_CACHE_REDIS_CONNECTION` short timeouts (see [Redis connection](#redis-connection)). 5.x used the default connection; this version defaults to the connection named `cache`, so name the one the entries should live in.
+6. Run migrations from a host with Lada Cache active against the shared Redis (see [Rolling deployments](#rolling-deployments)).
+7. Run `php artisan lada-cache:flush` once every host runs this version, then unset `LADA_CACHE_LEGACY_INVALIDATION`; the 5.x keys it deleted are garbage from then on.
+
+Code that reached into the package's internals to invalidate single tables, such as building a `QueryBuilder` and calling `setBuilder()` and `invalidateQuery()`, now uses `php artisan lada-cache:invalidate <tables>`, which also invalidates what the database changes along with those tables. `lada.invalidator` is gone; invalidation is part of `lada.cache`.
 
 ## Configuration
 After publishing the configuration file (see [Installation](#installation)), you will find a comprehensive config file at `config/lada-cache.php`.

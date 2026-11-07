@@ -45,6 +45,9 @@ final class Reflector
     /** @var array<string, array<int, mixed>>|null */
     private ?array $rows = null;
 
+    /** @var array<string, int>|null */
+    private ?array $referenceCounts = null;
+
     public function __construct(
         private readonly QueryBuilder $queryBuilder,
         string $sqlOperation = self::QUERY_TYPE_SELECT,
@@ -102,16 +105,27 @@ final class Reflector
         return $this->tables ??= $this->sqlOperation === self::QUERY_TYPE_SELECT
             ? array_values(array_unique([
                 ...TableExtractor::extractTables($this->queryBuilder),
-                ...SqlTableScanner::tables($this->getSql(), $this->queryBuilder->getConnection()->getTablePrefix()),
+                ...array_keys($this->referenceCounts()),
             ]))
             : TableExtractor::extractTables($this->queryBuilder);
     }
 
     public function getRows(): array
     {
-        return $this->rows ??= RowExtractor::extractRows(
-            $this->queryBuilder,
-            SqlTableScanner::tableReferenceCounts($this->getSql(), $this->queryBuilder->getConnection()->getTablePrefix()),
+        return $this->rows ??= RowExtractor::extractRows($this->queryBuilder, $this->referenceCounts());
+    }
+
+    /**
+     * How often the statement reads each table, scanned once for both the tables to tag and the
+     * tables whose rows can be pinned.
+     *
+     * @return array<string, int>
+     */
+    private function referenceCounts(): array
+    {
+        return $this->referenceCounts ??= SqlTableScanner::tableReferenceCounts(
+            $this->getSql(),
+            $this->queryBuilder->getConnection()->getTablePrefix(),
         );
     }
 
