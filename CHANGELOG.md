@@ -14,7 +14,7 @@
 - Writes invalidate tables their triggers write, found by scanning trigger bodies, and writes through updatable views invalidate their base tables
 - Added `lada-cache.replica_lag` (`LADA_CACHE_REPLICA_LAG`, default 2): on connections with read replicas, replica reads of recently written tables are not cached
 - Added `lada-cache.max_entry_size` (`LADA_CACHE_MAX_ENTRY_SIZE`, default 8 MB): larger results are returned but not cached
-- Invalidations Redis rejects are kept, shared through APCu under PHP-FPM, and replayed before the cache is used again; reads bypass the cache until then
+- Invalidations Redis rejects are kept, shared through APCu under PHP-FPM, and replayed before the cache is used again; reads bypass the cache until then, and again when the request or worker ends
 - Tables Laravel writes on nearly every request when sessions, cache or queues use the database are excluded from caching automatically, saving a lookup and store per request for entries the next write discards
 - Under Laravel Octane, including FrankenPHP worker mode, Lada's services are added to `octane.warm`, so the failure cooldown and invalidations awaiting replay live as long as the worker instead of one request
 - A restarted Redis or a promoted replica, which may have lost the newest invalidations, retires the cache on the first store or invalidation that reaches it

@@ -255,9 +255,12 @@ final class QueryHandler
     }
 
     /**
+     * Applies invalidations Redis rejected earlier, if any. Also run when a request or worker
+     * ends, so invalidations kept only in memory are not lost with it when Redis is back.
+     *
      * @return bool Whether nothing is pending anymore, so the cache can be trusted again
      */
-    private function replayFailedInvalidations(): bool
+    public function replayFailedInvalidations(): bool
     {
         try {
             $this->replayPendingInvalidations();

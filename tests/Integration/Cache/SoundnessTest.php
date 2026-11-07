@@ -252,6 +252,20 @@ final class SoundnessTest extends TestCase
         Log::shouldHaveReceived('warning')->once();
     }
 
+    public function testPendingInvalidationsAreReplayedWhenTheRequestEnds(): void
+    {
+        $failed = FailedInvalidations::processLocal();
+        $failed->record(Invalidation::everything());
+        $this->app->instance('lada.handler', new QueryHandler(app('lada.cache'), $failed));
+        app('lada.cache')->lookup('k', ['t']);
+        $generation = $this->generationId();
+
+        $this->app->terminate();
+
+        $this->assertNotSame($generation, $this->generationId());
+        $this->assertFalse($failed->hasPending());
+    }
+
     public function testRejectedSchemaChangeRetiresTheGenerationOnceRedisIsBack(): void
     {
         $failed = FailedInvalidations::processLocal();

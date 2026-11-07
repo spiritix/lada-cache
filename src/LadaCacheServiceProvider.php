@@ -105,6 +105,12 @@ final class LadaCacheServiceProvider extends ServiceProvider
                 FailureReporter::report(CacheOperation::Prune, $exception);
             }
         });
+
+        $this->app->terminating(function (): void {
+            if ($this->app->resolved('lada.handler')) {
+                $this->app->make('lada.handler')->replayFailedInvalidations();
+            }
+        });
     }
 
     /**

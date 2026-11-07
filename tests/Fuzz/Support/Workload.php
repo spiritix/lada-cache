@@ -227,6 +227,7 @@ final class Workload
 
         DB::setDefaultConnection($this->primaryConnection);
         $this->endOutage();
+        $this->healthyHandler?->replayFailedInvalidations();
     }
 
     /**
