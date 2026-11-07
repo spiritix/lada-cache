@@ -113,9 +113,7 @@ jobs:
         run: composer install --no-interaction --prefer-dist
 
       - name: Run PHPStan static analysis
-        run: vendor/bin/phpstan analyse --level=max src/
-        continue-on-error: true
+        run: vendor/bin/phpstan analyse --memory-limit=1G
 
       - name: Run Pint
-        run: vendor/bin/pint --test src/
-        continue-on-error: true
+        run: vendor/bin/pint --test src

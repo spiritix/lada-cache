@@ -20,7 +20,7 @@ final class RowKeys
 
     /**
      * @param  array<int|string, mixed>  $values
-     * @return list<string>|null  null when row tags cannot represent the values safely
+     * @return list<string>|null null when row tags cannot represent the values safely
      */
     public static function canonical(array $values, bool $stringKeys): ?array
     {

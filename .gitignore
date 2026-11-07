@@ -7,10 +7,11 @@
 # Composer & vendor
 /vendor/
 composer.phar
-composer.lock
 
 # Build artifacts
 /build/
+/result
+/result-*
 coverage.xml
 
 # PHPUnit cache

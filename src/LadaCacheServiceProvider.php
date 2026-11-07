@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Events\DatabaseRefreshed;
 use Illuminate\Database\Events\MigrationEnded;
@@ -12,6 +13,10 @@ use Illuminate\Database\Events\MigrationsEnded;
 use Illuminate\Database\Events\SchemaLoaded;
 use Illuminate\Database\Events\TransactionCommitted;
 use Illuminate\Database\Events\TransactionRolledBack;
+use Illuminate\Database\MySqlConnection;
+use Illuminate\Database\PostgresConnection;
+use Illuminate\Database\SQLiteConnection;
+use Illuminate\Database\SqlServerConnection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
@@ -20,18 +25,18 @@ use Spiritix\LadaCache\Console\DisableCommand;
 use Spiritix\LadaCache\Console\EnableCommand;
 use Spiritix\LadaCache\Console\FlushCommand;
 use Spiritix\LadaCache\Console\InvalidateCommand;
-use Spiritix\LadaCache\Database\MySqlConnection as LadaMySqlConnection;
 use Spiritix\LadaCache\Database\MariaDbConnection as LadaMariaDbConnection;
+use Spiritix\LadaCache\Database\MySqlConnection as LadaMySqlConnection;
 use Spiritix\LadaCache\Database\PostgresConnection as LadaPostgresConnection;
 use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Database\SqliteConnection as LadaSqliteConnection;
 use Spiritix\LadaCache\Database\SqlServerConnection as LadaSqlServerConnection;
 use Spiritix\LadaCache\Debug\CacheCollector;
 use Spiritix\LadaCache\Support\CacheOperation;
+use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\FailedInvalidations;
 use Spiritix\LadaCache\Support\FailureReporter;
 use Spiritix\LadaCache\Support\FrameworkTables;
-use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\ReplicaReads;
 use Throwable;
 
@@ -205,7 +210,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
     /**
      * Copy driver-specific state from the base connection to the Lada connection.
      */
-    private function hydrateLadaConnection(\Illuminate\Database\Connection $base, \Illuminate\Database\Connection $lada, string $name): \Illuminate\Database\Connection
+    private function hydrateLadaConnection(Connection $base, Connection $lada, string $name): Connection
     {
         if (method_exists($lada, 'setReadPdo')) {
             $lada->setReadPdo($base->getRawReadPdo());
@@ -242,8 +247,8 @@ final class LadaCacheServiceProvider extends ServiceProvider
 
     private function registerDatabaseDecorator(): void
     {
-        DB::extend('mysql', function (array $config, string $name): \Illuminate\Database\Connection {
-            /** @var \Illuminate\Database\MySqlConnection $base */
+        DB::extend('mysql', function (array $config, string $name): Connection {
+            /** @var MySqlConnection $base */
             $base = app('db.factory')->make($config, $name);
             $lada = new LadaMySqlConnection(
                 $base->getRawPdo(),
@@ -251,12 +256,13 @@ final class LadaCacheServiceProvider extends ServiceProvider
                 $base->getTablePrefix(),
                 $base->getConfig(),
             );
+
             return $this->hydrateLadaConnection($base, $lada, $name);
         });
 
         // Optional explicit MariaDB driver (alias of MySQL)
-        DB::extend('mariadb', function (array $config, string $name): \Illuminate\Database\Connection {
-            /** @var \Illuminate\Database\MySqlConnection $base */
+        DB::extend('mariadb', function (array $config, string $name): Connection {
+            /** @var MySqlConnection $base */
             $base = app('db.factory')->make($config, $name);
             $lada = new LadaMariaDbConnection(
                 $base->getRawPdo(),
@@ -264,11 +270,12 @@ final class LadaCacheServiceProvider extends ServiceProvider
                 $base->getTablePrefix(),
                 $base->getConfig(),
             );
+
             return $this->hydrateLadaConnection($base, $lada, $name);
         });
 
-        DB::extend('pgsql', function (array $config, string $name): \Illuminate\Database\Connection {
-            /** @var \Illuminate\Database\PostgresConnection $base */
+        DB::extend('pgsql', function (array $config, string $name): Connection {
+            /** @var PostgresConnection $base */
             $base = app('db.factory')->make($config, $name);
             $lada = new LadaPostgresConnection(
                 $base->getRawPdo(),
@@ -276,11 +283,12 @@ final class LadaCacheServiceProvider extends ServiceProvider
                 $base->getTablePrefix(),
                 $base->getConfig(),
             );
+
             return $this->hydrateLadaConnection($base, $lada, $name);
         });
 
-        DB::extend('sqlite', function (array $config, string $name): \Illuminate\Database\Connection {
-            /** @var \Illuminate\Database\SqliteConnection $base */
+        DB::extend('sqlite', function (array $config, string $name): Connection {
+            /** @var SQLiteConnection $base */
             $base = app('db.factory')->make($config, $name);
             $lada = new LadaSqliteConnection(
                 $base->getRawPdo(),
@@ -288,11 +296,12 @@ final class LadaCacheServiceProvider extends ServiceProvider
                 $base->getTablePrefix(),
                 $base->getConfig(),
             );
+
             return $this->hydrateLadaConnection($base, $lada, $name);
         });
 
-        DB::extend('sqlsrv', function (array $config, string $name): \Illuminate\Database\Connection {
-            /** @var \Illuminate\Database\SqlServerConnection $base */
+        DB::extend('sqlsrv', function (array $config, string $name): Connection {
+            /** @var SqlServerConnection $base */
             $base = app('db.factory')->make($config, $name);
             $lada = new LadaSqlServerConnection(
                 $base->getRawPdo(),
@@ -300,6 +309,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
                 $base->getTablePrefix(),
                 $base->getConfig(),
             );
+
             return $this->hydrateLadaConnection($base, $lada, $name);
         });
     }

@@ -105,6 +105,7 @@ final class RowExtractor
         }
 
         $values = in_array($where['type'] ?? null, ['In', 'InRaw'], true) && is_array($where['values'] ?? null) ? $where['values'] : [];
+
         return [$table, array_filter($values, 'is_scalar') === $values ? array_values($values) : []];
     }
 

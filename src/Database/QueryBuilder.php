@@ -11,6 +11,7 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Query\Grammars\Grammar;
 use Illuminate\Database\Query\Processors\Processor;
+use Illuminate\Support\Collection;
 use Spiritix\LadaCache\QueryHandler;
 use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Support\AssignedRows;
@@ -207,7 +208,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     /**
      * {@inheritDoc}
      *
-     * @return \Illuminate\Support\Collection<int, \stdClass>
+     * @return Collection<int, \stdClass>
      */
     public function insertOrIgnoreReturning(array $values, array $returning = ['*'], array|string|null $uniqueBy = null)
     {
