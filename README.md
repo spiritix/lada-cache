@@ -217,7 +217,8 @@ Each expiration is spread randomly by up to `LADA_CACHE_EXPIRATION_JITTER` perce
 ## Console Commands
 
 ```bash
-# Flush all cached entries
+# Flush all cached entries: retiring them is a single Redis command, after which the
+# leftover keys are deleted in non-blocking SCAN batches (about 1 second per million keys)
 php artisan lada-cache:flush
 
 # Invalidate the cached reads of specific tables, after changes made outside Laravel

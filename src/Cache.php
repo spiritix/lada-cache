@@ -159,10 +159,16 @@ final class Cache
         return $database.':'.substr(sha1((string) json_encode(DependentTables::configured())), 0, 12);
     }
 
-    public function flush(): void
+    /**
+     * Retiring makes every entry unreachable in one command; pruning only reclaims memory.
+     *
+     * @return int Number of retired keys deleted
+     */
+    public function flush(): int
     {
         $this->retireCurrentGeneration();
-        $this->pruneRetiredGenerations();
+
+        return $this->pruneRetiredGenerations();
     }
 
     public function retireCurrentGeneration(): void

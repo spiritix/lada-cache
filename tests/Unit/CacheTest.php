@@ -13,10 +13,13 @@ use Spiritix\LadaCache\EntrySizeLimit;
 use Spiritix\LadaCache\ExpirationPolicy;
 use Spiritix\LadaCache\Redis;
 use Spiritix\LadaCache\Support\Invalidation;
+use Spiritix\LadaCache\Tests\Concerns\RecordsRedisCommands;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class CacheTest extends TestCase
 {
+    use RecordsRedisCommands;
+
     private Redis $redis;
 
     private Cache $cache;
@@ -230,6 +233,21 @@ class CacheTest extends TestCase
 
         $this->assertSame('keep', $redis->get('g1:foreign-application-key'));
         $this->assertSame(0, (int) $redis->exists('g[1]*:legacy-key'));
+    }
+
+    public function testFlushCostsOneScriptPerScanBatchAndNeverBlocksOnKeys(): void
+    {
+        $retired = $this->miss('k', ['t']);
+        $this->redis->getConnection()->pipeline(function ($pipe) use ($retired): void {
+            for ($index = 0; $index < 20000; $index++) {
+                $pipe->set('p:'.$retired->generation->id.':e:'.$index, '1');
+            }
+        });
+
+        $commands = $this->recordRedisCommands(fn () => $this->assertSame(20000 + 1, $this->cache->flush()));
+
+        $this->assertSame([], array_diff($commands, ['evalsha', 'eval']));
+        $this->assertLessThan(200, count($commands));
     }
 
     public function testFlushRetiresAndPrunes(): void
