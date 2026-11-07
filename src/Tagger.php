@@ -40,24 +40,15 @@ final readonly class Tagger
     public function getTags(): array
     {
         $tables = array_values(array_filter($this->reflector->getTables(), 'is_string'));
-
-        if (! $this->considerRows) {
-            return array_values(array_unique(array_map(function (string $table): string {
-                [$database, $name] = $this->locate($table);
-
-                return self::PREFIX_DATABASE.$database.self::PREFIX_TABLE_UNSPECIFIC.$name;
-            }, $tables)));
-        }
-
-        $pinnedRows = $this->reflector->getRows();
+        $pinnedRows = $this->considerRows ? $this->reflector->getRows() : [];
         $type = $this->reflector->getType();
         $tags = [];
 
         foreach ($tables as $table) {
             [$database, $name] = $this->locate($table);
             $stringKeys = $this->reflector->usesStringKeys($table);
-            $pinned = RowKeys::canonical($pinnedRows[$table] ?? [], $stringKeys);
-            $assigned = $this->assignedRows->complete ? RowKeys::canonical($this->assignedRows->forTable($table), $stringKeys) : null;
+            $pinned = $this->considerRows ? RowKeys::canonical($pinnedRows[$table] ?? [], $stringKeys) : null;
+            $assigned = $this->considerRows && $this->assignedRows->complete ? RowKeys::canonical($this->assignedRows->forTable($table), $stringKeys) : null;
 
             foreach ($this->tableTags($type, $name, $pinned, $assigned) as $tag) {
                 $tags[self::PREFIX_DATABASE.$database.$tag] = true;
@@ -88,17 +79,15 @@ final readonly class Tagger
 
     /**
      * Prefixes that, followed by a table name, form every tag a read of that table can carry
-     * at table level, so appending a table name invalidates all its cached reads.
+     * at table level, so appending a table name invalidates all its cached reads. Both are
+     * returned whatever `consider_rows` says, so hosts configured differently, such as old and
+     * new pods during a deploy, still invalidate each other's reads.
      *
      * @return list<string>
      */
     public static function tableWideTagPrefixes(string $database): array
     {
         $databaseTag = self::PREFIX_DATABASE.$database;
-
-        if (! (bool) config('lada-cache.consider_rows', true)) {
-            return [$databaseTag.self::PREFIX_TABLE_UNSPECIFIC];
-        }
 
         return [$databaseTag.self::PREFIX_TABLE_SPECIFIC, $databaseTag.self::PREFIX_TABLE_UNSPECIFIC];
     }
