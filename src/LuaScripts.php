@@ -12,6 +12,7 @@ namespace Spiritix\LadaCache;
  * regardless of the Redis client:
  *
  * - `<base>generation`                  current generation id
+ * - `<base>server`                      run id of the Redis server that wrote the keys
  * - `<base><generation>:e:<hash>`       entry: 40 character fingerprint followed by the payload
  * - `<base><generation>:v:<tag>`        current version token of a tag
  * - `<base><generation>:w:<tag>`        present while reads of the tag may come from a lagging replica
@@ -23,6 +24,29 @@ namespace Spiritix\LadaCache;
  */
 final class LuaScripts
 {
+    /**
+     * Defines retireIfServerChanged(base). A restarted Redis or a promoted replica may have lost
+     * the newest version tokens, which would make invalidated entries reachable again; seeing a
+     * new server run id retires the generation, once, and returns true.
+     */
+    private const string SERVER_CHECK = <<<'LUA'
+        local function retireIfServerChanged(base)
+            local runId = string.match(redis.call('INFO', 'server'), 'run_id:(%w+)')
+            local serverKey = base .. 'server'
+            local known = redis.call('GET', serverKey)
+            if known == runId then
+                return false
+            end
+            redis.call('SET', serverKey, runId)
+            if not known then
+                return false
+            end
+            redis.call('SET', base .. 'generation', string.sub(redis.sha1hex(runId .. known), 1, 32))
+            return true
+        end
+
+        LUA;
+
     /**
      * ARGV: base, entry hash, fresh token, ttl seconds, tags...
      * Returns {generation, fingerprint} on a miss and {generation, fingerprint, payload} on a hit.
@@ -63,8 +87,11 @@ final class LuaScripts
      * Returns 1 when stored, 0 when the generation was retired meanwhile and -1 when one of the
      * tags was written too recently for a replica read to be trusted.
      */
-    public const string STORE = <<<'LUA'
+    public const string STORE = self::SERVER_CHECK.<<<'LUA'
         local base, generation, ttl = ARGV[1], ARGV[2], tonumber(ARGV[5])
+        if retireIfServerChanged(base) then
+            return 0
+        end
         if redis.call('GET', base .. 'generation') ~= generation then
             return 0
         end
@@ -91,8 +118,11 @@ final class LuaScripts
      * changes along with each group's tables. Returns {0} when nothing was ever cached, else
      * {generation, 1-based indexes of the groups whose dependents are not known yet...}.
      */
-    public const string INVALIDATE = <<<'LUA'
+    public const string INVALIDATE = self::SERVER_CHECK.<<<'LUA'
         local base, fresh, ttl, lag = ARGV[1], ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4])
+        if retireIfServerChanged(base) then
+            return {0}
+        end
         local generation = redis.call('GET', base .. 'generation')
         if not generation then
             return {0}
@@ -182,7 +212,7 @@ final class LuaScripts
 
     /**
      * ARGV: base, cursor, batch size
-     * Deletes one SCAN batch of keys that belong to no current generation.
+     * Deletes one SCAN batch of keys that belong to no current generation, keeping the server id.
      * Returns {next cursor, deleted count}.
      */
     public const string PRUNE_BATCH = <<<'LUA'
@@ -195,7 +225,7 @@ final class LuaScripts
         local stale = {}
         for _, key in ipairs(scan[2]) do
             local current = currentPrefix ~= nil and string.sub(key, 1, #currentPrefix) == currentPrefix
-            if key ~= generationKey and not current then
+            if key ~= generationKey and key ~= base .. 'server' and not current then
                 stale[#stale + 1] = key
             end
         end

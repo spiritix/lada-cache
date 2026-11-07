@@ -48,7 +48,7 @@ class FlushWithConnectionPrefixTest extends TestCase
         $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k1', ['t1']));
     }
 
-    public function testFlushDeletesAllEntriesAndKeepsOnlyTheGenerationKey(): void
+    public function testFlushDeletesAllEntriesAndKeepsOnlyTheGenerationAndServerKeys(): void
     {
         $cache = $this->freshCache();
         $this->seedEntry($cache, 'k1', ['t1'], ['1']);
@@ -57,7 +57,9 @@ class FlushWithConnectionPrefixTest extends TestCase
 
         $cache->flush();
 
-        $this->assertSame(['app_lada:generation'], RedisFacade::connection('cache')->keys('lada:*'));
+        $remaining = RedisFacade::connection('cache')->keys('lada:*');
+        sort($remaining);
+        $this->assertSame(['app_lada:generation', 'app_lada:server'], $remaining);
     }
 
     private function freshCache(): Cache

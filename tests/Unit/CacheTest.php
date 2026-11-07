@@ -146,6 +146,37 @@ class CacheTest extends TestCase
         $this->cache->lookup('k', ['t']);
     }
 
+    public function testStoringAfterARedisRestartOrFailoverRetiresTheGeneration(): void
+    {
+        $this->cache->store($this->miss('k', ['t']), ['before']);
+        $generation = $this->redis->get('p:generation');
+        $this->redis->set('p:server', 'run-id-of-the-previous-server');
+
+        $this->cache->store($this->miss('other', ['t']), ['after']);
+
+        $this->assertNotSame($generation, $this->redis->get('p:generation'));
+        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t']));
+    }
+
+    public function testInvalidatingAfterARedisRestartOrFailoverRetiresTheGeneration(): void
+    {
+        $this->cache->store($this->miss('k', ['t']), ['before']);
+        $this->redis->set('p:server', 'run-id-of-the-previous-server');
+
+        $this->cache->invalidate(Invalidation::of(['unrelated']));
+
+        $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t']));
+    }
+
+    public function testTheSameServerNeverRetires(): void
+    {
+        $this->cache->store($this->miss('k', ['t']), ['row']);
+        $this->cache->invalidate(Invalidation::of(['unrelated']));
+        $this->cache->store($this->miss('other', ['t']), ['row']);
+
+        $this->assertInstanceOf(CacheHit::class, $this->cache->lookup('k', ['t']));
+    }
+
     public function testRetireMakesEntriesUnreachable(): void
     {
         $this->cache->store($this->miss('k', ['t']), ['row']);
