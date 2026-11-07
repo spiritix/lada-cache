@@ -283,6 +283,7 @@ make concurrency          # several processes against MySQL and PostgreSQL
 
 - **Unit** and **Integration** cover behaviour case by case.
 - **Fuzz** runs a seeded random workload of reads, writes, raw statements, transactions, foreign key cascades, cache flushes, an emptied Redis and evicted keys, and compares every cached read with the same query run without the cache. A failure prints the seed and the operations that led to it; rerun with `LADA_FUZZ_SEED=<seed>`.
+- **Benchmark** (`make bench`) reports reads per second with and without the cache, and the Redis commands a cached read costs.
 - **Concurrency** forks worker processes, like pods sharing one database and Redis, runs the same workload in all of them at once, and checks that every cached read matches the database once they finish.
 
 ## License

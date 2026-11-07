@@ -1,4 +1,4 @@
-.PHONY: test test-sqlite test-mysql test-pgsql test-matrix fuzz concurrency build down
+.PHONY: test test-sqlite test-mysql test-pgsql test-matrix fuzz concurrency bench build down
 
 DOCKER_COMPOSE ?= docker compose
 RUN = $(DOCKER_COMPOSE) run --rm -T --user "$(shell id -u):$(shell id -g)"
@@ -11,6 +11,7 @@ ARGS ?=
 #   make test-matrix                   every database with every Redis client
 #   make fuzz LADA_FUZZ_ITERATIONS=5000 [LADA_FUZZ_SEED=123]
 #   make concurrency                   multi-process suite on MySQL and PostgreSQL
+#   make bench                         cached versus uncached read throughput on MySQL
 #   ARGS="--filter Foo" narrows any target
 
 test: test-sqlite
@@ -49,6 +50,9 @@ concurrency:
 
 build:
 	$(DOCKER_COMPOSE) build app
+
+bench:
+	$(RUN) -e DB_CONNECTION=mysql -e DB_HOST=mysql app vendor/bin/phpunit --no-coverage --do-not-cache-result tests/Benchmark
 
 down:
 	$(DOCKER_COMPOSE) down -v
