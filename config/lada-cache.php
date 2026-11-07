@@ -106,6 +106,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Invalidate Entries of Earlier Versions
+    |--------------------------------------------------------------------------
+    |
+    | While a deploy runs, hosts on 5.x serve entries this version never
+    | invalidates, because the two versions keep their entries and tags under
+    | different keys. Enable this during such a rollout so every write also
+    | deletes the 5.x entries of the written tags, at the cost of one more
+    | Redis script per write. Turn it off again once every host runs this
+    | version, after which the entries it removes are garbage anyway.
+    |
+    */
+    'legacy_invalidation' => env('LADA_CACHE_LEGACY_INVALIDATION', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Dependent Tables
     |--------------------------------------------------------------------------
     |

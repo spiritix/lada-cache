@@ -118,6 +118,10 @@ final class Cache
 
         $reply = $this->redis->evaluate(LuaScripts::INVALIDATE, $arguments);
 
+        if ($this->legacyInvalidation()) {
+            $this->redis->evaluate(LuaScripts::PURGE_LEGACY, $invalidation->tags());
+        }
+
         if (! is_array($reply) || ! isset($reply[0])) {
             throw new UnexpectedValueException('Malformed Lada Cache invalidation reply');
         }
@@ -148,6 +152,11 @@ final class Cache
         }
 
         return (int) $this->redis->evaluate(LuaScripts::STORE_DEPENDENTS, $arguments) === 1;
+    }
+
+    private function legacyInvalidation(): bool
+    {
+        return (bool) config('lada-cache.legacy_invalidation', false);
     }
 
     /**

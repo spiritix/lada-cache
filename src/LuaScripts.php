@@ -211,6 +211,31 @@ final class LuaScripts
         LUA;
 
     /**
+     * ARGV: base, tag...
+     * Deletes the 5.x tag sets of the tags and the entries they list, so hosts still running 5.x
+     * during a rolling deploy stop serving results the new version invalidated.
+     */
+    public const string PURGE_LEGACY = <<<'LUA'
+        local base = ARGV[1]
+        local deleted = 0
+        for i = 2, #ARGV do
+            local tagKey = base .. ARGV[i]
+            if redis.call('TYPE', tagKey)['ok'] == 'set' then
+                local entries = redis.call('SMEMBERS', tagKey)
+                if #entries > 0 then
+                    local keys = {}
+                    for _, entry in ipairs(entries) do
+                        keys[#keys + 1] = base .. entry
+                    end
+                    deleted = deleted + redis.call('UNLINK', unpack(keys))
+                end
+                deleted = deleted + redis.call('UNLINK', tagKey)
+            end
+        end
+        return deleted
+        LUA;
+
+    /**
      * ARGV: base, cursor, batch size
      * Deletes one SCAN batch of keys that belong to no current generation, keeping the server id.
      * Returns {next cursor, deleted count}.

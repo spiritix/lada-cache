@@ -2,10 +2,12 @@
 
 ## [Unreleased]
 ### Upgrading
-- Entries use a new key layout and invalidation scheme, so hosts still running an earlier version neither read them nor invalidate them. Writes made by old hosts during a rolling deploy can therefore leave new entries stale: run `php artisan lada-cache:flush` once every host runs this version.
+- Entries use a new key layout and invalidation scheme, so hosts still running an earlier version neither read them nor invalidate them. Writes made by old hosts during a rolling deploy can therefore leave new entries stale: run `php artisan lada-cache:flush` once every host runs this version. Set `LADA_CACHE_LEGACY_INVALIDATION=true` for the duration of the rollout so that writes by this version also invalidate the entries of the old one, and turn it off afterwards.
 - Migrations must run on a host with Lada Cache active against the shared Redis, since schema changes are detected from migration events only.
 
 ### Added
+- `lada-cache.legacy_invalidation` (`LADA_CACHE_LEGACY_INVALIDATION`, off by default): during a rolling deploy, writes also delete the 5.x entries of the tags they invalidate, so pods still on 5.x never serve results this version invalidated
+- Added `php artisan lada-cache:invalidate <tables>` to invalidate specific tables after changes made outside Laravel, such as imports or manual fixes, without flushing the cache
 - Added `withoutCache()` to read a query from the database without caching it (see https://github.com/spiritix/lada-cache/pull/151); writes invalidate regardless, since skipping their invalidation left other readers with stale rows
 - Added `lada-cache.scope` (`LADA_CACHE_SCOPE`): `models` caches only reads from models using `LadaCacheTrait`, while writes from any builder still invalidate
 - Added `lada-cache.expiration_jitter` (`LADA_CACHE_EXPIRATION_JITTER`, default 15): spreads each expiration by up to that percentage so entries cached together do not expire together (based on https://github.com/spiritix/lada-cache/pull/154)
