@@ -29,6 +29,13 @@ return new class extends Migration
             $table->string('name');
             $table->boolean('active')->default(true);
             $table->unsignedInteger('token_limit')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('suites', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('workspace_id');
+            $table->string('name');
         });
 
         Schema::create('members', function (Blueprint $table) {
@@ -154,7 +161,7 @@ return new class extends Migration
             'prompts', 'feature_metrics', 'workspace_languages', 'languages', 'automation_runs',
             'automation_trigger_events', 'automations', 'provider_settings', 'text_translations', 'elements', 'text_acceptances',
             'texts', 'template_permissions', 'templates', 'admin_workspace', 'admins', 'member_group_member',
-            'members', 'workspaces', 'workspace_groups', 'license_renewals',
+            'members', 'suites', 'workspaces', 'workspace_groups', 'license_renewals',
         ] as $table) {
             Schema::dropIfExists($table);
         }

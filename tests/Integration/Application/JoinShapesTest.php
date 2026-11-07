@@ -61,9 +61,9 @@ final class JoinShapesTest extends ApplicationShapeTestCase
 
     public function testCountOverRawWrappedQueryIsRefreshed(): void
     {
-        $count = fn (): int => DB::query()->fromRaw('('.Workspace::query()->where('workspaces.active', 1)->toRawSql().') count_row_table')->count();
+        $count = fn (): int => DB::query()->fromRaw('('.Workspace::query()->where('workspaces.id', '>', 0)->toRawSql().') count_row_table')->count();
 
-        $this->assertCachedThenRefreshed($count, fn () => Workspace::query()->whereKey(3)->update(['active' => true]));
+        $this->assertCachedThenRefreshed($count, fn () => DB::table('workspaces')->insert(['id' => 90, 'group_id' => 1, 'name' => 'delta', 'active' => true]));
     }
 
     public function testJoinClosureWithBoundValueIsRefreshedByWritesToTheJoinedRow(): void

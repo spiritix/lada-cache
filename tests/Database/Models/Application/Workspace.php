@@ -14,7 +14,9 @@ final class Workspace extends Model
 {
     use LadaCacheTrait;
 
-    public $timestamps = false;
+    public const CREATED_AT = 'created_at';
+
+    public const UPDATED_AT = 'updated_at';
 
     protected $guarded = [];
 
@@ -31,6 +33,11 @@ final class Workspace extends Model
     public function members(): HasMany
     {
         return $this->hasMany(Member::class);
+    }
+
+    public function templates(): HasMany
+    {
+        return $this->hasMany(Template::class);
     }
 
     public function languages(): BelongsToMany
