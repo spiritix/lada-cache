@@ -161,6 +161,19 @@ final class LegacyInvalidationTest extends TestCase
         $this->assertSame(['after'], Car::query()->pluck('name')->all());
     }
 
+    public function testAnInsertByAnEarlierVersionReachesACachedLookupOfTheMissingRow(): void
+    {
+        config(['lada-cache.legacy_invalidation' => true]);
+        $redis = new Redis;
+        $this->assertNull(Car::query()->find(7));
+        DB::connection()->getPdo()->exec("insert into cars (id, name) values (7, 'inserted by 5.x')");
+        $this->assertNull(Car::query()->find(7));
+
+        $this->invalidateAs5x($redis, $this->carsTag());
+
+        $this->assertSame('inserted by 5.x', Car::query()->find(7)?->name);
+    }
+
     public function testReadsLeaveTheTagSetsOfEarlierVersionsAloneByDefault(): void
     {
         config(['lada-cache.legacy_invalidation' => false]);

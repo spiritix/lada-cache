@@ -6,7 +6,7 @@
 - Migrations must run on a host with Lada Cache active against the shared Redis, since schema changes are detected from migration events only.
 
 ### Added
-- `lada-cache.legacy_invalidation` (`LADA_CACHE_LEGACY_INVALIDATION`, off by default): during a rolling deploy, writes also delete the 5.x entries of the tags they invalidate, so pods still on 5.x never serve results this version invalidated, and reads depend on the 5.x tag sets of their tags, so pods on this version never serve results a 5.x pod invalidated
+- `lada-cache.legacy_invalidation` (`LADA_CACHE_LEGACY_INVALIDATION`, off by default): during a rolling deploy, writes also delete the 5.x entries of the tags they invalidate, so pods still on 5.x never serve results this version invalidated, and reads depend on the 5.x tag sets of their tags, so pods on this version never serve results a 5.x pod invalidated; reads pinned to rows also depend on their table's unspecific tag, so rows created by 5.x pods reach cached lookups of them
 - Added `php artisan lada-cache:invalidate <tables>` to invalidate specific tables after changes made outside Laravel, such as imports or manual fixes, without flushing the cache
 - Added `withoutCache()` to read a query from the database without caching it (see https://github.com/spiritix/lada-cache/pull/151); writes invalidate regardless, since skipping their invalidation left other readers with stale rows
 - Added `lada-cache.scope` (`LADA_CACHE_SCOPE`): `models` caches only reads from models using `LadaCacheTrait`, while writes from any builder still invalidate

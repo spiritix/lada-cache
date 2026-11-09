@@ -93,6 +93,33 @@ final readonly class Tagger
     }
 
     /**
+     * Tags a 5.x host's writes must invalidate for a read carrying `$tags` to miss: the tags
+     * themselves and, for every table the read is pinned to rows of, the table's unspecific tag.
+     * A 5.x insert invalidates only that one, so a row created by a 5.x host would otherwise
+     * leave a cached lookup of the missing row in place.
+     *
+     * @param  list<string>  $tags
+     * @return list<string>
+     */
+    public static function legacyDependencies(array $tags): array
+    {
+        $dependencies = [];
+
+        foreach ($tags as $tag) {
+            $dependencies[$tag] = true;
+            $position = strrpos($tag, self::PREFIX_TABLE_SPECIFIC);
+
+            if ($position === false || str_contains(substr($tag, $position), self::PREFIX_ROW)) {
+                continue;
+            }
+
+            $dependencies[substr_replace($tag, self::PREFIX_TABLE_UNSPECIFIC, $position, strlen(self::PREFIX_TABLE_SPECIFIC))] = true;
+        }
+
+        return array_map('strval', array_keys($dependencies));
+    }
+
+    /**
      * Tags invalidating every cached read of the query's tables, a superset of what getTags()
      * invalidates for any write to them.
      *

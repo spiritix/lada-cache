@@ -16,6 +16,27 @@ class TaggerTest extends TestCase
         return 'tags:database:' . DB::connection()->getDatabaseName();
     }
 
+    public function testLegacyDependenciesAddTheUnspecificTagOfTablesAReadIsPinnedTo(): void
+    {
+        $tags = [
+            'tags:database:db:table_specific:cars',
+            'tags:database:db:table_specific:cars:row:5',
+            'tags:database:db:table_unspecific:drivers',
+        ];
+
+        $this->assertSame([
+            'tags:database:db:table_specific:cars',
+            'tags:database:db:table_unspecific:cars',
+            'tags:database:db:table_specific:cars:row:5',
+            'tags:database:db:table_unspecific:drivers',
+        ], Tagger::legacyDependencies($tags));
+    }
+
+    public function testLegacyDependenciesKeepTagsWithoutATableAsTheyAre(): void
+    {
+        $this->assertSame(['tags:database:db.cars'], Tagger::legacyDependencies(['tags:database:db.cars']));
+    }
+
     public function testSelectWithoutRowsWhenConsiderRowsFalseProducesDatabaseTableTags(): void
     {
         config(['lada-cache.consider_rows' => false]);

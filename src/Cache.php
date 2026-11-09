@@ -46,13 +46,15 @@ final class Cache
      */
     public function lookup(string $key, array $tags): CacheHit|CacheMiss
     {
+        $versionTags = self::canonicalTags($tags);
         $reply = $this->redis->evaluate(LuaScripts::LOOKUP, [
             $key,
             self::freshToken(),
             $this->expiration->nextTtl(),
-            $this->legacyInvalidation() ? 1 : 0,
             $this->redis->ladaPrefix(),
-            ...self::canonicalTags($tags),
+            count($versionTags),
+            ...$versionTags,
+            ...($this->legacyInvalidation() ? self::canonicalTags(Tagger::legacyDependencies($versionTags)) : []),
         ]);
 
         if (! is_array($reply) || ! isset($reply[0], $reply[1])) {
