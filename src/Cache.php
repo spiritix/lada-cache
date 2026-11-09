@@ -50,6 +50,8 @@ final class Cache
             $key,
             self::freshToken(),
             $this->expiration->nextTtl(),
+            $this->legacyInvalidation() ? 1 : 0,
+            $this->redis->ladaPrefix(),
             ...self::canonicalTags($tags),
         ]);
 

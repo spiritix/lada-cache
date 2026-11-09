@@ -18,6 +18,8 @@ namespace Spiritix\LadaCache;
  * - `<base><generation>:w:<tag>`        present while reads of the tag may come from a lagging replica
  * - `<base><generation>:d:<name>`       hash of WriteKind field => newline separated tables changed along with it,
  *                                       named by database and dependency configuration
+ * - `<base>legacy:<tag>`                with legacy invalidation, a token listed in the 5.x tag set `<base><tag>`,
+ *                                       so a 5.x host invalidating the tag deletes it
  *
  * An entry is valid only while the fingerprint of its tags' current tokens matches the one
  * captured before the query ran, so a result read before a concurrent write is never served.
@@ -48,11 +50,19 @@ final class LuaScripts
         LUA;
 
     /**
-     * ARGV: base, entry hash, fresh token, ttl seconds, tags...
+     * ARGV: base, entry hash, fresh token, ttl seconds, legacy invalidation (1 or 0), Lada prefix, tags...
      * Returns {generation, fingerprint} on a miss and {generation, fingerprint, payload} on a hit.
+     *
+     * With legacy invalidation, each tag also contributes the token of `<base>legacy:<tag>` to the
+     * fingerprint. That key is listed in the tag's 5.x tag set, which a 5.x host invalidating the
+     * tag deletes along with every key it lists, so the fingerprint changes and entries this
+     * version stored before the 5.x write become unreachable. A token whose key is missing or no
+     * longer listed in the set, because the 5.x host deleted the set but not yet its keys, is replaced.
      */
     public const string LOOKUP = <<<'LUA'
         local base, fresh, ttl = ARGV[1], ARGV[3], tonumber(ARGV[4])
+        local legacy = ARGV[5] == '1'
+        local connectionPrefix = string.sub(base, 1, #base - #ARGV[6])
         local generationKey = base .. 'generation'
         local generation = redis.call('GET', generationKey)
         if not generation then
@@ -60,19 +70,34 @@ final class LuaScripts
             generation = fresh
         end
         local scope = base .. generation .. ':'
+        local function setToken(key, token)
+            if ttl > 0 then
+                redis.call('SET', key, token, 'EX', ttl)
+            else
+                redis.call('SET', key, token)
+            end
+        end
         local tokens = {}
-        for i = 5, #ARGV do
+        for i = 7, #ARGV do
             local versionKey = scope .. 'v:' .. ARGV[i]
             local token = redis.call('GET', versionKey)
             if not token then
                 token = fresh
-                if ttl > 0 then
-                    redis.call('SET', versionKey, token, 'EX', ttl)
-                else
-                    redis.call('SET', versionKey, token)
-                end
+                setToken(versionKey, token)
             end
             tokens[#tokens + 1] = token
+            if legacy then
+                local legacyKey = base .. 'legacy:' .. ARGV[i]
+                local legacySet = base .. ARGV[i]
+                local member = string.sub(legacyKey, #connectionPrefix + 1)
+                local legacyToken = redis.call('GET', legacyKey)
+                if not legacyToken or redis.call('SISMEMBER', legacySet, member) == 0 then
+                    legacyToken = fresh
+                    setToken(legacyKey, legacyToken)
+                    redis.call('SADD', legacySet, member)
+                end
+                tokens[#tokens + 1] = legacyToken
+            end
         end
         local fingerprint = redis.sha1hex(table.concat(tokens, ':'))
         local entry = redis.call('GET', scope .. 'e:' .. ARGV[2])

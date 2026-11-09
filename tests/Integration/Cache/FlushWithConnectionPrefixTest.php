@@ -76,6 +76,23 @@ class FlushWithConnectionPrefixTest extends TestCase
         $this->assertSame([], $client->keys('lada:legacy-hash'));
     }
 
+    public function testEarlierVersionsInvalidationsReachThisVersionsEntriesUnderConnectionPrefix(): void
+    {
+        config(['lada-cache.legacy_invalidation' => true]);
+        $cache = $this->freshCache();
+        $client = RedisFacade::connection('cache');
+        $this->seedEntry($cache, 'k1', ['tags:database:db:table_unspecific:cars'], ['row']);
+        $members = $client->command('smembers', ['lada:tags:database:db:table_unspecific:cars']);
+        $this->assertSame(['lada:legacy:tags:database:db:table_unspecific:cars'], $members);
+
+        $client->command('del', ['lada:tags:database:db:table_unspecific:cars']);
+        foreach ($members as $member) {
+            $client->command('del', [$member]);
+        }
+
+        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k1', ['tags:database:db:table_unspecific:cars']));
+    }
+
     private function freshCache(): Cache
     {
         RedisFacade::purge('cache');

@@ -109,12 +109,14 @@ return [
     | Invalidate Entries of Earlier Versions
     |--------------------------------------------------------------------------
     |
-    | While a deploy runs, hosts on 5.x serve entries this version never
-    | invalidates, because the two versions keep their entries and tags under
-    | different keys. Enable this during such a rollout so every write also
-    | deletes the 5.x entries of the written tags, at the cost of one more
-    | Redis script per write. Turn it off again once every host runs this
-    | version, after which the entries it removes are garbage anyway.
+    | While a deploy runs, hosts on 5.x and hosts on this version keep their
+    | entries and tags under different keys, so neither sees the other's
+    | writes. Enable this during such a rollout: every write also deletes the
+    | 5.x entries of the written tags, at the cost of one more Redis script
+    | per write, and every read also depends on the 5.x tag sets of its tags,
+    | at the cost of two more commands per tag, so a write by a 5.x host
+    | invalidates what this version cached. Both versions must use the same
+    | Redis database. Turn it off again once every host runs this version.
     |
     */
     'legacy_invalidation' => env('LADA_CACHE_LEGACY_INVALIDATION', false),
