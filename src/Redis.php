@@ -49,6 +49,14 @@ final class Redis
     }
 
     /**
+     * The configured Lada prefix, the tail of the key base scripts receive as ARGV[1].
+     */
+    public function ladaPrefix(): string
+    {
+        return $this->prefix;
+    }
+
+    /**
      * Key for state kept outside Redis about this Redis connection and prefix, such as in APCu.
      */
     public function processStateKey(string $purpose): string

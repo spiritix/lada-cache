@@ -30,7 +30,7 @@ final class LegacyInvalidationTest extends TestCase
 
         $redis->set($redis->prefix($this->carsTag()), 'unused');
         $redis->getConnection()->command('del', [$redis->prefix($this->carsTag())]);
-        $redis->getConnection()->command('sadd', [$redis->prefix($this->carsTag()), 'legacy-hash']);
+        $redis->getConnection()->command('sadd', [$redis->prefix($this->carsTag()), $redis->prefix('legacy-hash')]);
         $redis->set($redis->prefix('legacy-hash'), 'serialized rows');
 
         $cache->invalidate(Invalidation::of([$this->carsTag()]));
@@ -45,7 +45,7 @@ final class LegacyInvalidationTest extends TestCase
         $redis = new Redis;
         $cache = new Cache($redis, new Encoder);
 
-        $redis->getConnection()->command('sadd', [$redis->prefix($this->carsTag()), 'legacy-hash']);
+        $redis->getConnection()->command('sadd', [$redis->prefix($this->carsTag()), $redis->prefix('legacy-hash')]);
         $redis->set($redis->prefix('legacy-hash'), 'serialized rows');
 
         $cache->invalidate(Invalidation::of([$this->carsTag()]));
@@ -58,7 +58,7 @@ final class LegacyInvalidationTest extends TestCase
     {
         config(['lada-cache.legacy_invalidation' => true]);
         $redis = new Redis;
-        $redis->getConnection()->command('sadd', [$redis->prefix($this->carsTag()), 'legacy-hash']);
+        $redis->getConnection()->command('sadd', [$redis->prefix($this->carsTag()), $redis->prefix('legacy-hash')]);
         $redis->set($redis->prefix('legacy-hash'), 'serialized rows');
 
         \Illuminate\Support\Facades\DB::table('cars')->insert(['id' => 1, 'name' => 'car', 'engine_id' => null, 'driver_id' => null]);

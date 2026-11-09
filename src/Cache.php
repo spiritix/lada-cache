@@ -119,7 +119,7 @@ final class Cache
         $reply = $this->redis->evaluate(LuaScripts::INVALIDATE, $arguments);
 
         if ($this->legacyInvalidation()) {
-            $this->redis->evaluate(LuaScripts::PURGE_LEGACY, $invalidation->tags());
+            $this->redis->evaluate(LuaScripts::PURGE_LEGACY, [$this->redis->ladaPrefix(), ...$invalidation->tags()]);
         }
 
         if (! is_array($reply) || ! isset($reply[0])) {

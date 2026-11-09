@@ -211,21 +211,23 @@ final class LuaScripts
         LUA;
 
     /**
-     * ARGV: base, tag...
+     * ARGV: base, Lada prefix, tag...
      * Deletes the 5.x tag sets of the tags and the entries they list, so hosts still running 5.x
-     * during a rolling deploy stop serving results the new version invalidated.
+     * during a rolling deploy stop serving results the new version invalidated. 5.x stores each
+     * entry in its tag sets with the Lada prefix but without the client's connection prefix.
      */
     public const string PURGE_LEGACY = <<<'LUA'
         local base = ARGV[1]
+        local connectionPrefix = string.sub(base, 1, #base - #ARGV[2])
         local deleted = 0
-        for i = 2, #ARGV do
+        for i = 3, #ARGV do
             local tagKey = base .. ARGV[i]
             if redis.call('TYPE', tagKey)['ok'] == 'set' then
                 local entries = redis.call('SMEMBERS', tagKey)
                 if #entries > 0 then
                     local keys = {}
                     for _, entry in ipairs(entries) do
-                        keys[#keys + 1] = base .. entry
+                        keys[#keys + 1] = connectionPrefix .. entry
                     end
                     deleted = deleted + redis.call('UNLINK', unpack(keys))
                 end
