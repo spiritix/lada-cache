@@ -1,0 +1,14 @@
+{
+    "name": "spiritix/lada-cache-rollout-legacy",
+    "description": "The 5.x release a rolling deploy upgrades from, installed beside this version so the Rollout suite can run hosts of both at once",
+    "repositories": [
+        {"type": "vcs", "url": "https://github.com/Kontainer-Dam-and-Pim/lada-cache.git"}
+    ],
+    "require": {
+        "orchestra/testbench": "^11.0",
+        "predis/predis": "^2.2",
+        "spiritix/lada-cache": "dev-feature/laravel-13#09248afe576fcbb55945bcb308798da4dcca2e4a"
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

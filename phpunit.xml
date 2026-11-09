@@ -27,6 +27,10 @@
         <testsuite name="Concurrency">
             <directory suffix="Test.php">tests/Concurrency</directory>
         </testsuite>
+        <testsuite name="Rollout">
+            <directory suffix="Test.php">tests/Rollout</directory>
+            <exclude>tests/Rollout/legacy</exclude>
+        </testsuite>
     </testsuites>
 
     <source>

@@ -21,6 +21,7 @@
 - Under Laravel Octane, including FrankenPHP worker mode, Lada's services are added to `octane.warm`, so the failure cooldown and invalidations awaiting replay live as long as the worker instead of one request
 - A restarted Redis or a promoted replica, which may have lost the newest invalidations, retires the cache on the first store or invalidation that reaches it
 - Invalidations merged over large transactions or backlogs collapse into table tags past 1000 row tags, so a bulk import commits with one small script instead of setting a version key per row
+- A Rollout suite (`just rollout`) running hosts of 5.x and of this version side by side against one database and Redis
 - Fuzz and multi-process test suites, and a test matrix over SQLite, MySQL and PostgreSQL with both Redis clients
 
 ### Changed

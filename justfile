@@ -72,6 +72,18 @@ concurrency *args: deps services
         just _suite "$driver" Concurrency {{args}}
     done
 
+# Run hosts of 5.x and of this version side by side, like pods during a rolling deploy.
+rollout *args: deps services
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{composer}} install --no-interaction --prefer-dist --no-progress -d tests/Rollout/legacy
+    for client in phpredis predis; do
+        for driver in mysql pgsql; do
+            echo "== rollout $driver / $client"
+            REDIS_CLIENT="$client" just _suite "$driver" Rollout {{args}}
+        done
+    done
+
 # Report cached versus uncached read throughput and what a cached read costs in Redis commands.
 bench: deps services
     {{run_db}} DB_CONNECTION=mysql DB_PORT={{mysql_port}} {{phpunit}} tests/Benchmark

@@ -291,6 +291,7 @@ just test-matrix          # every database with phpredis and Predis
 just test --filter=RowKeysTest
 LADA_FUZZ_ITERATIONS=5000 just fuzz
 just concurrency          # several processes against MySQL and PostgreSQL
+just rollout              # hosts of 5.x and this version side by side, like a rolling deploy
 just lint analyse         # Pint and PHPStan
 ```
 
@@ -298,6 +299,7 @@ just lint analyse         # Pint and PHPStan
 - **Fuzz** runs a seeded random workload of reads, writes, raw statements, transactions, foreign key cascades, cache flushes, an emptied Redis and evicted keys, and compares every cached read with the same query run without the cache. A failure prints the seed and the operations that led to it; rerun with `LADA_FUZZ_SEED=<seed>`.
 - **Benchmark** (`just bench`) reports reads per second with and without the cache, and the Redis commands a cached read costs.
 - **Concurrency** forks worker processes, like pods sharing one database and Redis, runs the same workload in all of them at once, and checks that every cached read matches the database once they finish.
+- **Rollout** (`just rollout`) runs hosts of 5.x, installed from `tests/Rollout/legacy`, beside hosts of this version as separate processes on MySQL and PostgreSQL. It covers writes in both directions, transactions, migrations, an emptied Redis, rolling back and turning legacy invalidation off, and runs long-lived workers of both versions concurrently before each checks its own cached reads against the database.
 
 ## License
 
