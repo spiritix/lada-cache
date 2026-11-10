@@ -26,6 +26,7 @@ final class DependentTablesTest extends TestCase
         DB::table('pet_toys')->insert([['id' => 1, 'pet_id' => 1, 'name' => 'ball']]);
         DB::table('owner_notes')->insert([['id' => 1, 'owner_id' => 1, 'body' => 'vip']]);
         DB::table('owner_audits')->insert([['id' => 1, 'owner_id' => 2, 'event' => 'signup']]);
+        $this->loadDependencyMap();
     }
 
     public function testDependentsAreReadFromTheSchema(): void
@@ -46,6 +47,11 @@ final class DependentTablesTest extends TestCase
         $this->assertContains('owners', $dependents['a:owner_names']);
         $this->assertArrayNotHasKey('d:owner_audits', $dependents);
         $this->assertArrayNotHasKey('u:owners:name', $dependents);
+        $this->assertSame(["owner_notes\towner_id", 'owner_pet_counts', 'pet_toys', "pets\towner_id"], $dependents['dk:owners:id']);
+        $this->assertSame(['owner_id'], $dependents['k:pets']);
+        $this->assertSame(['owner_id'], $dependents['k:owner_notes']);
+        $this->assertSame(['pet_id'], $dependents['k:pet_toys']);
+        $this->assertArrayNotHasKey('k:owner_audits', $dependents);
     }
 
     public function testInsertsRefreshCachedReadsOfViewsOverTheTable(): void
@@ -236,6 +242,93 @@ final class DependentTablesTest extends TestCase
         DB::update('update owners set id = ? where id = ?', [1000, 999]);
 
         $this->assertCacheHas($petsKey, $petsTags);
+    }
+
+    public function testDeletingAParentKeepsCachedReadsOfChildrenOfOtherParents(): void
+    {
+        DB::table('pets')->where('owner_id', 2)->get();
+        $this->assertSame(['rex'], DB::table('pets')->where('owner_id', 1)->pluck('name')->all());
+        [$otherKey, $otherTags] = $this->cacheKeyAndTags(DB::table('pets')->where('owner_id', 2));
+
+        DB::table('owners')->where('id', 1)->delete();
+
+        $this->assertCacheHas($otherKey, $otherTags, 'Only pets of owner 1 were deleted');
+        $this->assertSame([], DB::table('pets')->where('owner_id', 1)->pluck('name')->all());
+    }
+
+    public function testDeletingAParentRefreshesUnpinnedAndOtherwisePinnedReadsOfChildren(): void
+    {
+        $this->assertSame(2, DB::table('pets')->count());
+        $this->assertSame('rex', DB::table('pets')->where('name', 'rex')->value('name'));
+        $this->assertSame('rex', DB::table('pets')->whereIn('owner_id', [1, 2])->orderBy('id')->value('name'));
+
+        DB::table('owners')->where('id', 1)->delete();
+
+        $this->assertSame(1, DB::table('pets')->count());
+        $this->assertNull(DB::table('pets')->where('name', 'rex')->value('name'));
+        $this->assertSame('tom', DB::table('pets')->whereIn('owner_id', [1, 2])->orderBy('id')->value('name'));
+    }
+
+    public function testDeletingAParentKeepsCachedReadsOfNulledChildrenOfOtherParents(): void
+    {
+        DB::table('owner_notes')->insert(['id' => 2, 'owner_id' => 2, 'body' => 'regular']);
+        DB::table('owner_notes')->where('owner_id', 2)->get();
+        $this->assertSame(['vip'], DB::table('owner_notes')->where('owner_id', 1)->pluck('body')->all());
+        $this->assertSame(0, DB::table('owner_notes')->whereNull('owner_id')->count());
+        [$otherKey, $otherTags] = $this->cacheKeyAndTags(DB::table('owner_notes')->where('owner_id', 2));
+
+        DB::table('owners')->where('id', 1)->delete();
+
+        $this->assertCacheHas($otherKey, $otherTags, 'Only notes of owner 1 were nulled');
+        $this->assertSame([], DB::table('owner_notes')->where('owner_id', 1)->pluck('body')->all());
+        $this->assertSame(1, DB::table('owner_notes')->whereNull('owner_id')->count());
+    }
+
+    public function testDeletingParentsByOtherColumnsInvalidatesChildrenTableWide(): void
+    {
+        DB::table('pets')->where('owner_id', 2)->get();
+        [$otherKey, $otherTags] = $this->cacheKeyAndTags(DB::table('pets')->where('owner_id', 2));
+
+        DB::table('owners')->where('name', 'alice')->delete();
+
+        $this->assertCacheMissing($otherKey, $otherTags, 'The deleted keys are not known, so every pet read is refreshed');
+        $this->assertSame(1, DB::table('pets')->count());
+    }
+
+    public function testReadsCachedBeforeTheDependencyMapIsKnownAreRefreshedByRowPreciseCascades(): void
+    {
+        app('lada.cache')->flush();
+        $this->assertSame(['rex'], DB::table('pets')->where('owner_id', 1)->pluck('name')->all());
+
+        DB::table('owners')->where('id', 1)->delete();
+
+        $this->assertSame([], DB::table('pets')->where('owner_id', 1)->pluck('name')->all());
+    }
+
+    public function testReadsCachedBeforeTheDependencyMapIsKnownMissOnceWhenAWriteLoadsIt(): void
+    {
+        app('lada.cache')->flush();
+        DB::table('pets')->where('owner_id', 2)->get();
+        [$key, $tags] = $this->cacheKeyAndTags(DB::table('pets')->where('owner_id', 2));
+        $this->assertCacheHas($key, $tags);
+
+        DB::table('drivers')->where('id', 0)->delete();
+
+        $this->assertCacheMissing($key, $tags, 'With the map known, the read takes the cascade tags of its pins instead');
+        DB::table('pets')->where('owner_id', 2)->get();
+        $this->assertCacheHas($key, $tags);
+    }
+
+    public function testDeletingAParentInsideATransactionRefreshesChildrenAtCommitOnly(): void
+    {
+        $this->assertSame(['rex'], DB::table('pets')->where('owner_id', 1)->pluck('name')->all());
+        DB::table('pets')->where('owner_id', 2)->get();
+        [$otherKey, $otherTags] = $this->cacheKeyAndTags(DB::table('pets')->where('owner_id', 2));
+
+        DB::transaction(fn () => DB::table('owners')->whereIn('id', [1])->delete());
+
+        $this->assertCacheHas($otherKey, $otherTags);
+        $this->assertSame([], DB::table('pets')->where('owner_id', 1)->pluck('name')->all());
     }
 
     public function testRawDeleteRefreshesCachedReadsOfCascadedChildren(): void

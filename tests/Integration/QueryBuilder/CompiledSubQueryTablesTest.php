@@ -170,6 +170,7 @@ final class CompiledSubQueryTablesTest extends TestCase
 
     public function testInsertUsingKeepsRowLookupsOfItsSourceTableCached(): void
     {
+        $this->loadDependencyMap();
         DB::table('drivers')->insert(['id' => 1, 'name' => 'source']);
         DB::table('drivers')->where('id', 1)->first();
 

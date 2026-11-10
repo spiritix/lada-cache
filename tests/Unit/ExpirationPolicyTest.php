@@ -66,7 +66,7 @@ final class ExpirationPolicyTest extends TestCase
         $ttls = [];
 
         for ($entry = 0; $entry < 20; $entry++) {
-            $miss = $cache->lookup("k{$entry}", ["t{$entry}"]);
+            $miss = $cache->lookup("k{$entry}", ["t{$entry}"], []);
             $this->assertInstanceOf(CacheMiss::class, $miss);
             $cache->store($miss, ['row']);
             $ttls[] = (int) $redis->ttl("jitter:{$miss->generation->id}:e:k{$entry}");

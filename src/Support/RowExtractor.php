@@ -62,6 +62,84 @@ final class RowExtractor
     }
 
     /**
+     * The values each column of each table is pinned to by `col = v` or `col IN (...)` wheres
+     * the query ANDs together, so every row it reads from that table has one of them. A query with
+     * an OR pins nothing; in a query with joins only qualified columns pin, since an unqualified
+     * one may belong to any joined table. Tables the statement reads more than once are left out.
+     *
+     * @param  array<string, int>  $referenceCounts
+     * @return array<string, array<string, list<scalar>>> table => lowercase column => values
+     */
+    public static function extractColumnPins(BaseBuilder $builder, array $referenceCounts = []): array
+    {
+        $wheres = array_values(array_filter($builder->wheres, 'is_array'));
+
+        foreach ($wheres as $where) {
+            if (str_starts_with(self::boolean($where), 'or')) {
+                return [];
+            }
+        }
+
+        $aliasMap = self::resolveAliasMap($builder);
+        $requireQualified = ($builder->joins ?? []) !== [];
+        $pins = [];
+
+        foreach ($wheres as $where) {
+            $match = self::matchColumnPin($builder, $where, $aliasMap, $requireQualified);
+
+            if ($match === null) {
+                continue;
+            }
+
+            [$table, $column, $values] = $match;
+            $pins[$table][$column] = [...$pins[$table][$column] ?? [], ...$values];
+        }
+
+        return array_filter($pins, static fn (string $table): bool => ($referenceCounts[$table] ?? 1) <= 1, ARRAY_FILTER_USE_KEY);
+    }
+
+    /**
+     * @param  array<mixed>  $where
+     * @param  array<string, string>  $aliasMap
+     * @return array{0: string, 1: string, 2: non-empty-list<scalar>}|null
+     */
+    private static function matchColumnPin(BaseBuilder $builder, array $where, array $aliasMap, bool $requireQualified): ?array
+    {
+        if (! isset($where['column']) || str_contains(self::boolean($where), 'not')) {
+            return null;
+        }
+
+        $columnRef = $where['column'] instanceof Expression ? $builder->getGrammar()->getValue($where['column']) : $where['column'];
+
+        if (! is_string($columnRef) || ($requireQualified && ! str_contains($columnRef, '.'))) {
+            return null;
+        }
+
+        if (! str_contains($columnRef, '.') && is_string($builder->from)) {
+            $columnRef = SqlAliasParser::stripAlias($builder->from).'.'.$columnRef;
+        }
+
+        [$table, $column] = self::splitTableAndColumn($columnRef);
+
+        if ($table === null) {
+            return null;
+        }
+
+        $table = $aliasMap[$table] ?? $table;
+        $values = match (true) {
+            ($where['type'] ?? null) === 'Basic' && ($where['operator'] ?? '=') === '=' && is_scalar($where['value'] ?? null) => [$where['value']],
+            in_array($where['type'] ?? null, ['In', 'InRaw'], true) && is_array($where['values'] ?? null) => array_values($where['values']),
+            default => [],
+        };
+
+        if ($values === [] || array_filter($values, 'is_scalar') !== $values) {
+            return null;
+        }
+
+        return [$table, Write::columnName($column), $values];
+    }
+
+    /**
      * Resolve a primary-key where to its table and the key values it pins.
      *
      * Returns null for wheres that are not on a primary key or that negate it (whereNot),
@@ -117,7 +195,7 @@ final class RowExtractor
     /**
      * Laravel stores the boolean as given, so it may be 'or', 'and not' or an upper-case variant.
      *
-     * @param  array<string, mixed>  $where
+     * @param  array<mixed>  $where
      */
     private static function boolean(array $where): string
     {

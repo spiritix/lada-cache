@@ -43,7 +43,7 @@ final class RuntimeModesTest extends TestCase
 
         RedisFacade::connection((string) config('lada-cache.redis_connection'))->command('script', ['flush']);
 
-        $this->assertInstanceOf(CacheHit::class, $cache->lookup('k', ['t']));
+        $this->assertInstanceOf(CacheHit::class, $cache->lookup('k', ['t'], []));
     }
 
     public function testCooldownOutlivesTheRequestWhenApcuIsAvailable(): void
@@ -152,7 +152,7 @@ final class RuntimeModesTest extends TestCase
 
     private function miss(Cache $cache): CacheMiss
     {
-        $lookup = $cache->lookup('k', ['t']);
+        $lookup = $cache->lookup('k', ['t'], []);
         $this->assertInstanceOf(CacheMiss::class, $lookup);
 
         return $lookup;

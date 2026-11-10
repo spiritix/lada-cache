@@ -67,6 +67,7 @@ final class RawStatementInvalidationTest extends TestCase
 
     public function testRawWriteKeepsUnrelatedTablesCached(): void
     {
+        $this->loadDependencyMap();
         DB::table('drivers')->insert(['id' => 1, 'name' => 'driver']);
         $builder = DB::table('drivers')->where('id', 1);
         $builder->get();
@@ -80,6 +81,7 @@ final class RawStatementInvalidationTest extends TestCase
     public function testRawMultiTableDeleteRefreshesItsTargetsWithoutRetiringTheCache(): void
     {
         $this->requireDatabaseDriver('mysql');
+        $this->loadDependencyMap();
         DB::table('drivers')->insert([['id' => 1, 'name' => 'kept'], ['id' => 2, 'name' => 'orphaned']]);
         DB::table('cars')->insert([['id' => 1, 'name' => 'a', 'engine_id' => null, 'driver_id' => 1], ['id' => 2, 'name' => 'b', 'engine_id' => null, 'driver_id' => 2]]);
         DB::table('materials')->insert(['id' => 1, 'name' => 'steel']);
@@ -96,6 +98,7 @@ final class RawStatementInvalidationTest extends TestCase
     public function testRawMultiTableUpdateRefreshesItsTargetsWithoutRetiringTheCache(): void
     {
         $this->requireDatabaseDriver('mysql');
+        $this->loadDependencyMap();
         DB::table('drivers')->insert(['id' => 1, 'name' => 'driver']);
         DB::table('cars')->insert(['id' => 1, 'name' => 'before', 'engine_id' => null, 'driver_id' => 1]);
         DB::table('materials')->insert(['id' => 1, 'name' => 'steel']);

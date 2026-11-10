@@ -24,6 +24,7 @@ final readonly class Invalidation
      * @param  array<string, true>|null  $coverage  table-wide tags invalidating everything $tags does; null when unknown
      * @param  array<string, array<string, true>>  $cascadeSources  database => `Write::dependentsFields()` of each written table
      * @param  array<string, string>  $connections  database => name of a connection to it
+     * @param  array<string, array<string, array{fallback: string, keys: array<int|string, true>}>>  $keyedSources  database => `Write::keyedDependentsFields()` by field
      */
     private function __construct(
         private array $tags,
@@ -33,6 +34,7 @@ final readonly class Invalidation
         public bool $retiresEverything,
         public int $replicaLagSeconds,
         private bool $collapsed = false,
+        private array $keyedSources = [],
     ) {}
 
     public static function none(): self
@@ -74,11 +76,16 @@ final readonly class Invalidation
         }
 
         $fields = [];
+        $keyed = [];
         foreach ($tables as $table) {
             $fields += array_fill_keys($write->dependentsFields($table), true);
+
+            foreach ($write->keyedDependentsFields($table) as $source) {
+                $keyed[$source['field']] = ['fallback' => $source['fallback'], 'keys' => array_fill_keys($source['keys'], true)];
+            }
         }
 
-        return $this->merge(new self([], [], [$database => $fields], [$database => $connection], false, 0));
+        return $this->merge(new self([], [], [$database => $fields], [$database => $connection], false, 0, false, $keyed === [] ? [] : [$database => $keyed]));
     }
 
     public function merge(self $other): self
@@ -86,6 +93,22 @@ final readonly class Invalidation
         $cascadeSources = $this->cascadeSources;
         foreach ($other->cascadeSources as $database => $fields) {
             $cascadeSources[$database] = ($cascadeSources[$database] ?? []) + $fields;
+        }
+
+        $keyedSources = $this->keyedSources;
+        foreach ($other->keyedSources as $database => $sources) {
+            foreach ($sources as $field => $source) {
+                $keys = ($keyedSources[$database][$field]['keys'] ?? []) + $source['keys'];
+
+                if (count($keys) > RowKeys::MAX_PER_TABLE) {
+                    unset($keyedSources[$database][$field]);
+                    $cascadeSources[$database][$source['fallback']] = true;
+
+                    continue;
+                }
+
+                $keyedSources[$database][$field] = ['fallback' => $source['fallback'], 'keys' => $keys];
+            }
         }
 
         return (new self(
@@ -96,17 +119,18 @@ final readonly class Invalidation
             $this->retiresEverything || $other->retiresEverything,
             max($this->replicaLagSeconds, $other->replicaLagSeconds),
             $this->collapsed || $other->collapsed,
+            array_filter($keyedSources),
         ))->bounded();
     }
 
     public function isEmpty(): bool
     {
-        return ! $this->retiresEverything && $this->tags === [] && $this->cascadeSources === [];
+        return ! $this->retiresEverything && $this->tags === [] && $this->cascadeSources === [] && $this->keyedSources === [];
     }
 
     public function size(): int
     {
-        return count($this->tags) + array_sum(array_map('count', $this->cascadeSources));
+        return count($this->tags) + array_sum(array_map('count', $this->cascadeSources)) + array_sum(array_map('count', $this->keyedSources));
     }
 
     /**
@@ -137,6 +161,25 @@ final readonly class Invalidation
     }
 
     /**
+     * @return array<string, list<array{field: string, fallback: string, keys: list<string>}>> database => keyed fields, sorted
+     */
+    public function keyedSources(): array
+    {
+        $sources = [];
+        foreach ($this->keyedSources as $database => $fields) {
+            ksort($fields, SORT_STRING);
+            foreach ($fields as $field => $source) {
+                $keys = array_map('strval', array_keys($source['keys']));
+                sort($keys, SORT_STRING);
+                $sources[(string) $database][] = ['field' => (string) $field, 'fallback' => $source['fallback'], 'keys' => $keys];
+            }
+        }
+        ksort($sources, SORT_STRING);
+
+        return $sources;
+    }
+
+    /**
      * @param  list<string>  $databases
      */
     public function onlyCascadesOf(array $databases): self
@@ -150,6 +193,8 @@ final readonly class Invalidation
             array_intersect_key($this->connections, $selected),
             false,
             $this->replicaLagSeconds,
+            false,
+            array_intersect_key($this->keyedSources, $selected),
         );
     }
 
@@ -168,6 +213,6 @@ final readonly class Invalidation
             return self::everything();
         }
 
-        return new self($this->coverage, $this->coverage, $this->cascadeSources, $this->connections, $this->retiresEverything, $this->replicaLagSeconds, true);
+        return new self($this->coverage, $this->coverage, $this->cascadeSources, $this->connections, $this->retiresEverything, $this->replicaLagSeconds, true, $this->keyedSources);
     }
 }

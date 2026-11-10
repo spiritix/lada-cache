@@ -20,7 +20,7 @@ class ConcurrencyTest extends TestCase
         [$key, $tags] = $this->cacheKeyAndTags($builder);
         $cache = app('lada.cache');
 
-        $slowReader = $cache->lookup($key, $tags);
+        $slowReader = $this->lookupRead($key, $tags);
         $this->assertInstanceOf(CacheMiss::class, $slowReader);
         $rowsReadBeforeWrite = [['id' => 910, 'name' => 'before', 'engine_id' => null, 'driver_id' => null]];
 
@@ -41,7 +41,7 @@ class ConcurrencyTest extends TestCase
 
         $redis = new LadaRedis();
         $generation = (string) $redis->get($redis->prefix('generation'));
-        $redis->del($redis->prefix($generation.':v:'.$tags[0]));
+        $redis->del($redis->prefix($generation.':v:'.$tags->tags[0]));
 
         $this->assertCacheMissing($key, $tags);
     }

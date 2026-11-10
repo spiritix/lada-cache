@@ -20,11 +20,13 @@ final readonly class Write
     /**
      * @param  list<string>  $columns  the assigned columns of a `WriteKind::ColumnUpdate`, empty otherwise
      * @param  bool  $changesRows  false when the database reported no affected rows, which fire no foreign key
+     * @param  array{table: string, column: string, keys: non-empty-list<string>}|null  $deletedKeys  the primary key values a delete is pinned to
      */
     private function __construct(
         private WriteKind $kind,
         private array $columns = [],
         private bool $changesRows = true,
+        private ?array $deletedKeys = null,
     ) {}
 
     public static function insert(): self
@@ -86,6 +88,41 @@ final readonly class Write
     }
 
     /**
+     * Narrows a delete to the rows of the table with these primary key values, so foreign keys
+     * referencing that key change only the child rows referencing them. Other writes, and
+     * deletes affecting no rows, are returned unchanged.
+     *
+     * @param  non-empty-list<string>  $keys  see `RowKeys::columnValues()`
+     */
+    public function deletingKeys(string $table, string $column, array $keys): self
+    {
+        if ($this->kind !== WriteKind::Delete || ! $this->changesRows) {
+            return $this;
+        }
+
+        return new self($this->kind, $this->columns, true, ['table' => $table, 'column' => self::columnName($column), 'keys' => $keys]);
+    }
+
+    /**
+     * The row-precise fields of the table, each with the field used instead when the dependency
+     * map has none and the keys it is narrowed to.
+     *
+     * @return list<array{field: string, fallback: string, keys: non-empty-list<string>}>
+     */
+    public function keyedDependentsFields(string $table): array
+    {
+        if ($this->deletedKeys === null || $this->deletedKeys['table'] !== $table) {
+            return [];
+        }
+
+        return [[
+            'field' => self::keyedDeleteField($table, $this->deletedKeys['column']),
+            'fallback' => self::deleteField($table),
+            'keys' => $this->deletedKeys['keys'],
+        ]];
+    }
+
+    /**
      * @return list<string>
      */
     public function dependentsFields(string $table): array
@@ -94,7 +131,7 @@ final readonly class Write
             WriteKind::Insert => [],
             WriteKind::ColumnUpdate => array_map(static fn (string $column): string => self::columnUpdateField($table, $column), $this->columns),
             WriteKind::AnyUpdate => [self::anyUpdateField($table)],
-            WriteKind::Delete => [self::deleteField($table)],
+            WriteKind::Delete => $this->deletedKeys !== null && $this->deletedKeys['table'] === $table ? [] : [self::deleteField($table)],
             WriteKind::Truncate => [self::truncateField($table)],
             WriteKind::Merge => [self::deleteField($table), self::anyUpdateField($table)],
             WriteKind::Unknown => [self::truncateField($table), self::anyUpdateField($table)],
@@ -132,6 +169,23 @@ final readonly class Write
     public static function deleteField(string $table): string
     {
         return 'd:'.$table;
+    }
+
+    /**
+     * A delete of rows by the referenced column's values: row-precise foreign key edges as
+     * `<child>\t<column>` lines, and everything else the delete changes as table lines.
+     */
+    public static function keyedDeleteField(string $table, string $column): string
+    {
+        return 'dk:'.$table.':'.self::columnName($column);
+    }
+
+    /**
+     * The columns of a table that row-precise foreign key cascades come through.
+     */
+    public static function cascadeColumnsField(string $table): string
+    {
+        return 'k:'.$table;
     }
 
     public static function truncateField(string $table): string

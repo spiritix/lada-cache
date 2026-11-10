@@ -41,7 +41,7 @@ final class DependentTables
      * Part of the name of the dependency map in Redis, so hosts reading another field layout
      * keep their own map.
      */
-    public const int LAYOUT = 4;
+    public const int LAYOUT = 5;
 
     /**
      * @return array<string, list<string>> `Write` dependents field => tables changed along with it
@@ -394,6 +394,7 @@ final class DependentTables
     {
         $graph = ['everyWrite' => $everyWrite, 'foreignKeys' => $foreignKeys, 'triggers' => $triggers];
         $fields = [];
+        $cascadeColumns = [];
 
         foreach (array_keys($everyWrite + $viewBases + $foreignKeys + $triggers) as $table) {
             $table = (string) $table;
@@ -433,11 +434,67 @@ final class DependentTables
                     $fields[$field] = $changed;
                 }
             }
+
+            foreach (self::preciseEdgesByColumn($keys) as $column => $precise) {
+                $others = array_values(array_filter($keys, static fn (array $foreignKey): bool => ! in_array($foreignKey, $precise, true)));
+                $beyond = self::changesOfDelete($others);
+
+                foreach ($precise as $foreignKey) {
+                    array_push($beyond, ...self::expand(self::preciseChildChange($foreignKey), $graph));
+                    $cascadeColumns[$foreignKey['child']][$foreignKey['childColumns'][0]] = true;
+                }
+
+                $lines = [
+                    ...array_map(static fn (array $foreignKey): string => $foreignKey['child']."\t".$foreignKey['childColumns'][0], $precise),
+                    ...self::reachableFrom($beyond, $graph),
+                ];
+                sort($lines, SORT_STRING);
+                $fields[Write::keyedDeleteField($table, $column)] = array_values(array_unique($lines));
+            }
+        }
+
+        foreach ($cascadeColumns as $child => $columns) {
+            $names = array_map('strval', array_keys($columns));
+            sort($names, SORT_STRING);
+            $fields[Write::cascadeColumnsField((string) $child)] = $names;
         }
 
         ksort($fields, SORT_STRING);
 
         return $fields;
+    }
+
+    /**
+     * The foreign keys referencing each single column of the table whose deletes change only the
+     * child rows referencing the deleted values: single-column keys that cascade or set NULL. A
+     * SET DEFAULT key moves its rows to the default value, which reads may pin, so it is not.
+     *
+     * @param  list<ForeignKey>  $foreignKeys
+     * @return array<string, non-empty-list<ForeignKey>>
+     */
+    private static function preciseEdgesByColumn(array $foreignKeys): array
+    {
+        $edges = [];
+
+        foreach ($foreignKeys as $foreignKey) {
+            if (count($foreignKey['parentColumns']) === 1 && count($foreignKey['childColumns']) === 1
+                && in_array($foreignKey['onDelete'], [ReferentialAction::Cascades, ReferentialAction::SetsNull], true)) {
+                $edges[$foreignKey['parentColumns'][0]][] = $foreignKey;
+            }
+        }
+
+        return $edges;
+    }
+
+    /**
+     * @param  ForeignKey  $foreignKey
+     * @return Change
+     */
+    private static function preciseChildChange(array $foreignKey): array
+    {
+        return $foreignKey['onDelete'] === ReferentialAction::Cascades
+            ? ['delete', $foreignKey['child']]
+            : ['update', $foreignKey['child'], $foreignKey['childColumns'][0]];
     }
 
     /**
@@ -464,35 +521,47 @@ final class DependentTables
             }
 
             $seen[$id] = true;
-            [$kind, $table] = $change;
-            $tables[$table] = true;
-            $keys = $graph['foreignKeys'][$table] ?? [];
-            $triggers = $graph['triggers'][$table] ?? [];
-            $column = $change[2] ?? null;
-
-            foreach (array_keys($graph['everyWrite'][$table] ?? []) as $dependent) {
-                $queue[] = ['any', (string) $dependent];
-            }
-
-            array_push($queue, ...match ($kind) {
-                'any' => [...self::triggerChanges($triggers, static fn (): bool => true), ...self::changesOfDelete($keys), ...self::changesOfUpdate($keys, null)],
-                'insert' => self::triggerChanges($triggers, static fn (array $trigger): bool => in_array(TriggerEvent::Insert, $trigger['events'], true)),
-                'delete' => [...self::triggerChanges($triggers, static fn (array $trigger): bool => in_array(TriggerEvent::Delete, $trigger['events'], true)), ...self::changesOfDelete($keys)],
-                'truncate' => [
-                    ...self::triggerChanges($triggers, static fn (array $trigger): bool => in_array(TriggerEvent::Truncate, $trigger['events'], true) || in_array(TriggerEvent::Delete, $trigger['events'], true)),
-                    ...self::changesOfTruncate($keys),
-                ],
-                'update' => [
-                    ...self::triggerChanges($triggers, static fn (array $trigger): bool => in_array(TriggerEvent::Update, $trigger['events'], true) && ($trigger['columns'] === null || in_array($column, $trigger['columns'], true))),
-                    ...self::changesOfUpdate($keys, $column),
-                ],
-            });
+            $tables[$change[1]] = true;
+            array_push($queue, ...self::expand($change, $graph));
         }
 
         $names = array_map('strval', array_keys($tables));
         sort($names, SORT_STRING);
 
         return $names;
+    }
+
+    /**
+     * The changes a change to a table makes in turn: its views and configured dependents, the
+     * triggers of its kind of change and the foreign key rules of its rows.
+     *
+     * @param  Change  $change
+     * @param  array{everyWrite: array<string, array<string, true>>, foreignKeys: array<string, list<ForeignKey>>, triggers: array<string, list<Trigger>>}  $graph
+     * @return list<Change>
+     */
+    private static function expand(array $change, array $graph): array
+    {
+        [$kind, $table] = $change;
+        $keys = $graph['foreignKeys'][$table] ?? [];
+        $triggers = $graph['triggers'][$table] ?? [];
+        $column = $change[2] ?? null;
+        $changes = array_map(static fn (int|string $dependent): array => ['any', (string) $dependent], array_keys($graph['everyWrite'][$table] ?? []));
+
+        array_push($changes, ...match ($kind) {
+            'any' => [...self::triggerChanges($triggers, static fn (): bool => true), ...self::changesOfDelete($keys), ...self::changesOfUpdate($keys, null)],
+            'insert' => self::triggerChanges($triggers, static fn (array $trigger): bool => in_array(TriggerEvent::Insert, $trigger['events'], true)),
+            'delete' => [...self::triggerChanges($triggers, static fn (array $trigger): bool => in_array(TriggerEvent::Delete, $trigger['events'], true)), ...self::changesOfDelete($keys)],
+            'truncate' => [
+                ...self::triggerChanges($triggers, static fn (array $trigger): bool => in_array(TriggerEvent::Truncate, $trigger['events'], true) || in_array(TriggerEvent::Delete, $trigger['events'], true)),
+                ...self::changesOfTruncate($keys),
+            ],
+            'update' => [
+                ...self::triggerChanges($triggers, static fn (array $trigger): bool => in_array(TriggerEvent::Update, $trigger['events'], true) && ($trigger['columns'] === null || in_array($column, $trigger['columns'], true))),
+                ...self::changesOfUpdate($keys, $column),
+            ],
+        });
+
+        return $changes;
     }
 
     /**
@@ -552,7 +621,7 @@ final class DependentTables
         foreach ($foreignKeys as $foreignKey) {
             array_push($changes, ...match ($foreignKey['onDelete']) {
                 ReferentialAction::Cascades => [['delete', $foreignKey['child']]],
-                ReferentialAction::SetsColumns => self::columnUpdates($foreignKey),
+                ReferentialAction::SetsNull, ReferentialAction::SetsDefault => self::columnUpdates($foreignKey),
                 ReferentialAction::KeepsRows => [],
             });
         }

@@ -73,7 +73,7 @@ class ConfigurationBehaviourTest extends TestCase
         $redis = new LadaRedis();
         $cache = new Cache($redis, new Encoder(), new ExpirationPolicy(60));
 
-        $miss = $cache->lookup('expire-key', ['tag']);
+        $miss = $cache->lookup('expire-key', ['tag'], []);
         $this->assertInstanceOf(CacheMiss::class, $miss);
         $cache->store($miss, ['x' => 1]);
 

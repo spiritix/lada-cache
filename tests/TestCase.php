@@ -5,8 +5,11 @@ namespace Spiritix\LadaCache\Tests;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Orchestra\Testbench\TestCase as BaseTestCase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
+use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\LadaCacheServiceProvider;
+use Spiritix\LadaCache\Support\DependentTables;
 
 class TestCase extends BaseTestCase
 {
@@ -34,6 +37,23 @@ class TestCase extends BaseTestCase
 
         if (function_exists('apcu_clear_cache')) {
             apcu_clear_cache();
+        }
+    }
+
+    /**
+     * Puts the cache where production is after its first write: with the dependency map of the
+     * default connection stored, so cached reads take the cascade tags they keep afterwards. Tests
+     * asserting that a write keeps reads cached call it first; until some write loads the map,
+     * reads take a fallback tag and miss once when it is loaded.
+     */
+    protected function loadDependencyMap(): void
+    {
+        $connection = DB::connection();
+        $cache = app('lada.cache');
+        $lookup = $cache->lookup('dependency-map', [], []);
+
+        if ($lookup instanceof CacheMiss) {
+            $cache->storeDependents($lookup->generation, $connection->getDatabaseName(), DependentTables::load($connection));
         }
     }
 

@@ -31,6 +31,7 @@ final class SubqueryTagPropagationCacheTest extends TestCase
 
     public function testJoinSubResultSurvivesWritesToUnrelatedTables(): void
     {
+        $this->loadDependencyMap();
         DB::table('engines')->insert(['id' => 902, 'name' => 'E']);
         DB::table('cars')->insert(['id' => 802, 'name' => 'C', 'engine_id' => 902, 'driver_id' => null]);
 

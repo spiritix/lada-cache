@@ -100,6 +100,7 @@ final class RowKeyEquivalenceTest extends TestCase
 
     public function testUpdatesThatKeepTheKeyLeaveOtherRowsCached(): void
     {
+        $this->loadDependencyMap();
         DB::table('cars')->insert(['id' => 6, 'name' => 'other', 'engine_id' => null, 'driver_id' => null]);
         $otherRow = DB::table('cars')->where('id', 6);
         $otherRow->get();

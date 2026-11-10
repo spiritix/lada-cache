@@ -63,27 +63,27 @@ final class SoundnessTest extends TestCase
     public function testReplicaReadsOfRecentlyWrittenTablesAreNotStored(): void
     {
         $cache = new Cache(new Redis, new Encoder, new ExpirationPolicy(0));
-        $miss = $cache->lookup('k', ['t']);
+        $miss = $cache->lookup('k', ['t'], []);
         $this->assertInstanceOf(CacheMiss::class, $miss);
 
         $cache->invalidate(Invalidation::of(['t'], 30));
-        $afterWrite = $cache->lookup('k', ['t']);
+        $afterWrite = $cache->lookup('k', ['t'], []);
         $this->assertInstanceOf(CacheMiss::class, $afterWrite);
         $cache->store($afterWrite, [['read from a lagging replica']], ['t']);
 
-        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k', ['t']));
+        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k', ['t'], []));
     }
 
     public function testPrimaryReadsAreStoredRightAfterAWrite(): void
     {
         $cache = new Cache(new Redis, new Encoder, new ExpirationPolicy(0));
         $cache->invalidate(Invalidation::of(['t'], 30));
-        $miss = $cache->lookup('k', ['t']);
+        $miss = $cache->lookup('k', ['t'], []);
         $this->assertInstanceOf(CacheMiss::class, $miss);
 
         $cache->store($miss, [['read from the primary']]);
 
-        $this->assertNotInstanceOf(CacheMiss::class, $cache->lookup('k', ['t']));
+        $this->assertNotInstanceOf(CacheMiss::class, $cache->lookup('k', ['t'], []));
     }
 
     public function testWritesOnConnectionsWithReplicasKeepReplicaReadsUncachedDuringTheLag(): void
@@ -259,7 +259,7 @@ final class SoundnessTest extends TestCase
         $failed = FailedInvalidations::processLocal();
         $failed->record(Invalidation::everything());
         $this->app->instance('lada.handler', new QueryHandler(app('lada.cache'), $failed));
-        app('lada.cache')->lookup('k', ['t']);
+        app('lada.cache')->lookup('k', ['t'], []);
         $generation = $this->generationId();
 
         $this->app->terminate();

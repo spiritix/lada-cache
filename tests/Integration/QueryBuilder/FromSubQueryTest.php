@@ -136,6 +136,7 @@ final class FromSubQueryTest extends TestCase
 
     public function testSubqueryTablesDoNotLeakIntoOtherQueries(): void
     {
+        $this->loadDependencyMap();
         $driver = Driver::create(['name' => 'driver']);
 
         DB::query()->fromSub(DB::table('cars')->select('id'), 'per_car');

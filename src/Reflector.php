@@ -50,6 +50,9 @@ final class Reflector
     /** @var array<string, int>|null */
     private ?array $referenceCounts = null;
 
+    /** @var array<string, array<string, list<scalar>>>|null */
+    private ?array $columnPins = null;
+
     public function __construct(
         private readonly QueryBuilder $queryBuilder,
         string $sqlOperation = self::QUERY_TYPE_SELECT,
@@ -115,6 +118,14 @@ final class Reflector
                 ...array_keys($this->referenceCounts()),
             ]))
             : TableExtractor::extractTables($this->queryBuilder);
+    }
+
+    /**
+     * @return array<string, array<string, list<scalar>>> table => lowercase column => values its wheres pin it to
+     */
+    public function getColumnPins(): array
+    {
+        return $this->columnPins ??= RowExtractor::extractColumnPins($this->queryBuilder, $this->referenceCounts());
     }
 
     public function getRows(): array

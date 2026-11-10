@@ -28,11 +28,11 @@ class FlushWithConnectionPrefixTest extends TestCase
     {
         $cache = $this->freshCache();
 
-        $miss = $cache->lookup('k1', ['t1']);
+        $miss = $cache->lookup('k1', ['t1'], []);
         $this->assertInstanceOf(CacheMiss::class, $miss);
         $cache->store($miss, ['row']);
 
-        $hit = $cache->lookup('k1', ['t1']);
+        $hit = $cache->lookup('k1', ['t1'], []);
         $this->assertInstanceOf(CacheHit::class, $hit);
         $this->assertSame(['row'], $hit->rows);
         $this->assertContains('app_lada:generation', RedisFacade::connection('cache')->keys('lada:*'));
@@ -45,7 +45,7 @@ class FlushWithConnectionPrefixTest extends TestCase
 
         $cache->invalidate(Invalidation::of(['t1']));
 
-        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k1', ['t1']));
+        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k1', ['t1'], []));
     }
 
     public function testFlushDeletesAllEntriesAndKeepsOnlyTheGenerationAndServerKeys(): void
@@ -90,7 +90,7 @@ class FlushWithConnectionPrefixTest extends TestCase
             $client->command('del', [$member]);
         }
 
-        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k1', ['tags:database:db:table_unspecific:cars']));
+        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k1', ['tags:database:db:table_unspecific:cars'], []));
     }
 
     private function freshCache(): Cache
@@ -105,7 +105,7 @@ class FlushWithConnectionPrefixTest extends TestCase
      */
     private function seedEntry(Cache $cache, string $key, array $tags, array $rows): void
     {
-        $miss = $cache->lookup($key, $tags);
+        $miss = $cache->lookup($key, $tags, []);
         $this->assertInstanceOf(CacheMiss::class, $miss);
         $cache->store($miss, $rows);
     }

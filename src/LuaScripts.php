@@ -50,8 +50,36 @@ final class LuaScripts
         LUA;
 
     /**
-     * ARGV: base, entry hash, fresh token, ttl seconds, Lada prefix, tag count, tags..., legacy tags...
+     * Defines the names of the tags foreign key cascades into a table replace, given the table's
+     * prefix (`Tagger::cascadeTagPrefix()` followed by the table name and a colon): `any` for
+     * reads made while no dependency map was known, `via:<column>` for reads not pinned on a
+     * cascade column, and `col:<column>:<key>` for reads pinned on it.
+     */
+    private const string CASCADE_TAGS = <<<'LUA'
+        local function cascadeAny(prefix)
+            return prefix .. 'any'
+        end
+        local function cascadeVia(prefix, column)
+            return prefix .. 'via:' .. column
+        end
+        local function cascadeValue(prefix, column, key)
+            return prefix .. 'col:' .. column .. ':' .. key
+        end
+
+        LUA;
+
+    /**
+     * ARGV: base, entry hash, fresh token, ttl seconds, Lada prefix, tag count, tags...,
+     *       cascade read count, then per table read: dependents name, cascade tag prefix, cascade
+     *       columns field, pinned column count, then per column: column, key count, keys...,
+     *       then legacy tags...
      * Returns {generation, fingerprint} on a miss and {generation, fingerprint, payload} on a hit.
+     *
+     * A table read also takes the tokens of the cascade tags that row-precise foreign key cascades
+     * into it replace (see `CASCADE_TAGS`): for each column the dependency map lists in the table's
+     * cascade columns field (`Write::cascadeColumnsField()`),
+     * the value tags of the keys the read pins it to, or its `via` tag when it pins none; without a
+     * dependency map, the `any` tag. A table no row-precise cascade reaches takes none.
      *
      * Legacy tags are only passed with legacy invalidation on (see `Tagger::legacyDependencies()`);
      * each contributes the token of `<base>legacy:<tag>` to the fingerprint. That key is listed in the tag's 5.x tag set, which a 5.x host invalidating the
@@ -59,7 +87,7 @@ final class LuaScripts
      * version stored before the 5.x write become unreachable. A token whose key is missing or no
      * longer listed in the set, because the 5.x host deleted the set but not yet its keys, is replaced.
      */
-    public const string LOOKUP = <<<'LUA'
+    public const string LOOKUP = self::CASCADE_TAGS.<<<'LUA'
         local base, fresh, ttl = ARGV[1], ARGV[3], tonumber(ARGV[4])
         local connectionPrefix = string.sub(base, 1, #base - #ARGV[5])
         local lastVersionTag = 6 + tonumber(ARGV[6])
@@ -78,8 +106,8 @@ final class LuaScripts
             end
         end
         local tokens = {}
-        for i = 7, lastVersionTag do
-            local versionKey = scope .. 'v:' .. ARGV[i]
+        local function takeToken(tag)
+            local versionKey = scope .. 'v:' .. tag
             local token = redis.call('GET', versionKey)
             if not token then
                 token = fresh
@@ -87,7 +115,44 @@ final class LuaScripts
             end
             tokens[#tokens + 1] = token
         end
-        for i = lastVersionTag + 1, #ARGV do
+        for i = 7, lastVersionTag do
+            takeToken(ARGV[i])
+        end
+        local index = lastVersionTag + 1
+        local cascadeReads = tonumber(ARGV[index])
+        index = index + 1
+        for _ = 1, cascadeReads do
+            local dependentsKey = scope .. 'd:' .. ARGV[index]
+            local prefix = ARGV[index + 1]
+            local columnsField = ARGV[index + 2]
+            local pinCount = tonumber(ARGV[index + 3])
+            index = index + 4
+            local pins = {}
+            for _ = 1, pinCount do
+                local column = ARGV[index]
+                local keyCount = tonumber(ARGV[index + 1])
+                pins[column] = {unpack(ARGV, index + 2, index + 1 + keyCount)}
+                index = index + 2 + keyCount
+            end
+            if redis.call('EXISTS', dependentsKey) == 0 then
+                takeToken(cascadeAny(prefix))
+            else
+                local columns = redis.call('HGET', dependentsKey, columnsField)
+                if columns then
+                    for column in string.gmatch(columns, '[^\n]+') do
+                        local keys = pins[column]
+                        if keys then
+                            for _, key in ipairs(keys) do
+                                takeToken(cascadeValue(prefix, column, key))
+                            end
+                        else
+                            takeToken(cascadeVia(prefix, column))
+                        end
+                    end
+                end
+            end
+        end
+        for i = index, #ARGV do
             local legacyKey = base .. 'legacy:' .. ARGV[i]
             local legacySet = base .. ARGV[i]
             local member = string.sub(legacyKey, #connectionPrefix + 1)
@@ -138,12 +203,16 @@ final class LuaScripts
 
     /**
      * ARGV: base, fresh token, ttl seconds, replica lag seconds, tag count, tags...,
-     *       group count, then per group: dependents name, prefix count, prefixes..., field count, dependents fields (see `Write`)...
+     *       group count, then per group: dependents name, prefix count, prefixes..., field count, dependents fields (see `Write`)...,
+     *       cascade tag prefix, keyed field count, then per keyed field: field, fallback field, key count, keys...
+     * A keyed field lists, besides tables changed table-wide, row-precise foreign key edges as
+     * `<child>\t<column>`: for those only the cascade tags of the child naming the keys are
+     * replaced (see `CASCADE_TAGS`). Without the keyed field, its fallback is used table-wide.
      * Replaces the tokens of the tags, and of every table-wide tag of the tables the database
      * changes along with each group's tables. Returns {0} when nothing was ever cached, else
      * {generation, 1-based indexes of the groups whose dependents are not known yet...}.
      */
-    public const string INVALIDATE = self::SERVER_CHECK.<<<'LUA'
+    public const string INVALIDATE = self::SERVER_CHECK.self::CASCADE_TAGS.<<<'LUA'
         local base, fresh, ttl, lag = ARGV[1], ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4])
         if retireIfServerChanged(base) then
             return {0}
@@ -189,8 +258,8 @@ final class LuaScripts
             if not known then
                 result[#result + 1] = group
             end
+            local changed = {}
             if known and fieldCount > 0 then
-                local changed = {}
                 for _, dependents in ipairs(redis.call('HMGET', dependentsKey, unpack(ARGV, index, index + fieldCount - 1))) do
                     if dependents then
                         for dependent in string.gmatch(dependents, '[^\n]+') do
@@ -198,13 +267,39 @@ final class LuaScripts
                         end
                     end
                 end
-                for dependent in pairs(changed) do
-                    for p = 1, prefixCount do
-                        replace(prefixes[p] .. dependent)
+            end
+            index = index + fieldCount
+            local cascadePrefix = ARGV[index]
+            local keyedCount = tonumber(ARGV[index + 1])
+            index = index + 2
+            for _ = 1, keyedCount do
+                local field, fallback, keyCount = ARGV[index], ARGV[index + 1], tonumber(ARGV[index + 2])
+                local keysStart = index + 3
+                index = keysStart + keyCount
+                if known then
+                    local dependents = redis.call('HGET', dependentsKey, field) or redis.call('HGET', dependentsKey, fallback)
+                    if dependents then
+                        for line in string.gmatch(dependents, '[^\n]+') do
+                            local child, column = string.match(line, '^(.-)\t(.+)$')
+                            if child then
+                                local prefix = cascadePrefix .. child .. ':'
+                                replace(cascadeAny(prefix))
+                                replace(cascadeVia(prefix, column))
+                                for k = keysStart, keysStart + keyCount - 1 do
+                                    replace(cascadeValue(prefix, column, ARGV[k]))
+                                end
+                            else
+                                changed[line] = true
+                            end
+                        end
                     end
                 end
             end
-            index = index + fieldCount
+            for dependent in pairs(changed) do
+                for p = 1, prefixCount do
+                    replace(prefixes[p] .. dependent)
+                end
+            end
         end
         return result
         LUA;

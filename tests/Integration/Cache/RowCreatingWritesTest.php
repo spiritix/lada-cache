@@ -39,6 +39,7 @@ final class RowCreatingWritesTest extends TestCase
 
     public function testInsertWithPrimaryKeyKeepsOtherRowLookupsCached(): void
     {
+        $this->loadDependencyMap();
         DB::table('cars')->insert(['id' => 1, 'name' => 'cached', 'engine_id' => null, 'driver_id' => null]);
         DB::table('cars')->where('id', 1)->first();
 

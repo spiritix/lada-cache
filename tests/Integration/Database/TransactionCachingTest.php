@@ -92,6 +92,7 @@ final class TransactionCachingTest extends TestCase
 
     public function testInvalidationsOfARolledBackTransactionDoNotLeakIntoTheNext(): void
     {
+        $this->loadDependencyMap();
         DB::table('cars')->insert(['id' => 1, 'name' => 'row', 'engine_id' => null, 'driver_id' => null]);
         $builder = DB::table('cars')->where('id', 1);
         [$key, $tags] = $this->cacheKeyAndTags($builder);

@@ -14,7 +14,8 @@ enum ReferentialAction
 {
     case KeepsRows;
     case Cascades;
-    case SetsColumns;
+    case SetsNull;
+    case SetsDefault;
 
     /**
      * Parses a rule as each database reports it: `CASCADE`, `SET NULL`, `SET_DEFAULT`, PostgreSQL's
@@ -24,7 +25,8 @@ enum ReferentialAction
     {
         return match (strtolower(trim($rule))) {
             'cascade', 'c' => self::Cascades,
-            'set null', 'set_null', 'set default', 'set_default', 'n', 'd' => self::SetsColumns,
+            'set null', 'set_null', 'n' => self::SetsNull,
+            'set default', 'set_default', 'd' => self::SetsDefault,
             'no action', 'no_action', 'restrict', 'a', 'r' => self::KeepsRows,
             default => throw new UnexpectedValueException('Unknown foreign key rule '.json_encode($rule)),
         };

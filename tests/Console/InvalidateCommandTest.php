@@ -20,6 +20,7 @@ final class InvalidateCommandTest extends TestCase
 
     public function testInvalidatesRowAndTableReadsOfTheNamedTablesOnly(): void
     {
+        $this->loadDependencyMap();
         $this->assertSame('before', Car::query()->find(1)?->name);
         $this->assertSame(['before'], DB::table('cars')->pluck('name')->all());
         $this->assertSame('before', DB::table('drivers')->where('id', 1)->value('name'));

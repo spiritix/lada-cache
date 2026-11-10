@@ -49,6 +49,37 @@ final class RowKeys
         return $canonical;
     }
 
+    /**
+     * Keys for values of a column whose type is not known, such as a foreign key column compared
+     * with the primary key values it references: integers and integer strings share a key, other
+     * strings are keyed like string primary keys. Values neither can represent make it null.
+     *
+     * @param  array<int|string, mixed>  $values
+     * @return non-empty-list<string>|null
+     */
+    public static function columnValues(array $values): ?array
+    {
+        $keys = [];
+        foreach ($values as $value) {
+            $key = self::integerKey($value) ?? self::stringKey($value);
+
+            if ($key === null) {
+                return null;
+            }
+
+            $keys[$key] = true;
+        }
+
+        if ($keys === [] || count($keys) > self::MAX_PER_TABLE) {
+            return null;
+        }
+
+        $canonical = array_map('strval', array_keys($keys));
+        sort($canonical, SORT_STRING);
+
+        return $canonical;
+    }
+
     private static function integerKey(mixed $value): ?string
     {
         if (is_int($value)) {

@@ -619,7 +619,7 @@ parameters:
 			path: src/Support/RowExtractor.php
 
 		-
-			message: '#^Parameter \#1 \$where of static method Spiritix\\LadaCache\\Support\\RowExtractor\:\:boolean\(\) expects array\<string, mixed\>, mixed given\.$#'
+			message: '#^Parameter \#1 \$where of static method Spiritix\\LadaCache\\Support\\RowExtractor\:\:boolean\(\) expects array\<mixed\>, mixed given\.$#'
 			identifier: argument.type
 			count: 1
 			path: src/Support/RowExtractor.php

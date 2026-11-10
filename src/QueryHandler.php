@@ -13,6 +13,7 @@ use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Debug\CacheCollector;
 use Spiritix\LadaCache\Support\AssignedRows;
 use Spiritix\LadaCache\Support\CacheOperation;
+use Spiritix\LadaCache\Support\CascadeRead;
 use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\FailedInvalidations;
 use Spiritix\LadaCache\Support\FailureReporter;
@@ -21,6 +22,7 @@ use Spiritix\LadaCache\Support\PendingInvalidations;
 use Spiritix\LadaCache\Support\RawStatementEffect;
 use Spiritix\LadaCache\Support\RedisCooldown;
 use Spiritix\LadaCache\Support\ReplicaReads;
+use Spiritix\LadaCache\Support\RowKeys;
 use Spiritix\LadaCache\Support\Write;
 use Throwable;
 
@@ -78,7 +80,7 @@ final class QueryHandler
             $invalidation = Invalidation::ofWrite($tags, $tagger->tableWideTags(), ReplicaReads::lagSeconds($connection))->withChangesOf(
                 $reflector->getDatabase(),
                 (string) $connection->getName(),
-                $write,
+                self::narrowedToDeletedKeys($write, $builder, $reflector),
                 $reflector->getTables(),
             );
         } catch (Throwable $exception) {
@@ -151,8 +153,10 @@ final class QueryHandler
             $reflector = new Reflector($builder);
             $sql = $reflector->getSql();
             $cacheable = (new Manager($reflector))->shouldCache();
+            $tagger = new Tagger($reflector);
             $key = $cacheable ? (new Hasher($reflector))->getHash() : '';
-            $tags = $cacheable ? (new Tagger($reflector))->getTags() : [];
+            $tags = $cacheable ? $tagger->getTags() : [];
+            $cascadeReads = $cacheable ? $tagger->cascadeReads() : [];
         } catch (Throwable $exception) {
             FailureReporter::report(CacheOperation::Analyze, $exception);
 
@@ -163,7 +167,7 @@ final class QueryHandler
             return $runQuery($sql);
         }
 
-        $lookup = $this->lookup($key, $tags);
+        $lookup = $this->lookup($key, $tags, $cascadeReads);
 
         if ($lookup instanceof CacheHit) {
             $collector?->endMeasuring('Hit', [$key], $tags, $sql, $reflector->getParameters());
@@ -205,11 +209,12 @@ final class QueryHandler
 
     /**
      * @param  array<string>  $tags
+     * @param  list<CascadeRead>  $cascadeReads
      */
-    private function lookup(string $key, array $tags): CacheHit|CacheMiss|null
+    private function lookup(string $key, array $tags, array $cascadeReads): CacheHit|CacheMiss|null
     {
         try {
-            return $this->cache->lookup($key, $tags);
+            return $this->cache->lookup($key, $tags, $cascadeReads);
         } catch (Throwable $exception) {
             FailureReporter::report(CacheOperation::Read, $exception, ['key' => $key]);
 
@@ -331,6 +336,30 @@ final class QueryHandler
         if ($stored !== []) {
             $this->cache->invalidate($invalidation->onlyCascadesOf($stored), $cooldown);
         }
+    }
+
+    /**
+     * A delete of one table pinned to primary key values changes, through foreign keys referencing
+     * that key, only the child rows referencing those values.
+     */
+    private static function narrowedToDeletedKeys(Write $write, QueryBuilder $builder, Reflector $reflector): Write
+    {
+        $tables = $reflector->getTables();
+
+        if (count($tables) !== 1 || $reflector->getType() !== Reflector::QUERY_TYPE_DELETE) {
+            return $write;
+        }
+
+        $table = $tables[array_key_first($tables)];
+
+        if (! is_string($table)) {
+            return $write;
+        }
+
+        $rows = $reflector->getRows()[$table] ?? null;
+        $keys = is_array($rows) ? RowKeys::columnValues($rows) : null;
+
+        return $keys === null ? $write : $write->deletingKeys($table, $builder->primaryKeyOf($table), $keys);
     }
 
     private static function inTransaction(ConnectionInterface $connection): bool

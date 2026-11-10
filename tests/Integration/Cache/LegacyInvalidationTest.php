@@ -97,14 +97,14 @@ final class LegacyInvalidationTest extends TestCase
         config(['lada-cache.legacy_invalidation' => true]);
         $redis = new Redis;
         $cache = new Cache($redis, new Encoder);
-        $miss = $cache->lookup('k', [$this->carsTag()]);
+        $miss = $cache->lookup('k', [$this->carsTag()], []);
         $this->assertInstanceOf(CacheMiss::class, $miss);
         $cache->store($miss, ['before']);
-        $this->assertInstanceOf(CacheHit::class, $cache->lookup('k', [$this->carsTag()]));
+        $this->assertInstanceOf(CacheHit::class, $cache->lookup('k', [$this->carsTag()], []));
 
         $this->invalidateAs5x($redis, $this->carsTag());
 
-        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k', [$this->carsTag()]));
+        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k', [$this->carsTag()], []));
     }
 
     public function testEntriesMissWhileAnEarlierVersionHasDeletedTheTagSetButNotYetItsKeys(): void
@@ -112,11 +112,11 @@ final class LegacyInvalidationTest extends TestCase
         config(['lada-cache.legacy_invalidation' => true]);
         $redis = new Redis;
         $cache = new Cache($redis, new Encoder);
-        $cache->store($cache->lookup('k', [$this->carsTag()]), ['before']);
+        $cache->store($cache->lookup('k', [$this->carsTag()], []), ['before']);
 
         $this->invalidateAs5x($redis, $this->carsTag(), deleteMembers: false);
 
-        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k', [$this->carsTag()]));
+        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k', [$this->carsTag()], []));
     }
 
     public function testAResultReadBeforeAnEarlierVersionInvalidatesIsNeverServed(): void
@@ -124,13 +124,13 @@ final class LegacyInvalidationTest extends TestCase
         config(['lada-cache.legacy_invalidation' => true]);
         $redis = new Redis;
         $cache = new Cache($redis, new Encoder);
-        $capturedBeforeWrite = $cache->lookup('k', [$this->carsTag()]);
+        $capturedBeforeWrite = $cache->lookup('k', [$this->carsTag()], []);
         $this->assertInstanceOf(CacheMiss::class, $capturedBeforeWrite);
 
         $this->invalidateAs5x($redis, $this->carsTag());
         $cache->store($capturedBeforeWrite, ['read before the write']);
 
-        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k', [$this->carsTag()]));
+        $this->assertInstanceOf(CacheMiss::class, $cache->lookup('k', [$this->carsTag()], []));
     }
 
     public function testEntriesStayCachedWhileNoEarlierVersionInvalidates(): void
@@ -138,10 +138,10 @@ final class LegacyInvalidationTest extends TestCase
         config(['lada-cache.legacy_invalidation' => true]);
         $redis = new Redis;
         $cache = new Cache($redis, new Encoder);
-        $cache->store($cache->lookup('k', [$this->carsTag()]), ['before']);
-        $cache->store($cache->lookup('other', [$this->carsTag()]), ['other']);
+        $cache->store($cache->lookup('k', [$this->carsTag()], []), ['before']);
+        $cache->store($cache->lookup('other', [$this->carsTag()], []), ['other']);
 
-        $hit = $cache->lookup('k', [$this->carsTag()]);
+        $hit = $cache->lookup('k', [$this->carsTag()], []);
 
         $this->assertInstanceOf(CacheHit::class, $hit);
         $this->assertSame(['before'], $hit->rows);
@@ -180,7 +180,7 @@ final class LegacyInvalidationTest extends TestCase
         $redis = new Redis;
         $cache = new Cache($redis, new Encoder);
 
-        $cache->store($cache->lookup('k', [$this->carsTag()]), ['rows']);
+        $cache->store($cache->lookup('k', [$this->carsTag()], []), ['rows']);
 
         $this->assertSame(0, (int) $redis->exists($redis->prefix($this->carsTag())));
         $this->assertSame(0, (int) $redis->exists($redis->prefix('legacy:'.$this->carsTag())));

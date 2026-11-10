@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use Spiritix\LadaCache\Support\AssignedRows;
+use Spiritix\LadaCache\Support\CascadeRead;
 use Spiritix\LadaCache\Support\RowKeys;
 
 /**
@@ -24,6 +25,8 @@ final readonly class Tagger
     private const string PREFIX_TABLE_UNSPECIFIC = ':table_unspecific:';
 
     private const string PREFIX_ROW = ':row:';
+
+    private const string PREFIX_CASCADE = ':cascade:';
 
     private bool $considerRows;
 
@@ -56,6 +59,44 @@ final readonly class Tagger
         }
 
         return array_map('strval', array_keys($tags));
+    }
+
+    /**
+     * The tables of a read as foreign key cascades into them see it, with the values its wheres
+     * pin each column to when rows are considered.
+     *
+     * @return list<CascadeRead>
+     */
+    public function cascadeReads(): array
+    {
+        $pins = $this->considerRows ? $this->reflector->getColumnPins() : [];
+        $reads = [];
+
+        foreach (array_filter($this->reflector->getTables(), 'is_string') as $table) {
+            [$database, $name] = $this->locate($table);
+            $columns = [];
+
+            foreach ($pins[$table] ?? [] as $column => $values) {
+                $keys = RowKeys::columnValues($values);
+                if ($keys !== null) {
+                    $columns[$column] = $keys;
+                }
+            }
+
+            ksort($columns, SORT_STRING);
+            $reads[] = new CascadeRead($database, $name, self::cascadeTagPrefix($database).$name.':', $columns);
+        }
+
+        return $reads;
+    }
+
+    /**
+     * Prefix of the tags foreign key cascades into a table replace, followed by the table name
+     * and `:any`, `:via:<column>` or `:col:<column>:<key>` (see `LuaScripts::CASCADE_TAGS`).
+     */
+    public static function cascadeTagPrefix(string $database): string
+    {
+        return self::PREFIX_DATABASE.$database.self::PREFIX_CASCADE;
     }
 
     /**

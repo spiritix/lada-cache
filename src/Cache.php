@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache;
 
+use Spiritix\LadaCache\Support\CascadeRead;
 use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\Invalidation;
 use Spiritix\LadaCache\Support\RedisCooldown;
+use Spiritix\LadaCache\Support\Write;
 use Throwable;
 use UnexpectedValueException;
 
@@ -44,17 +46,31 @@ final class Cache
 
     /**
      * @param  array<string>  $tags
+     * @param  list<CascadeRead>  $cascadeReads  the tables of the read as foreign key cascades into them see it
      */
-    public function lookup(string $key, array $tags): CacheHit|CacheMiss
+    public function lookup(string $key, array $tags, array $cascadeReads): CacheHit|CacheMiss
     {
         $versionTags = self::canonicalTags($tags);
-        $reply = $this->redis->evaluate(LuaScripts::LOOKUP, [
+        $arguments = [
             $key,
             self::freshToken(),
             $this->expiration->nextTtl(),
             $this->redis->ladaPrefix(),
             count($versionTags),
             ...$versionTags,
+            count($cascadeReads),
+        ];
+
+        foreach ($cascadeReads as $read) {
+            array_push($arguments, self::dependentsName($read->database), $read->tagPrefix, Write::cascadeColumnsField($read->table), count($read->pins));
+
+            foreach ($read->pins as $column => $keys) {
+                array_push($arguments, $column, count($keys), ...$keys);
+            }
+        }
+
+        $reply = $this->redis->evaluate(LuaScripts::LOOKUP, [
+            ...$arguments,
             ...($this->legacyInvalidation() ? self::canonicalTags(Tagger::legacyDependencies($versionTags)) : []),
         ]);
 
@@ -110,15 +126,25 @@ final class Cache
             $invalidation->replicaLagSeconds,
             count($invalidation->tags()),
             ...$invalidation->tags(),
-            count($invalidation->cascadeSources()),
         ];
 
-        $databases = array_keys($invalidation->cascadeSources());
+        $cascadeSources = $invalidation->cascadeSources();
+        $keyedSources = $invalidation->keyedSources();
+        $databases = array_values(array_unique([...array_keys($cascadeSources), ...array_keys($keyedSources)]));
+        sort($databases, SORT_STRING);
+        $arguments[] = count($databases);
 
-        foreach ($invalidation->cascadeSources() as $database => $fields) {
+        foreach ($databases as $database) {
             $prefixes = Tagger::tableWideTagPrefixes($database);
+            $fields = $cascadeSources[$database] ?? [];
+            $keyed = $keyedSources[$database] ?? [];
             array_push($arguments, self::dependentsName($database), count($prefixes), ...$prefixes);
             array_push($arguments, count($fields), ...$fields);
+            array_push($arguments, Tagger::cascadeTagPrefix($database), count($keyed));
+
+            foreach ($keyed as $source) {
+                array_push($arguments, $source['field'], $source['fallback'], count($source['keys']), ...$source['keys']);
+            }
         }
 
         $reply = $this->redis->evaluate(LuaScripts::INVALIDATE, $arguments, $cooldown);

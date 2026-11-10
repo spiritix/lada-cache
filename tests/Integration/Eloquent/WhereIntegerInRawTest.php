@@ -21,6 +21,7 @@ class WhereIntegerInRawTest extends TestCase
 
     public function test_find_many_survives_write_to_unrelated_row(): void
     {
+        $this->loadDependencyMap();
         $read = $this->makeDriver(['name' => 'read']);
         $other = $this->makeDriver(['name' => 'other']);
 
@@ -42,6 +43,7 @@ class WhereIntegerInRawTest extends TestCase
 
     public function test_belongs_to_eager_load_is_scoped_to_loaded_parents(): void
     {
+        $this->loadDependencyMap();
         $driver = $this->makeDriver(['name' => 'd1']);
         $other = $this->makeDriver(['name' => 'd2']);
         $car = $this->makeCar(['name' => 'c1', 'driver_id' => $driver->id]);
