@@ -47,8 +47,8 @@ A **Redis-based**, fully automated, and scalable query cache layer for Laravel.
 |   7.x    |  7.2+  |    5.x     |
 |   8.x    |  7.3+  |    5.x     |
 | 9.x-11.x |  8.0+  |    5.x     |
-|  12.x    |  8.3+  |    6.x     |
-|  13.x    |  8.3+  |    6.x     |
+|  12.x    |  8.3+  |   6.0.x    |
+|  13.x    |  8.3+  |   6.1+     |
 
 ## Architecture
 
