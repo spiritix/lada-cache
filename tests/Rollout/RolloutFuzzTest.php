@@ -9,8 +9,11 @@ use PHPUnit\Framework\TestCase;
 /**
  * Long-lived hosts of both versions, like Octane workers of the old and the new release, run
  * seeded random reads and writes against the same rows at the same time. Races may make reads
- * differ while they run, but once every host has stopped writing, each host's own cached reads
- * must match the database. A failure names the seed; rerun with LADA_FUZZ_SEED=<seed>.
+ * differ while they run, and 5.x hosts may even keep a result they read before their own
+ * concurrent write, which 5.x cannot prevent. Once every host has stopped, each host of this
+ * version writes every row once more; afterwards every host of both versions must read what the
+ * database holds, since writes by this version remove the 5.x entries they invalidate. A failure
+ * names the seed; rerun with LADA_FUZZ_SEED=<seed>.
  */
 final class RolloutFuzzTest extends TestCase
 {
@@ -41,7 +44,7 @@ final class RolloutFuzzTest extends TestCase
             foreach (['old', 'new'] as $version) {
                 for ($worker = 0; $worker < self::WORKERS_PER_VERSION; $worker++) {
                     $workerSeed = $seed + $round * 100 + count($commands);
-                    $commands[] = [$version, 'worker', [$workerSeed, $steps, $barrier, self::WORKERS_PER_VERSION * 2]];
+                    $commands[] = [$version, 'worker', [$workerSeed, $steps, $barrier, self::WORKERS_PER_VERSION]];
                 }
             }
 

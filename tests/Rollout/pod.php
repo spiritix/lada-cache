@@ -233,7 +233,28 @@ function legacy_keys(): array
  *
  * @return list<string>
  */
-function worker(string $version, int $seed, int $steps, string $barrierDirectory, int $workers): array
+/**
+ * Marks this worker as having reached the phase and waits for every worker to reach it.
+ *
+ * @return string|null the phase timed out on, null when every worker reached it
+ */
+function wait_at_barrier(string $barrierDirectory, string $phase, string $worker, int $workers): ?string
+{
+    touch("{$barrierDirectory}/{$phase}-{$worker}");
+    $deadline = microtime(true) + 120;
+
+    while (count((array) glob("{$barrierDirectory}/{$phase}-*")) < $workers) {
+        if (microtime(true) > $deadline) {
+            return "reach {$phase}";
+        }
+
+        usleep(50_000);
+    }
+
+    return null;
+}
+
+function worker(string $version, int $seed, int $steps, string $barrierDirectory, int $workersPerVersion): array
 {
     mt_srand($seed);
     $ids = [1, 2, 3, 4];
@@ -260,15 +281,18 @@ function worker(string $version, int $seed, int $steps, string $barrierDirectory
         });
     }
 
-    touch("{$barrierDirectory}/{$version}-{$seed}");
-    $deadline = microtime(true) + 120;
+    $timedOut = wait_at_barrier($barrierDirectory, 'done', "{$version}-{$seed}", $workersPerVersion * 2);
 
-    while (count((array) glob("{$barrierDirectory}/*")) < $workers) {
-        if (microtime(true) > $deadline) {
-            return ["{$version} worker {$seed} timed out waiting for the other workers"];
+    if ($timedOut === null && $version === 'new') {
+        foreach ($ids as $id) {
+            operation($version, 'update', [$id, "{$version}-{$seed}-final-{$id}"]);
         }
+    }
 
-        usleep(50_000);
+    $timedOut ??= wait_at_barrier($barrierDirectory, 'final', "{$version}-{$seed}", $workersPerVersion * 2);
+
+    if ($timedOut !== null) {
+        return ["{$version} worker {$seed} timed out waiting for the other workers to {$timedOut}"];
     }
 
     $mismatches = [];
