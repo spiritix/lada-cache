@@ -13,7 +13,7 @@ class TaggerTest extends TestCase
 {
     private function dbTagPrefix(): string
     {
-        return 'tags:database:' . DB::connection()->getDatabaseName();
+        return 'tags:database:'.DB::connection()->getDatabaseName();
     }
 
     public function testLegacyDependenciesAddTheUnspecificTagOfTablesAReadIsPinnedTo(): void
@@ -44,7 +44,7 @@ class TaggerTest extends TestCase
         $b = DB::table('cars');
         $tags = (new Tagger(new Reflector($b)))->getTags();
 
-        $this->assertSame([$this->dbTagPrefix() . ':table_unspecific:cars'], $tags);
+        $this->assertSame([$this->dbTagPrefix().':table_unspecific:cars'], $tags);
     }
 
     public function testWithoutRowsTagsSeparateDatabaseAndTableNames(): void
@@ -53,8 +53,8 @@ class TaggerTest extends TestCase
 
         $tags = (new Tagger(new Reflector(DB::table('ab'))))->getTags();
 
-        $this->assertNotContains('tags:database:' . DB::connection()->getDatabaseName() . 'ab', $tags);
-        $this->assertSame([$this->dbTagPrefix() . ':table_unspecific:ab'], $tags);
+        $this->assertNotContains('tags:database:'.DB::connection()->getDatabaseName().'ab', $tags);
+        $this->assertSame([$this->dbTagPrefix().':table_unspecific:ab'], $tags);
     }
 
     public function testSelectWithoutRowsWhenConsiderRowsTrueProducesUnspecificTableTag(): void
@@ -64,7 +64,7 @@ class TaggerTest extends TestCase
         $b = DB::table('cars');
         $tags = (new Tagger(new Reflector($b)))->getTags();
 
-        $this->assertContains($this->dbTagPrefix() . ':table_unspecific:cars', $tags);
+        $this->assertContains($this->dbTagPrefix().':table_unspecific:cars', $tags);
         $this->assertFalse($this->arrayHasStringContaining($tags, ':row:'));
     }
 
@@ -75,9 +75,9 @@ class TaggerTest extends TestCase
         $b = DB::table('cars')->whereIn('id', [1, 2]);
         $tags = (new Tagger(new Reflector($b)))->getTags();
 
-        $this->assertContains($this->dbTagPrefix() . ':table_specific:cars', $tags);
-        $this->assertContains($this->dbTagPrefix() . ':table_specific:cars:row:1', $tags);
-        $this->assertContains($this->dbTagPrefix() . ':table_specific:cars:row:2', $tags);
+        $this->assertContains($this->dbTagPrefix().':table_specific:cars', $tags);
+        $this->assertContains($this->dbTagPrefix().':table_specific:cars:row:1', $tags);
+        $this->assertContains($this->dbTagPrefix().':table_specific:cars:row:2', $tags);
     }
 
     public function testUpdateWithoutRowsProducesBothTableTags(): void
@@ -88,8 +88,8 @@ class TaggerTest extends TestCase
         $r = new Reflector($b, Reflector::QUERY_TYPE_UPDATE, ['name' => 'x']);
         $tags = (new Tagger($r))->getTags();
 
-        $this->assertContains($this->dbTagPrefix() . ':table_specific:cars', $tags);
-        $this->assertContains($this->dbTagPrefix() . ':table_unspecific:cars', $tags);
+        $this->assertContains($this->dbTagPrefix().':table_specific:cars', $tags);
+        $this->assertContains($this->dbTagPrefix().':table_unspecific:cars', $tags);
     }
 
     public function testUpdateWithSpecificRowsProducesUnspecificAndRowTags(): void
@@ -101,11 +101,11 @@ class TaggerTest extends TestCase
         $tags = (new Tagger($r))->getTags();
 
         // Invalidates aggregates but preserves row isolation
-        $this->assertContains($this->dbTagPrefix() . ':table_unspecific:cars', $tags);
-        $this->assertContains($this->dbTagPrefix() . ':table_specific:cars:row:5', $tags);
-        $this->assertContains($this->dbTagPrefix() . ':table_specific:cars:row:10', $tags);
+        $this->assertContains($this->dbTagPrefix().':table_unspecific:cars', $tags);
+        $this->assertContains($this->dbTagPrefix().':table_specific:cars:row:5', $tags);
+        $this->assertContains($this->dbTagPrefix().':table_specific:cars:row:10', $tags);
         // Should NOT have table_specific without row suffix (preserves isolation)
-        $this->assertNotContains($this->dbTagPrefix() . ':table_specific:cars', $tags);
+        $this->assertNotContains($this->dbTagPrefix().':table_specific:cars', $tags);
     }
 
     public function testInsertProducesUnspecificTableTag(): void
@@ -116,7 +116,7 @@ class TaggerTest extends TestCase
         $r = new Reflector($b, Reflector::QUERY_TYPE_INSERT, ['name' => 'x']);
         $tags = (new Tagger($r))->getTags();
 
-        $this->assertContains($this->dbTagPrefix() . ':table_unspecific:cars', $tags);
+        $this->assertContains($this->dbTagPrefix().':table_unspecific:cars', $tags);
     }
 
     public function testDeleteWithoutRowsProducesBothTableTags(): void
@@ -127,8 +127,8 @@ class TaggerTest extends TestCase
         $r = new Reflector($b, Reflector::QUERY_TYPE_DELETE);
         $tags = (new Tagger($r))->getTags();
 
-        $this->assertContains($this->dbTagPrefix() . ':table_specific:cars', $tags);
-        $this->assertContains($this->dbTagPrefix() . ':table_unspecific:cars', $tags);
+        $this->assertContains($this->dbTagPrefix().':table_specific:cars', $tags);
+        $this->assertContains($this->dbTagPrefix().':table_unspecific:cars', $tags);
     }
 
     public function testTruncateProducesSpecificAndUnspecificTableTags(): void
@@ -139,8 +139,8 @@ class TaggerTest extends TestCase
         $r = new Reflector($b, Reflector::QUERY_TYPE_TRUNCATE);
         $tags = (new Tagger($r))->getTags();
 
-        $this->assertContains($this->dbTagPrefix() . ':table_specific:cars', $tags);
-        $this->assertContains($this->dbTagPrefix() . ':table_unspecific:cars', $tags);
+        $this->assertContains($this->dbTagPrefix().':table_specific:cars', $tags);
+        $this->assertContains($this->dbTagPrefix().':table_unspecific:cars', $tags);
     }
 
     public function testAliasNormalizationStripsAsAliasInTableNames(): void
@@ -150,7 +150,7 @@ class TaggerTest extends TestCase
         $b = DB::table('engines as e');
         $tags = (new Tagger(new Reflector($b)))->getTags();
 
-        $this->assertContains($this->dbTagPrefix() . ':table_unspecific:engines', $tags);
+        $this->assertContains($this->dbTagPrefix().':table_unspecific:engines', $tags);
         $this->assertFalse($this->arrayHasStringContaining($tags, ' as '));
     }
 
@@ -180,6 +180,7 @@ class TaggerTest extends TestCase
                 return true;
             }
         }
+
         return false;
     }
 }

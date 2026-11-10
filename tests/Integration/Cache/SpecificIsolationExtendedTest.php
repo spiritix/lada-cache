@@ -16,7 +16,7 @@ final class SpecificIsolationExtendedTest extends TestCase
 {
     use CacheAssertions;
 
-    public function test_specific_update_on_one_table_does_not_invalidate_other_rows_or_tables(): void
+    public function testSpecificUpdateOnOneTableDoesNotInvalidateOtherRowsOrTables(): void
     {
         // Seed two cars and one driver row. We'll cache car rows; driver stays untouched but ensures multi-table scenario.
         DB::table('cars')->insert([
@@ -48,7 +48,7 @@ final class SpecificIsolationExtendedTest extends TestCase
         $this->assertCacheMissing($k11, $t11, 'Row 11 cache should be invalidated');
     }
 
-    public function test_update_where_in_invalidates_only_listed_rows(): void
+    public function testUpdateWhereInInvalidatesOnlyListedRows(): void
     {
         DB::table('cars')->insert([
             ['id' => 20, 'name' => 'X', 'engine_id' => null, 'driver_id' => null],
@@ -59,6 +59,7 @@ final class SpecificIsolationExtendedTest extends TestCase
         $mk = function (int $id): array {
             $b = DB::table('cars')->where('id', $id);
             $r = new Reflector($b);
+
             return [(new Hasher($r))->getHash(), (new Tagger($r))->getTags()];
         };
 

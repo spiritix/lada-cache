@@ -58,7 +58,7 @@ final class SchemaChangeTest extends TestCase
     {
         $generation = $this->generationId();
 
-        event(new DatabaseRefreshed());
+        event(new DatabaseRefreshed);
 
         $this->assertNotSame($generation, $this->generationId());
     }
@@ -67,7 +67,7 @@ final class SchemaChangeTest extends TestCase
     {
         $availability = RedisAvailability::processLocal();
         $availability->markUnavailable();
-        $cache = new Cache(new Redis(null, $availability), new Encoder(), new ExpirationPolicy(0));
+        $cache = new Cache(new Redis(null, $availability), new Encoder, new ExpirationPolicy(0));
         $generation = $this->generationId();
 
         $cache->retireAfterSchemaChange();
@@ -77,7 +77,7 @@ final class SchemaChangeTest extends TestCase
 
     private function generationId(): string
     {
-        $redis = new Redis();
+        $redis = new Redis;
 
         return (string) $redis->get($redis->prefix('generation'));
     }

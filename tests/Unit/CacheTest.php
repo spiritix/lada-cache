@@ -30,13 +30,13 @@ class CacheTest extends TestCase
 
         config(['lada-cache.prefix' => 'p:']);
 
-        $this->redis = new Redis();
-        $this->cache = new Cache($this->redis, new Encoder(), new ExpirationPolicy(0));
+        $this->redis = new Redis;
+        $this->cache = new Cache($this->redis, new Encoder, new ExpirationPolicy(0));
     }
 
     public function testResultsLargerThanTheEntrySizeLimitAreNotStored(): void
     {
-        $cache = new Cache($this->redis, new Encoder(), new ExpirationPolicy(0), new EntrySizeLimit(100));
+        $cache = new Cache($this->redis, new Encoder, new ExpirationPolicy(0), new EntrySizeLimit(100));
         $small = $cache->lookup('small', ['t'], []);
         $large = $cache->lookup('large', ['t'], []);
         $this->assertInstanceOf(CacheMiss::class, $small);
@@ -51,7 +51,7 @@ class CacheTest extends TestCase
 
     public function testZeroEntrySizeLimitStoresAnySize(): void
     {
-        $cache = new Cache($this->redis, new Encoder(), new ExpirationPolicy(0), new EntrySizeLimit(0));
+        $cache = new Cache($this->redis, new Encoder, new ExpirationPolicy(0), new EntrySizeLimit(0));
         $miss = $cache->lookup('large', ['t'], []);
         $this->assertInstanceOf(CacheMiss::class, $miss);
 
@@ -223,8 +223,8 @@ class CacheTest extends TestCase
     public function testPruneTreatsGlobCharactersInThePrefixLiterally(): void
     {
         config(['lada-cache.prefix' => 'g[1]*:']);
-        $redis = new Redis();
-        $cache = new Cache($redis, new Encoder(), new ExpirationPolicy(0));
+        $redis = new Redis;
+        $cache = new Cache($redis, new Encoder, new ExpirationPolicy(0));
         $cache->retireCurrentGeneration();
         $redis->set('g1:foreign-application-key', 'keep');
         $redis->set('g[1]*:legacy-key', 'drop');
@@ -263,7 +263,7 @@ class CacheTest extends TestCase
 
     public function testEntriesAndVersionsExpireWithTheConfiguredTtl(): void
     {
-        $cache = new Cache($this->redis, new Encoder(), new ExpirationPolicy(60));
+        $cache = new Cache($this->redis, new Encoder, new ExpirationPolicy(60));
         $miss = $cache->lookup('k', ['t'], []);
         $this->assertInstanceOf(CacheMiss::class, $miss);
         $cache->store($miss, ['row']);

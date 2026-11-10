@@ -15,7 +15,7 @@ final class TransactionInvalidationTest extends TestCase
 {
     use CacheAssertions;
 
-    public function test_specific_update_in_transaction_invalidates_after_commit_only(): void
+    public function testSpecificUpdateInTransactionInvalidatesAfterCommitOnly(): void
     {
         DB::table('cars')->insert(['id' => 601, 'name' => 'TX', 'engine_id' => null, 'driver_id' => null]);
 

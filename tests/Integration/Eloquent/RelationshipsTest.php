@@ -15,7 +15,7 @@ class RelationshipsTest extends TestCase
 {
     use MakesTestModels;
 
-    public function test_belongs_to_driver(): void
+    public function testBelongsToDriver(): void
     {
         $driver = $this->makeDriver(['name' => 'd1']);
         $car = $this->makeCar(['name' => 'c1', 'driver_id' => $driver->id]);
@@ -25,7 +25,7 @@ class RelationshipsTest extends TestCase
         Assert::assertSame('d1', $loaded->driver->name);
     }
 
-    public function test_update_or_create_move_invalidates_counts(): void
+    public function testUpdateOrCreateMoveInvalidatesCounts(): void
     {
         $d1 = $this->makeDriver(['name' => 'd1']);
         $d2 = $this->makeDriver(['name' => 'd2']);
@@ -43,7 +43,7 @@ class RelationshipsTest extends TestCase
         Assert::assertSame(1, (int) Driver::withCount('cars')->findOrFail($d2->id)->cars_count);
     }
 
-    public function test_has_one_engine(): void
+    public function testHasOneEngine(): void
     {
         $car = $this->makeCar(['name' => 'c-has-one']);
         $engine = $car->engine()->create(['name' => 'e1']);
@@ -54,7 +54,7 @@ class RelationshipsTest extends TestCase
         Assert::assertSame($car->id, $fresh->engine->car_id);
     }
 
-    public function test_latest_of_many_eager_loads_are_cached_with_their_final_query_constraints(): void
+    public function testLatestOfManyEagerLoadsAreCachedWithTheirFinalQueryConstraints(): void
     {
         $carA = $this->makeCar(['name' => 'car-a']);
         $carB = $this->makeCar(['name' => 'car-b']);
@@ -77,7 +77,7 @@ class RelationshipsTest extends TestCase
         Assert::assertSame('engine-b', $loadedB->latestEngine?->name);
     }
 
-    public function test_latest_and_oldest_of_many_eager_loads_do_not_share_cache_key(): void
+    public function testLatestAndOldestOfManyEagerLoadsDoNotShareCacheKey(): void
     {
         // Same outer SQL+bindings for both eager loads; only the beforeQuery-applied
         // aggregate join differs (MAX vs MIN). Without applyBeforeQueryCallbacks before
@@ -99,7 +99,7 @@ class RelationshipsTest extends TestCase
         Assert::assertSame('engine-old', $loaded->oldestEngine?->name);
     }
 
-    public function test_belongs_to_many_materials_attach_detach_sync(): void
+    public function testBelongsToManyMaterialsAttachDetachSync(): void
     {
         $car = $this->makeCar(['name' => 'c-btm']);
         $m1 = $this->makeMaterial(['name' => 'steel']);
@@ -122,7 +122,7 @@ class RelationshipsTest extends TestCase
         Assert::assertSame([$m2->id, $m3->id], $car->materials->pluck('id')->sort()->values()->all());
     }
 
-    public function test_eager_loading_constraints_and_where_has(): void
+    public function testEagerLoadingConstraintsAndWhereHas(): void
     {
         $driver1 = $this->makeDriver(['name' => 'drv-a']);
         $driver2 = $this->makeDriver(['name' => 'drv-b']);

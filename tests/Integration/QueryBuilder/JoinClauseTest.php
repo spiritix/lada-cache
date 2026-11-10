@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Integration\QueryBuilder;
@@ -34,7 +35,7 @@ class JoinClauseTest extends TestCase
         return compact('d1', 'd2', 'c1', 'c2', 'c3');
     }
 
-    public function test_join_with_nested_where_closure_works(): void
+    public function testJoinWithNestedWhereClosureWorks(): void
     {
         $data = $this->seedData();
 
@@ -65,7 +66,7 @@ class JoinClauseTest extends TestCase
         Assert::assertSame($results->toJson(), $results2->toJson());
     }
 
-    public function test_join_with_multiple_nested_where_closures(): void
+    public function testJoinWithMultipleNestedWhereClosures(): void
     {
         $data = $this->seedData();
 
@@ -104,7 +105,7 @@ class JoinClauseTest extends TestCase
         Assert::assertSame($results->toJson(), $results2->toJson());
     }
 
-    public function test_join_with_nested_where_and_orWhere(): void
+    public function testJoinWithNestedWhereAndOrWhere(): void
     {
         $data = $this->seedData();
 

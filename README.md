@@ -263,7 +263,7 @@ php artisan lada-cache:enable
 
 Pull requests and issue reports are welcome!
 
-- Follow **PSR-12** coding style  
+- Format with **Pint** (`just format`) and keep `just lint analyse` clean  
 - Add tests for all new features  
 - Submit via feature branches (no direct PRs from `master`)
 

@@ -88,13 +88,13 @@ rollout *args: deps services
 bench: deps services
     {{run_db}} DB_CONNECTION=mysql DB_PORT={{mysql_port}} {{phpunit}} tests/Benchmark
 
-# Run the code formatter over src, which rewrites files.
+# Run the code formatter, which rewrites files.
 format:
-    vendor/bin/pint src
+    vendor/bin/pint
 
 # Check the code formatter without changing anything.
 lint:
-    vendor/bin/pint --test src
+    vendor/bin/pint --test
 
 # Run PHPStan over src.
 analyse:

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Integration\Cache;
@@ -39,7 +40,7 @@ class ConcurrencyTest extends TestCase
         [$key, $tags] = $this->cacheKeyAndTags($builder);
         $this->assertCacheHas($key, $tags);
 
-        $redis = new LadaRedis();
+        $redis = new LadaRedis;
         $generation = (string) $redis->get($redis->prefix('generation'));
         $redis->del($redis->prefix($generation.':v:'.$tags->tags[0]));
 
@@ -53,7 +54,7 @@ class ConcurrencyTest extends TestCase
         $builder->get();
         [$key, $tags] = $this->cacheKeyAndTags($builder);
 
-        $redis = new LadaRedis();
+        $redis = new LadaRedis;
         $redis->del($redis->prefix('generation'));
 
         $this->assertCacheMissing($key, $tags);

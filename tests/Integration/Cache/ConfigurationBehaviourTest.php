@@ -1,12 +1,15 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Integration\Cache;
 
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis as RedisFacade;
 use Spiritix\LadaCache\Cache;
 use Spiritix\LadaCache\CacheMiss;
+use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Encoder;
 use Spiritix\LadaCache\ExpirationPolicy;
 use Spiritix\LadaCache\Manager;
@@ -22,10 +25,10 @@ class ConfigurationBehaviourTest extends TestCase
         config(['lada-cache.active' => false]);
 
         $builder = DB::table('cars');
-        
+
         // When inactive, DB::table() returns Laravel's default builder, not Lada's
-        $this->assertInstanceOf(\Illuminate\Database\Query\Builder::class, $builder);
-        $this->assertNotInstanceOf(\Spiritix\LadaCache\Database\QueryBuilder::class, $builder);
+        $this->assertInstanceOf(Builder::class, $builder);
+        $this->assertNotInstanceOf(QueryBuilder::class, $builder);
     }
 
     public function testIncludeTablesOnlyCachesIncluded(): void
@@ -63,15 +66,15 @@ class ConfigurationBehaviourTest extends TestCase
     public function testPrefixAppliedToKeys(): void
     {
         config(['lada-cache.prefix' => 'test:']);
-        $redis = new LadaRedis();
+        $redis = new LadaRedis;
         $this->assertSame('test:foo', $redis->prefix('foo'));
     }
 
     public function testExpirationTimeControlsEntryAndVersionTtl(): void
     {
         config(['lada-cache.prefix' => 'cfg:']);
-        $redis = new LadaRedis();
-        $cache = new Cache($redis, new Encoder(), new ExpirationPolicy(60));
+        $redis = new LadaRedis;
+        $cache = new Cache($redis, new Encoder, new ExpirationPolicy(60));
 
         $miss = $cache->lookup('expire-key', ['tag'], []);
         $this->assertInstanceOf(CacheMiss::class, $miss);
@@ -97,7 +100,7 @@ class ConfigurationBehaviourTest extends TestCase
     {
         // Use default connection to avoid missing connection names
         config(['lada-cache.redis_connection' => 'default']);
-        $lada = new LadaRedis();
+        $lada = new LadaRedis;
         $connA = $lada->getConnection();
         $connB = RedisFacade::connection('default');
         $this->assertSame(get_class($connB), get_class($connA));
@@ -117,8 +120,12 @@ class ConfigurationBehaviourTest extends TestCase
 
         config(['lada-cache.enable_debugbar' => true]);
         // Bind a fake debugbar to avoid missing service
-        $this->app->instance('debugbar', new class {
-            public function addCollector($c): void { $this->collectors[] = $c; }
+        $this->app->instance('debugbar', new class
+        {
+            public function addCollector($c): void
+            {
+                $this->collectors[] = $c;
+            }
         });
 
         // Run a query to ensure no exceptions are thrown

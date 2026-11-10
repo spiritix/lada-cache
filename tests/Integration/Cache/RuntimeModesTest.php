@@ -38,7 +38,7 @@ final class RuntimeModesTest extends TestCase
 
     public function testScriptsAreReloadedAfterRedisForgetsThem(): void
     {
-        $cache = new Cache(new Redis(), new Encoder(), new ExpirationPolicy(0));
+        $cache = new Cache(new Redis, new Encoder, new ExpirationPolicy(0));
         $cache->store($this->miss($cache), [['id' => 1]]);
 
         RedisFacade::connection((string) config('lada-cache.redis_connection'))->command('script', ['flush']);

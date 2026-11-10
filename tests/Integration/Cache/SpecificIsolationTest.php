@@ -15,7 +15,7 @@ final class SpecificIsolationTest extends TestCase
 {
     use CacheAssertions;
 
-    public function test_update_specific_row_does_not_invalidate_other_specific_row(): void
+    public function testUpdateSpecificRowDoesNotInvalidateOtherSpecificRow(): void
     {
         // Arrange: seed two rows
         DB::table('cars')->insert([

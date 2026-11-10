@@ -40,7 +40,7 @@ class ReflectorTest extends TestCase
             ->joinSub($sub, 'engines', 'cars.engine_id', '=', 'engines.id')
             ->whereExists(function ($q) {
                 $q->from('materials')
-                  ->whereColumn('materials.id', 'cars.id');
+                    ->whereColumn('materials.id', 'cars.id');
             });
 
         $tables = (new Reflector($b))->getTables();

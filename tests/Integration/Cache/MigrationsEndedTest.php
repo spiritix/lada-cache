@@ -28,7 +28,7 @@ final class MigrationsEndedTest extends TestCase
     public function testMigrationsEndedPrunesRetiredGenerationsButKeepsTheCurrentOne(): void
     {
         $this->seedCachedName('pre-migration');
-        $redis = new Redis();
+        $redis = new Redis;
         $retired = $this->currentGenerationId();
         event(new MigrationEnded(new class extends Migration {}, 'up'));
         $current = $this->currentGenerationId();
@@ -41,7 +41,7 @@ final class MigrationsEndedTest extends TestCase
 
     private function currentGenerationId(): string
     {
-        $redis = new Redis();
+        $redis = new Redis;
 
         return (string) $redis->get($redis->prefix('generation'));
     }

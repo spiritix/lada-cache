@@ -13,7 +13,7 @@ class SoftDeletesTest extends TestCase
 {
     use MakesTestModels;
 
-    public function test_soft_delete_hides_from_default_queries_and_with_trashed_shows(): void
+    public function testSoftDeleteHidesFromDefaultQueriesAndWithTrashedShows(): void
     {
         $car = $this->makeCar(['name' => 'sd1']);
         $id = $car->id;
@@ -32,7 +32,7 @@ class SoftDeletesTest extends TestCase
         Assert::assertTrue($with->trashed());
     }
 
-    public function test_only_trashed_and_restore(): void
+    public function testOnlyTrashedAndRestore(): void
     {
         $alive = $this->makeCar(['name' => 'alive']);
         $trashed = $this->makeCar(['name' => 'trashme']);
@@ -52,7 +52,7 @@ class SoftDeletesTest extends TestCase
         Assert::assertSame(1, Car::where('id', $trashed->id)->count());
     }
 
-    public function test_force_delete_removes_permanently(): void
+    public function testForceDeleteRemovesPermanently(): void
     {
         $car = $this->makeCar(['name' => 'force']);
         $id = $car->id;
@@ -69,4 +69,3 @@ class SoftDeletesTest extends TestCase
         Assert::assertSame(0, Car::withTrashed()->where('id', $id)->count());
     }
 }
-

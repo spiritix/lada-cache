@@ -11,6 +11,4 @@ use Illuminate\Database\Eloquent\Builder;
  *
  * @extends Builder<TModel>
  */
-final class OwnColumnsBuilder extends Builder
-{
-}
+final class OwnColumnsBuilder extends Builder {}

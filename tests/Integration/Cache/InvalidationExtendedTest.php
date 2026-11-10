@@ -15,7 +15,7 @@ final class InvalidationExtendedTest extends TestCase
 {
     use CacheAssertions;
 
-    public function test_broad_update_invalidates_all_specific_and_unspecific_for_table(): void
+    public function testBroadUpdateInvalidatesAllSpecificAndUnspecificForTable(): void
     {
         DB::table('cars')->insert([
             ['id' => 30, 'name' => 'A', 'engine_id' => null, 'driver_id' => null],
@@ -25,6 +25,7 @@ final class InvalidationExtendedTest extends TestCase
         $mk = function (int $id): array {
             $b = DB::table('cars')->where('id', $id);
             $r = new Reflector($b);
+
             return [(new Hasher($r))->getHash(), (new Tagger($r))->getTags()];
         };
         [$k30, $t30] = $mk(30);
@@ -50,7 +51,7 @@ final class InvalidationExtendedTest extends TestCase
         $this->assertCacheMissing($kb, $tb);
     }
 
-    public function test_broad_delete_invalidates_all_specific_and_unspecific_for_table(): void
+    public function testBroadDeleteInvalidatesAllSpecificAndUnspecificForTable(): void
     {
         DB::table('cars')->insert([
             ['id' => 40, 'name' => 'A', 'engine_id' => null, 'driver_id' => null],
@@ -60,6 +61,7 @@ final class InvalidationExtendedTest extends TestCase
         $mk = function (int $id): array {
             $b = DB::table('cars')->where('id', $id);
             $r = new Reflector($b);
+
             return [(new Hasher($r))->getHash(), (new Tagger($r))->getTags()];
         };
         [$k40, $t40] = $mk(40);
@@ -105,7 +107,7 @@ final class InvalidationExtendedTest extends TestCase
         $this->assertCacheMissing($ks, $ts);
     }
 
-    public function test_specific_row_delete_invalidates_broad_select(): void
+    public function testSpecificRowDeleteInvalidatesBroadSelect(): void
     {
         DB::table('cars')->insert(['id' => 60, 'name' => 'ToDelete', 'engine_id' => null, 'driver_id' => null]);
 

@@ -122,7 +122,7 @@ final class SubqueryShapesTest extends ApplicationShapeTestCase
         DB::table('text_translations')->insert([['id' => 1, 'checksum' => 'aaa', 'locale' => 'en', 'content' => 'uno']]);
         DB::table('text_acceptances')->insert([['id' => 1, 'checksum' => 'aaa', 'member_id' => 1]]);
 
-        $orphans = fn (): array => Text::query()->whereDoesntHave('translations')->whereDoesntHave('acceptances')->pluck("texts.checksum")->sort()->values()->all();
+        $orphans = fn (): array => Text::query()->whereDoesntHave('translations')->whereDoesntHave('acceptances')->pluck('texts.checksum')->sort()->values()->all();
 
         $this->assertCachedThenRefreshed(
             $orphans,

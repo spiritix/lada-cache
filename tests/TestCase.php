@@ -1,12 +1,13 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Orchestra\Testbench\TestCase as BaseTestCase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
+use Orchestra\Testbench\TestCase as BaseTestCase;
 use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\LadaCacheServiceProvider;
 use Spiritix\LadaCache\Support\DependentTables;
@@ -60,7 +61,7 @@ class TestCase extends BaseTestCase
     protected function getPackageProviders($app): array
     {
         return [
-            LadaCacheServiceProvider::class
+            LadaCacheServiceProvider::class,
         ];
     }
 
@@ -112,9 +113,9 @@ class TestCase extends BaseTestCase
         } else {
             $app['config']->set('database.default', 'testing');
             $app['config']->set('database.connections.testing', [
-                'driver'   => 'sqlite',
+                'driver' => 'sqlite',
                 'database' => ':memory:',
-                'prefix'   => '',
+                'prefix' => '',
                 'foreign_key_constraints' => true,
             ]);
         }

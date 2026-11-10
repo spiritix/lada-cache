@@ -68,4 +68,3 @@ class HasherTest extends TestCase
         $this->assertNotSame($h1, $h2);
     }
 }
-

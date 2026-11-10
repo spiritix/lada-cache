@@ -11,7 +11,7 @@ class CacheCollectorTest extends TestCase
 {
     public function testStartAndEndMeasuringAddsMeasureAndCollectCountsIt(): void
     {
-        $collector = new CacheCollector();
+        $collector = new CacheCollector;
 
         $collector->startMeasuring();
         $collector->endMeasuring(
@@ -55,7 +55,7 @@ class CacheCollectorTest extends TestCase
 
     public function testGetNameAndWidgets(): void
     {
-        $collector = new CacheCollector();
+        $collector = new CacheCollector;
 
         $this->assertSame('lada', $collector->getName());
 

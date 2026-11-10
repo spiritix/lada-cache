@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Integration\QueryBuilder;
@@ -36,8 +37,8 @@ class ComplexQueryBuilderTest extends TestCase
 
         // Materials
         $mSteel = Material::factory()->create(['name' => 'steel']);
-        $mAl   = Material::factory()->create(['name' => 'aluminum']);
-        $mPl   = Material::factory()->create(['name' => 'plastic']);
+        $mAl = Material::factory()->create(['name' => 'aluminum']);
+        $mPl = Material::factory()->create(['name' => 'plastic']);
 
         DB::table('car_material')->insert([
             ['car_id' => $c1->id, 'material_id' => $mSteel->id],
@@ -49,7 +50,7 @@ class ComplexQueryBuilderTest extends TestCase
         return compact('d1', 'd2', 'c1', 'c2', 'c3', 'e1', 'e2', 'e3', 'mSteel', 'mAl', 'mPl');
     }
 
-    public function test_complex_query_cached_and_invalidated_row_and_table_level(): void
+    public function testComplexQueryCachedAndInvalidatedRowAndTableLevel(): void
     {
         $data = $this->seedData();
 

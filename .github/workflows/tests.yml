@@ -116,4 +116,4 @@ jobs:
         run: vendor/bin/phpstan analyse --memory-limit=1G
 
       - name: Run Pint
-        run: vendor/bin/pint --test src
+        run: vendor/bin/pint --test

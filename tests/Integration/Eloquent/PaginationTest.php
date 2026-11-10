@@ -6,14 +6,14 @@ namespace Spiritix\LadaCache\Tests\Integration\Eloquent;
 
 use PHPUnit\Framework\Assert;
 use Spiritix\LadaCache\Tests\Concerns\MakesTestModels;
-use Spiritix\LadaCache\Tests\TestCase;
 use Spiritix\LadaCache\Tests\Database\Models\Car;
+use Spiritix\LadaCache\Tests\TestCase;
 
 class PaginationTest extends TestCase
 {
     use MakesTestModels;
 
-    public function test_paginate(): void
+    public function testPaginate(): void
     {
         foreach (range(1, 7) as $i) {
             $this->makeCar(['name' => 'c'.$i]);
@@ -31,7 +31,7 @@ class PaginationTest extends TestCase
         Assert::assertSame(3, $page1->lastPage());
     }
 
-    public function test_simple_paginate(): void
+    public function testSimplePaginate(): void
     {
         foreach (range(1, 5) as $i) {
             $this->makeCar(['name' => 's'.$i]);
@@ -49,4 +49,3 @@ class PaginationTest extends TestCase
         Assert::assertFalse($page3->hasMorePages());
     }
 }
-

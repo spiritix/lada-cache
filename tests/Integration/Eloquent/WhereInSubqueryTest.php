@@ -14,7 +14,7 @@ use Spiritix\LadaCache\Tests\TestCase;
  */
 final class WhereInSubqueryTest extends TestCase
 {
-    public function test_eloquent_subquery_read_is_refreshed_by_insert_into_subquery_table(): void
+    public function testEloquentSubqueryReadIsRefreshedByInsertIntoSubqueryTable(): void
     {
         $driver = Driver::create(['name' => 'driver']);
         $count = fn (): int => Driver::query()
@@ -29,7 +29,7 @@ final class WhereInSubqueryTest extends TestCase
         $this->assertSame(1, $count());
     }
 
-    public function test_closure_subquery_read_is_refreshed_by_insert_into_subquery_table(): void
+    public function testClosureSubqueryReadIsRefreshedByInsertIntoSubqueryTable(): void
     {
         $driver = Driver::create(['name' => 'driver']);
         $count = fn (): int => Driver::query()
@@ -44,7 +44,7 @@ final class WhereInSubqueryTest extends TestCase
         $this->assertSame(1, $count());
     }
 
-    public function test_where_not_in_subquery_read_is_refreshed_by_insert_into_subquery_table(): void
+    public function testWhereNotInSubqueryReadIsRefreshedByInsertIntoSubqueryTable(): void
     {
         $driver = Driver::create(['name' => 'driver']);
         $count = fn (): int => Driver::query()

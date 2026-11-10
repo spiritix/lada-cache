@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Concerns;
@@ -15,6 +16,7 @@ trait MakesTestModels
     protected function makeCar(array $attributes = [], ?int $count = null): Model|Car
     {
         $factory = Car::factory()->state($attributes);
+
         return $count ? $factory->count($count)->create() : $factory->create();
     }
 
@@ -38,4 +40,3 @@ trait MakesTestModels
         return CarMaterial::factory()->state($attributes)->create();
     }
 }
-

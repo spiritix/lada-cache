@@ -127,7 +127,7 @@ final class SoundnessTest extends TestCase
         $working = new QueryHandler(app('lada.cache'), $failed);
         $unreachable = new QueryHandler($this->unreachableCache(), $failed);
         DB::table('cars')->insert(['id' => 1, 'name' => 'before', 'engine_id' => null, 'driver_id' => null]);
-        $read = fn (): array => $working->cacheQuery(DB::table('cars')->where('id', 1), 
+        $read = fn (): array => $working->cacheQuery(DB::table('cars')->where('id', 1),
             fn (): array => DB::connection()->select('select name from cars where id = 1')
         );
         $this->assertSame('before', $read()[0]->name);

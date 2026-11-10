@@ -21,7 +21,7 @@ class ScopesTest extends TestCase
         $this->makeCar(['name' => 'delta', 'driver_id' => 20]);
     }
 
-    public function test_where_or_where_and_between(): void
+    public function testWhereOrWhereAndBetween(): void
     {
         $this->seedCars();
 
@@ -35,7 +35,7 @@ class ScopesTest extends TestCase
         Assert::assertSame([10, 15, 20], $between);
     }
 
-    public function test_order_limit_first_and_first_or_fail_variants(): void
+    public function testOrderLimitFirstAndFirstOrFailVariants(): void
     {
         $this->seedCars();
 
@@ -50,7 +50,7 @@ class ScopesTest extends TestCase
         Assert::assertSame('bravo', $firstOrFail->name);
     }
 
-    public function test_find_and_find_or_fail(): void
+    public function testFindAndFindOrFail(): void
     {
         $car = $this->makeCar(['name' => 'f0']);
 
@@ -62,4 +62,3 @@ class ScopesTest extends TestCase
         Assert::assertSame($car->id, $also->id);
     }
 }
-

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Integration\QueryBuilder;
@@ -39,7 +40,7 @@ class WithoutCacheTest extends TestCase
 
         DB::table('cars')->where('id', 2020)->withoutCache()->update(['name' => 'WithoutCacheWrite']);
 
-        $this->assertCacheMissing($key, $tags, "Writes with withoutCache() must still invalidate, or other readers see stale rows");
+        $this->assertCacheMissing($key, $tags, 'Writes with withoutCache() must still invalidate, or other readers see stale rows');
     }
 
     public function testWithoutCacheStillRunsTheInsertInvalidation(): void
@@ -53,7 +54,7 @@ class WithoutCacheTest extends TestCase
         DB::table('cars')->withoutCache()
             ->insert(['id' => 2030, 'name' => 'InsertBypass', 'engine_id' => null, 'driver_id' => null]);
 
-        $this->assertCacheMissing($key, $tags, "Writes with withoutCache() must still invalidate, or other readers see stale rows");
+        $this->assertCacheMissing($key, $tags, 'Writes with withoutCache() must still invalidate, or other readers see stale rows');
     }
 
     public function testWithoutCacheStillRunsTheInsertGetIdInvalidation(): void
@@ -66,7 +67,7 @@ class WithoutCacheTest extends TestCase
         DB::table('cars')->withoutCache()
             ->insertGetId(['name' => 'InsertGetIdBypass', 'engine_id' => null, 'driver_id' => null]);
 
-        $this->assertCacheMissing($key, $tags, "Writes with withoutCache() must still invalidate, or other readers see stale rows");
+        $this->assertCacheMissing($key, $tags, 'Writes with withoutCache() must still invalidate, or other readers see stale rows');
     }
 
     public function testWithoutCacheStillRunsTheInsertOrIgnoreInvalidation(): void
@@ -79,7 +80,7 @@ class WithoutCacheTest extends TestCase
         DB::table('cars')->withoutCache()
             ->insertOrIgnore(['id' => 2040, 'name' => 'InsertOrIgnoreBypass', 'engine_id' => null, 'driver_id' => null]);
 
-        $this->assertCacheMissing($key, $tags, "Writes with withoutCache() must still invalidate, or other readers see stale rows");
+        $this->assertCacheMissing($key, $tags, 'Writes with withoutCache() must still invalidate, or other readers see stale rows');
     }
 
     public function testWithoutCacheStillRunsTheUpsertInvalidation(): void
@@ -93,7 +94,7 @@ class WithoutCacheTest extends TestCase
         DB::table('cars')->withoutCache()
             ->upsert([['id' => 2050, 'name' => 'UpsertBypassNew']], ['id'], ['name']);
 
-        $this->assertCacheMissing($key, $tags, "Writes with withoutCache() must still invalidate, or other readers see stale rows");
+        $this->assertCacheMissing($key, $tags, 'Writes with withoutCache() must still invalidate, or other readers see stale rows');
     }
 
     public function testWithoutCacheStillRunsTheUpdateOrInsertInvalidation(): void
@@ -106,7 +107,7 @@ class WithoutCacheTest extends TestCase
         DB::table('cars')->where('id', 2060)->withoutCache()
             ->updateOrInsert(['id' => 2060], ['name' => 'UpdateOrInsertBypass']);
 
-        $this->assertCacheMissing($key, $tags, "Writes with withoutCache() must still invalidate, or other readers see stale rows");
+        $this->assertCacheMissing($key, $tags, 'Writes with withoutCache() must still invalidate, or other readers see stale rows');
     }
 
     public function testWithoutCacheStillRunsTheDeleteInvalidation(): void
@@ -119,7 +120,7 @@ class WithoutCacheTest extends TestCase
 
         DB::table('cars')->where('id', 2070)->withoutCache()->delete();
 
-        $this->assertCacheMissing($key, $tags, "Writes with withoutCache() must still invalidate, or other readers see stale rows");
+        $this->assertCacheMissing($key, $tags, 'Writes with withoutCache() must still invalidate, or other readers see stale rows');
     }
 
     public function testWithoutCacheStillRunsTheTruncateInvalidation(): void
@@ -132,7 +133,7 @@ class WithoutCacheTest extends TestCase
 
         DB::table('cars')->withoutCache()->truncate();
 
-        $this->assertCacheMissing($key, $tags, "Writes with withoutCache() must still invalidate, or other readers see stale rows");
+        $this->assertCacheMissing($key, $tags, 'Writes with withoutCache() must still invalidate, or other readers see stale rows');
     }
 
     public function testNormalWriteStillInvalidates(): void

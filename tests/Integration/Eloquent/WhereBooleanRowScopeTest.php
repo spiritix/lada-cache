@@ -13,7 +13,7 @@ use Spiritix\LadaCache\Tests\TestCase;
  */
 final class WhereBooleanRowScopeTest extends TestCase
 {
-    public function test_or_where_read_is_refreshed_by_insert_matching_the_or_branch(): void
+    public function testOrWhereReadIsRefreshedByInsertMatchingTheOrBranch(): void
     {
         $anchor = Driver::create(['name' => 'anchor']);
         $count = fn (): int => Driver::query()->where('id', $anchor->id)->orWhere('name', 'probe')->count();
@@ -25,7 +25,7 @@ final class WhereBooleanRowScopeTest extends TestCase
         $this->assertSame(2, $count());
     }
 
-    public function test_upper_case_or_read_is_refreshed_by_insert_matching_the_or_branch(): void
+    public function testUpperCaseOrReadIsRefreshedByInsertMatchingTheOrBranch(): void
     {
         $anchor = Driver::create(['name' => 'anchor']);
         $count = fn (): int => Driver::query()->where('id', $anchor->id)->where('name', '=', 'probe', 'OR')->count();
@@ -37,7 +37,7 @@ final class WhereBooleanRowScopeTest extends TestCase
         $this->assertSame(2, $count());
     }
 
-    public function test_or_where_update_refreshes_rows_matched_by_the_or_branch(): void
+    public function testOrWhereUpdateRefreshesRowsMatchedByTheOrBranch(): void
     {
         $anchor = Driver::create(['name' => 'anchor']);
         $matched = Driver::create(['name' => 'probe']);
@@ -49,7 +49,7 @@ final class WhereBooleanRowScopeTest extends TestCase
         $this->assertSame('renamed', Driver::find($matched->id)?->name);
     }
 
-    public function test_where_not_read_is_refreshed_by_insert(): void
+    public function testWhereNotReadIsRefreshedByInsert(): void
     {
         $anchor = Driver::create(['name' => 'anchor']);
         $count = fn (): int => Driver::query()->whereNot('id', $anchor->id)->where('name', 'probe')->count();

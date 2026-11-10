@@ -21,6 +21,7 @@ class ManagerTest extends TestCase
         foreach ($tables as $t) {
             $builder->join($t, "$first.id", '=', "$t.id");
         }
+
         return new Reflector($builder);
     }
 
@@ -71,7 +72,7 @@ class ManagerTest extends TestCase
         // Temporarily enable to get a Lada query builder, then test Manager with inactive config
         config(['lada-cache.active' => true]);
         $reflector = $this->makeReflectorFromTables(['cars']);
-        
+
         // Now set inactive and test that Manager respects it
         config([
             'lada-cache.active' => false,

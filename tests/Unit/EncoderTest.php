@@ -12,8 +12,8 @@ class EncoderTest extends TestCase
 {
     public function testRowsRoundTrip(): void
     {
-        $encoder = new Encoder();
-        $row = new stdClass();
+        $encoder = new Encoder;
+        $row = new stdClass;
         $row->id = 1;
         $row->name = 'car';
         $row->price = null;
@@ -25,7 +25,7 @@ class EncoderTest extends TestCase
 
     public function testDecodeRejectsPayloadsThatAreNotResults(): void
     {
-        $encoder = new Encoder();
+        $encoder = new Encoder;
 
         $this->assertNull($encoder->decode('not-serialized'));
         $this->assertNull($encoder->decode('"json string"'));
@@ -35,9 +35,9 @@ class EncoderTest extends TestCase
 
     public function testDecodeNeverInstantiatesClassesOtherThanStdClass(): void
     {
-        $payload = serialize([new EncoderGadget()]);
+        $payload = serialize([new EncoderGadget]);
 
-        $rows = (new Encoder())->decode($payload);
+        $rows = (new Encoder)->decode($payload);
 
         $this->assertIsArray($rows);
         $this->assertNotInstanceOf(EncoderGadget::class, $rows[0]);

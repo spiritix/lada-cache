@@ -206,7 +206,7 @@ final class RawStatementInvalidationTest extends TestCase
 
     private function currentGeneration(): string
     {
-        $redis = new Redis();
+        $redis = new Redis;
 
         return (string) $redis->get($redis->prefix('generation'));
     }

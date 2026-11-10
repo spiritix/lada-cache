@@ -14,7 +14,7 @@ class TransactionTest extends TestCase
 {
     use MakesTestModels;
 
-    public function test_transaction_commit(): void
+    public function testTransactionCommit(): void
     {
         DB::transaction(function (): void {
             Car::create(['name' => 'tx-commit']);
@@ -23,7 +23,7 @@ class TransactionTest extends TestCase
         Assert::assertSame(1, Car::where('name', 'tx-commit')->count());
     }
 
-    public function test_transaction_rollback_on_exception(): void
+    public function testTransactionRollbackOnException(): void
     {
         try {
             DB::transaction(function (): void {
@@ -38,4 +38,3 @@ class TransactionTest extends TestCase
         Assert::assertSame(0, Car::where('name', 'tx-rollback')->count());
     }
 }
-

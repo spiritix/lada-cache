@@ -97,7 +97,7 @@ class FlushWithConnectionPrefixTest extends TestCase
     {
         RedisFacade::purge('cache');
 
-        return new Cache(new Redis(), new Encoder(), new ExpirationPolicy(0));
+        return new Cache(new Redis, new Encoder, new ExpirationPolicy(0));
     }
 
     /**

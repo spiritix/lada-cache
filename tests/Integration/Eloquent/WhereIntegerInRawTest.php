@@ -19,7 +19,7 @@ class WhereIntegerInRawTest extends TestCase
 {
     use MakesTestModels;
 
-    public function test_find_many_survives_write_to_unrelated_row(): void
+    public function testFindManySurvivesWriteToUnrelatedRow(): void
     {
         $this->loadDependencyMap();
         $read = $this->makeDriver(['name' => 'read']);
@@ -31,7 +31,7 @@ class WhereIntegerInRawTest extends TestCase
         Assert::assertSame(0, $this->countQueries(fn () => Driver::findMany([$read->id])));
     }
 
-    public function test_find_many_is_invalidated_by_write_to_its_row(): void
+    public function testFindManyIsInvalidatedByWriteToItsRow(): void
     {
         $read = $this->makeDriver(['name' => 'read']);
 
@@ -41,7 +41,7 @@ class WhereIntegerInRawTest extends TestCase
         Assert::assertSame('read renamed', Driver::findMany([$read->id])->first()->name);
     }
 
-    public function test_belongs_to_eager_load_is_scoped_to_loaded_parents(): void
+    public function testBelongsToEagerLoadIsScopedToLoadedParents(): void
     {
         $this->loadDependencyMap();
         $driver = $this->makeDriver(['name' => 'd1']);

@@ -40,7 +40,7 @@ class QueryHandlerTest extends TestCase
 
         config(['lada-cache.prefix' => 'p:']);
 
-        $this->cache = new Cache(new Redis(), new Encoder(), new ExpirationPolicy(0));
+        $this->cache = new Cache(new Redis, new Encoder, new ExpirationPolicy(0));
     }
 
     public function testMissRunsQueryOnceAndHitServesStoredRows(): void
@@ -196,6 +196,6 @@ class QueryHandlerTest extends TestCase
     {
         config(['lada-cache.redis_connection' => 'unreachable']);
 
-        return new QueryHandler(new Cache(new Redis(), new Encoder(), new ExpirationPolicy(0)));
+        return new QueryHandler(new Cache(new Redis, new Encoder, new ExpirationPolicy(0)));
     }
 }

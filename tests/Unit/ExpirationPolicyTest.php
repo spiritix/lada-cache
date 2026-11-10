@@ -61,8 +61,8 @@ final class ExpirationPolicyTest extends TestCase
     public function testStoredEntriesAndVersionsGetJitteredTtls(): void
     {
         config(['lada-cache.prefix' => 'jitter:']);
-        $redis = new Redis();
-        $cache = new Cache($redis, new Encoder(), new ExpirationPolicy(10_000, 50));
+        $redis = new Redis;
+        $cache = new Cache($redis, new Encoder, new ExpirationPolicy(10_000, 50));
         $ttls = [];
 
         for ($entry = 0; $entry < 20; $entry++) {

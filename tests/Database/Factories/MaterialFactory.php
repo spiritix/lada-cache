@@ -9,11 +9,11 @@ use Spiritix\LadaCache\Tests\Database\Models\Material;
 
 class MaterialFactory extends Factory
 {
-    /** @var class-string<\Spiritix\LadaCache\Tests\Database\Models\Material> */
+    /** @var class-string<Material> */
     protected $model = Material::class;
 
     /**
-     * @inheritDoc
+     * {@inheritDoc}
      */
     public function definition(): array
     {

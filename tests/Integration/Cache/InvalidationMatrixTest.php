@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Integration\Cache;
@@ -104,7 +105,7 @@ class InvalidationMatrixTest extends TestCase
 
         // Mutate: upsert should update existing row
         DB::table('cars')->upsert([
-            ['id' => 1006, 'name' => 'U2']
+            ['id' => 1006, 'name' => 'U2'],
         ], ['id'], ['name']);
 
         $second = DB::table('cars')->where('id', 1006)->value('name');

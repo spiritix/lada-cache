@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Tests\Unit\Support;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Tests\TestCase;
 use Spiritix\LadaCache\Support\TableExtractor;
+use Spiritix\LadaCache\Tests\TestCase;
 
 class TableExtractorTest extends TestCase
 {

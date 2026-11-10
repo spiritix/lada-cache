@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Tests\Integration\Application;
 
 use Illuminate\Support\Facades\DB;
+use Spiritix\LadaCache\Tests\Database\Models\Application\AssistantPrompt;
 use Spiritix\LadaCache\Tests\Database\Models\Application\Automation;
 use Spiritix\LadaCache\Tests\Database\Models\Application\FeatureMetric;
 use Spiritix\LadaCache\Tests\Database\Models\Application\Workspace;
@@ -25,7 +26,7 @@ final class RawAndWriteShapesTest extends ApplicationShapeTestCase
     public function testOrderByRawBooleanExpressionIsRefreshed(): void
     {
         $this->assertCachedThenRefreshed(
-            fn (): array => \Spiritix\LadaCache\Tests\Database\Models\Application\AssistantPrompt::query()->orderByRaw('prompts.id > 1')->pluck('prompts.body')->all(),
+            fn (): array => AssistantPrompt::query()->orderByRaw('prompts.id > 1')->pluck('prompts.body')->all(),
             fn () => DB::table('prompts')->where('id', 1)->update(['body' => 'hi']),
         );
     }
