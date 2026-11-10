@@ -39,12 +39,6 @@
         </include>
     </source>
 
-    <coverage>
-        <report>
-            <clover outputFile="coverage.xml"/>
-        </report>
-    </coverage>
-
     <php>
         <env name="APP_ENV" value="testing"/>
         <env name="CACHE_DRIVER" value="redis"/>

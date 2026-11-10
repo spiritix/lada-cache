@@ -13,7 +13,6 @@ composer.phar
 /build/
 /result
 /result-*
-coverage.xml
 
 # PHPUnit cache
 .phpunit.result.cache
