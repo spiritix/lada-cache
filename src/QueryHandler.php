@@ -21,7 +21,7 @@ use Spiritix\LadaCache\Support\PendingInvalidations;
 use Spiritix\LadaCache\Support\RawStatementEffect;
 use Spiritix\LadaCache\Support\RedisCooldown;
 use Spiritix\LadaCache\Support\ReplicaReads;
-use Spiritix\LadaCache\Support\WriteKind;
+use Spiritix\LadaCache\Support\Write;
 use Throwable;
 
 /**
@@ -58,9 +58,10 @@ final class QueryHandler
 
     /**
      * @param  string  $statementType  One of Reflector::QUERY_TYPE_*
+     * @param  Write  $write  What the statement did to the rows, deciding what the database changed along with them
      * @param  array<string, mixed>  $values  Values used by the grammar to compile the SQL (e.g., update sets)
      */
-    public function invalidateQuery(QueryBuilder $builder, string $statementType, array $values = [], AssignedRows $assignedRows = new AssignedRows): void
+    public function invalidateQuery(QueryBuilder $builder, string $statementType, Write $write, array $values = [], AssignedRows $assignedRows = new AssignedRows): void
     {
         $collector = $this->startCollector();
         $connection = $builder->getConnection();
@@ -77,7 +78,7 @@ final class QueryHandler
             $invalidation = Invalidation::ofWrite($tags, $tagger->tableWideTags(), ReplicaReads::lagSeconds($connection))->withChangesOf(
                 $reflector->getDatabase(),
                 (string) $connection->getName(),
-                $reflector->getType() === Reflector::QUERY_TYPE_INSERT ? WriteKind::Insert : WriteKind::Modify,
+                $write,
                 $reflector->getTables(),
             );
         } catch (Throwable $exception) {
@@ -117,7 +118,7 @@ final class QueryHandler
                 return;
             }
 
-            $this->invalidateQuery($builder, Reflector::QUERY_TYPE_TRUNCATE);
+            $this->invalidateQuery($builder, Reflector::QUERY_TYPE_TRUNCATE, Write::unknown());
         }
     }
 

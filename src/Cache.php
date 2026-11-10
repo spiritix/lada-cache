@@ -145,7 +145,7 @@ final class Cache
     }
 
     /**
-     * @param  array<string, list<string>>  $dependents  `WriteKind::dependentsField()` => tables changed along with it
+     * @param  array<string, list<string>>  $dependents  `Write` dependents field => tables changed along with it
      * @return bool Whether they were stored, false when the generation was retired meanwhile
      */
     public function storeDependents(Generation $generation, string $database, array $dependents, RedisCooldown $cooldown = RedisCooldown::Respect): bool
@@ -165,12 +165,12 @@ final class Cache
     }
 
     /**
-     * Hosts with different `dependent_tables`, such as old and new pods during a deploy, keep
-     * separate dependency maps instead of one host's configuration applying to all.
+     * Hosts with different `dependent_tables` or field layouts, such as old and new pods during a
+     * deploy, keep separate dependency maps instead of one host's map applying to all.
      */
     private static function dependentsName(string $database): string
     {
-        return $database.':'.substr(sha1((string) json_encode(DependentTables::configured())), 0, 12);
+        return $database.':'.substr(sha1((string) json_encode([DependentTables::LAYOUT, DependentTables::configured()])), 0, 12);
     }
 
     /**

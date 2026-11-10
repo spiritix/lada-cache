@@ -6,7 +6,7 @@ namespace Spiritix\LadaCache\Tests\Unit\Support;
 
 use PHPUnit\Framework\TestCase;
 use Spiritix\LadaCache\Support\Invalidation;
-use Spiritix\LadaCache\Support\WriteKind;
+use Spiritix\LadaCache\Support\Write;
 
 final class InvalidationTest extends TestCase
 {
@@ -23,13 +23,13 @@ final class InvalidationTest extends TestCase
 
     public function testCollapsingKeepsCascadesAndReplicaLag(): void
     {
-        $merged = Invalidation::ofWrite(['seed'], ['cars:wide'], 7)->withChangesOf('db', 'default', WriteKind::Modify, ['cars']);
+        $merged = Invalidation::ofWrite(['seed'], ['cars:wide'], 7)->withChangesOf('db', 'default', Write::delete(), ['cars']);
         foreach (range(1, Invalidation::MAX_TAGS + 1) as $id) {
             $merged = $merged->merge(Invalidation::ofWrite(["cars:row:{$id}"], ['cars:wide'], 0));
         }
 
         $this->assertSame(['cars:wide'], $merged->tags());
-        $this->assertSame(['db' => ['m:cars']], $merged->cascadeSources());
+        $this->assertSame(['db' => ['d:cars']], $merged->cascadeSources());
         $this->assertSame(7, $merged->replicaLagSeconds);
     }
 

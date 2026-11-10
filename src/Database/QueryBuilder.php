@@ -12,10 +12,12 @@ use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Query\Grammars\Grammar;
 use Illuminate\Database\Query\Processors\Processor;
 use Illuminate\Support\Collection;
+use InvalidArgumentException;
 use Spiritix\LadaCache\QueryHandler;
 use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Support\AssignedRows;
 use Spiritix\LadaCache\Support\SqlAliasParser;
+use Spiritix\LadaCache\Support\Write;
 
 /**
  * LadaCache Query Builder for Laravel 12+
@@ -136,7 +138,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function insert(array $values)
     {
         $result = $this->runStatement(fn () => parent::insert($values));
-        $this->invalidate(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy($values));
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, Write::insert(), $values, $this->rowsAssignedBy($values));
 
         return $result;
     }
@@ -145,7 +147,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function insertUsing(array $columns, $query)
     {
         $result = $this->runStatement(fn () => $this->withoutTrackingCompiledSubQueries(fn () => parent::insertUsing($columns, $query)));
-        $this->invalidate(Reflector::QUERY_TYPE_INSERT, [], AssignedRows::unknown());
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, Write::insert(), [], AssignedRows::unknown());
 
         return $result;
     }
@@ -154,7 +156,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function insertOrIgnoreUsing(array $columns, $query)
     {
         $result = $this->runStatement(fn () => $this->withoutTrackingCompiledSubQueries(fn () => parent::insertOrIgnoreUsing($columns, $query)));
-        $this->invalidate(Reflector::QUERY_TYPE_INSERT, [], AssignedRows::unknown());
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, Write::insert(), [], AssignedRows::unknown());
 
         return $result;
     }
@@ -163,7 +165,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function updateFrom(array $values)
     {
         $result = $this->runStatement(fn () => parent::updateFrom($values));
-        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, $values, $this->rowsReassignedBy($values));
+        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, Write::update(array_keys($values))->affecting($result), $values, $this->rowsReassignedBy($values));
 
         return $result;
     }
@@ -173,7 +175,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     {
         $id = $this->runStatement(fn () => parent::insertGetId($values, $sequence));
         $primaryKey = $this->primaryKeyOfTarget();
-        $this->invalidate(Reflector::QUERY_TYPE_INSERT, $values, $primaryKey === null ? AssignedRows::unknown() : $this->rowsAssignedBy([$primaryKey => $id]));
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, Write::insert(), $values, $primaryKey === null ? AssignedRows::unknown() : $this->rowsAssignedBy([$primaryKey => $id]));
 
         return $id;
     }
@@ -182,16 +184,20 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function update(array $values)
     {
         $count = $this->runStatement(fn () => parent::update($values));
-        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, $values, $this->rowsReassignedBy($values));
+        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, Write::update(array_keys($values))->affecting($count), $values, $this->rowsReassignedBy($values));
 
         return $count;
     }
 
-    /** {@inheritDoc} */
-    public function upsert(array $values, $uniqueBy, $update = null)
+    /**
+     * {@inheritDoc}
+     *
+     * @param  array<int|string, mixed>|null  $update
+     */
+    public function upsert(array $values, array|string $uniqueBy, ?array $update = null)
     {
         $result = $this->runStatement(fn () => parent::upsert($values, $uniqueBy, $update));
-        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, $values);
+        $this->invalidate(Reflector::QUERY_TYPE_UPDATE, Write::update(self::upsertedColumns($values, $update))->affecting($result), $values);
 
         return $result;
     }
@@ -200,7 +206,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function insertOrIgnore(array $values)
     {
         $result = $this->runStatement(fn () => parent::insertOrIgnore($values));
-        $this->invalidate(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy($values));
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, Write::insert(), $values, $this->rowsAssignedBy($values));
 
         return $result;
     }
@@ -213,7 +219,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function insertOrIgnoreReturning(array $values, array $returning = ['*'], array|string|null $uniqueBy = null)
     {
         $result = $this->runStatement(fn () => parent::insertOrIgnoreReturning($values, $returning, $uniqueBy));
-        $this->invalidate(Reflector::QUERY_TYPE_INSERT, $values, $this->rowsAssignedBy($values));
+        $this->invalidate(Reflector::QUERY_TYPE_INSERT, Write::insert(), $values, $this->rowsAssignedBy($values));
 
         return $result;
     }
@@ -222,7 +228,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function delete($id = null)
     {
         $count = $this->runStatement(fn () => parent::delete($id));
-        $this->invalidate(Reflector::QUERY_TYPE_DELETE);
+        $this->invalidate(Reflector::QUERY_TYPE_DELETE, Write::delete()->affecting($count));
 
         return $count;
     }
@@ -231,7 +237,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function truncate()
     {
         $this->runStatement(fn () => parent::truncate());
-        $this->invalidate(Reflector::QUERY_TYPE_TRUNCATE);
+        $this->invalidate(Reflector::QUERY_TYPE_TRUNCATE, Write::unknown());
     }
 
     /**
@@ -247,9 +253,32 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
             : $statement();
     }
 
-    private function invalidate(string $queryType, array $values = [], AssignedRows $assignedRows = new AssignedRows): void
+    private function invalidate(string $queryType, Write $write, array $values = [], AssignedRows $assignedRows = new AssignedRows): void
     {
-        $this->handler->invalidateQuery($this, $queryType, $values, $assignedRows);
+        $this->handler->invalidateQuery($this, $queryType, $write, $values, $assignedRows);
+    }
+
+    /**
+     * The columns an upsert assigns to existing rows, resolved as `Builder::upsert()` does.
+     *
+     * @param  array<int|string, mixed>  $values
+     * @param  array<int|string, mixed>|null  $update
+     * @return list<int|string>
+     */
+    private static function upsertedColumns(array $values, ?array $update): array
+    {
+        if ($update === null) {
+            $first = reset($values);
+
+            return array_keys(is_array($first) ? $first : $values);
+        }
+
+        $columns = [];
+        foreach ($update as $key => $value) {
+            $columns[] = is_int($key) ? (is_string($value) ? $value : throw new InvalidArgumentException('Upsert update columns must be names, got '.get_debug_type($value))) : $key;
+        }
+
+        return $columns;
     }
 
     /**

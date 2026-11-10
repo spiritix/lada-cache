@@ -9,7 +9,7 @@ use PDO;
 use PHPUnit\Framework\TestCase;
 use Spiritix\LadaCache\Support\Invalidation;
 use Spiritix\LadaCache\Support\PendingInvalidations;
-use Spiritix\LadaCache\Support\WriteKind;
+use Spiritix\LadaCache\Support\Write;
 
 final class PendingInvalidationsTest extends TestCase
 {
@@ -20,13 +20,13 @@ final class PendingInvalidationsTest extends TestCase
         $reconnected = new SQLiteConnection(new PDO('sqlite::memory:'), ':memory:', '', ['name' => 'sqlite']);
 
         $pending->add($purged, Invalidation::of(['a', 'b']));
-        $pending->add($purged, Invalidation::of(['a'])->withChangesOf('db', 'sqlite', WriteKind::Modify, ['cars']));
+        $pending->add($purged, Invalidation::of(['a'])->withChangesOf('db', 'sqlite', Write::delete(), ['cars']));
         $pending->add($purged, Invalidation::everything());
 
         $this->assertTrue($pending->take($reconnected)->isEmpty());
         $taken = $pending->take($purged);
         $this->assertSame(['a', 'b'], $taken->tags());
-        $this->assertSame(['db' => ['m:cars']], $taken->cascadeSources());
+        $this->assertSame(['db' => ['d:cars']], $taken->cascadeSources());
         $this->assertTrue($taken->retiresEverything);
         $this->assertTrue($pending->take($purged)->isEmpty());
     }

@@ -22,7 +22,7 @@ final readonly class Invalidation
     /**
      * @param  array<string, true>  $tags
      * @param  array<string, true>|null  $coverage  table-wide tags invalidating everything $tags does; null when unknown
-     * @param  array<string, array<string, true>>  $cascadeSources  database => `WriteKind::dependentsField()` of each written table
+     * @param  array<string, array<string, true>>  $cascadeSources  database => `Write::dependentsFields()` of each written table
      * @param  array<string, string>  $connections  database => name of a connection to it
      */
     private function __construct(
@@ -67,13 +67,16 @@ final readonly class Invalidation
      *
      * @param  array<string>  $tables
      */
-    public function withChangesOf(string $database, string $connection, WriteKind $kind, array $tables): self
+    public function withChangesOf(string $database, string $connection, Write $write, array $tables): self
     {
         if ($tables === []) {
             return $this;
         }
 
-        $fields = array_fill_keys(array_map($kind->dependentsField(...), $tables), true);
+        $fields = [];
+        foreach ($tables as $table) {
+            $fields += array_fill_keys($write->dependentsFields($table), true);
+        }
 
         return $this->merge(new self([], [], [$database => $fields], [$database => $connection], false, 0));
     }

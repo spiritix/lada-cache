@@ -11,7 +11,7 @@
 - Added `withoutCache()` to read a query from the database without caching it (see https://github.com/spiritix/lada-cache/pull/151); writes invalidate regardless, since skipping their invalidation left other readers with stale rows
 - Added `lada-cache.scope` (`LADA_CACHE_SCOPE`): `models` caches only reads from models using `LadaCacheTrait`, while writes from any builder still invalidate
 - Added `lada-cache.expiration_jitter` (`LADA_CACHE_EXPIRATION_JITTER`, default 15): spreads each expiration by up to that percentage so entries cached together do not expire together (based on https://github.com/spiritix/lada-cache/pull/154)
-- Writes invalidate the tables the database changes through foreign keys with cascading or nulling actions, read from the schema once per cache generation; `lada-cache.dependent_tables` adds undeclared dependencies such as triggers
+- Writes invalidate the tables the database changes through foreign keys with cascading or nulling actions, read from the schema once per cache generation: deletes follow delete rules, updates follow update rules only when they assign a referenced column, a nulled child stops a delete from reaching the tables below it, and writes affecting no rows fire no foreign key; `lada-cache.dependent_tables` adds undeclared dependencies such as triggers
 - Writes invalidate cached reads of views over the written tables, read from the schema like foreign keys
 - Writes invalidate tables their triggers write, found by scanning trigger bodies, and writes through updatable views invalidate their base tables
 - Added `lada-cache.replica_lag` (`LADA_CACHE_REPLICA_LAG`, default 2): on connections with read replicas, replica reads of recently written tables are not cached

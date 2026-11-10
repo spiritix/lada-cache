@@ -34,6 +34,12 @@ return new class extends Migration
             $table->string('body');
         });
 
+        Schema::create('owner_note_tags', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('owner_note_id')->constrained('owner_notes')->cascadeOnDelete();
+            $table->string('name');
+        });
+
         Schema::create('owner_audits', function (Blueprint $table) {
             $table->id();
             $table->foreignId('owner_id')->constrained('owners')->restrictOnDelete();
@@ -44,6 +50,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('owner_audits');
+        Schema::dropIfExists('owner_note_tags');
         Schema::dropIfExists('owner_notes');
         Schema::dropIfExists('pet_toys');
         Schema::dropIfExists('pets');

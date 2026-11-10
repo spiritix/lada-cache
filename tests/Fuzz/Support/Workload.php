@@ -119,6 +119,7 @@ final class Workload
             DB::table('car_material')->insert(['car_id' => $this->random->getInt(1, 5), 'material_id' => $id]);
             DB::table('pet_toys')->insert(['id' => $id, 'pet_id' => $this->random->getInt(1, 5), 'name' => $this->name()]);
             DB::table('owner_notes')->insert(['id' => $id, 'owner_id' => $this->random->getInt(1, 4), 'body' => $this->name()]);
+            DB::table('owner_note_tags')->insert(['id' => $id, 'owner_note_id' => $id, 'name' => $this->name()]);
         }
         DB::table('owner_audits')->insert(['id' => 1, 'owner_id' => 4, 'event' => 'signup']);
         foreach (array_slice(self::LICENSE_CODES, 0, 4) as $code) {
@@ -126,7 +127,7 @@ final class Workload
         }
 
         if ($this->driver === 'pgsql') {
-            foreach (['owners', 'drivers', 'pets', 'cars', 'pet_toys', 'owner_notes', 'owner_audits', 'materials'] as $table) {
+            foreach (['owners', 'drivers', 'pets', 'cars', 'pet_toys', 'owner_notes', 'owner_note_tags', 'owner_audits', 'materials'] as $table) {
                 DB::statement("select setval(pg_get_serial_sequence('{$this->table($table)}', 'id'), 100)");
             }
         }
@@ -343,6 +344,7 @@ final class Workload
             'licenses by codes' => fn (int $id) => static fn (bool $cached): array => ($cached ? License::query() : License::query()->withoutCache())->whereKey([self::licenseCode($id), self::licenseCode($id + 1)])->orderBy('code')->get()->toArray(),
             'toy by id' => fn (int $id) => $rows(fn () => DB::table('pet_toys')->where('id', $id)),
             'note by id' => fn (int $id) => $rows(fn () => DB::table('owner_notes')->where('id', $id)),
+            'tags of note' => fn (int $id) => $rows(fn () => DB::table('owner_note_tags')->where('owner_note_id', $id)->orderBy('id')),
             'pets in ids' => fn (int $id) => $rows(fn () => DB::table('pets')->whereIn('id', [$id, $id + 1])->orderBy('id')),
             'pets above id' => fn (int $id) => $rows(fn () => DB::table('pets')->where('id', '>', $id)->orderBy('id')),
             'pets by name count' => fn (int $id, string $name) => $scalar(fn () => DB::table('pets')->where('name', $name), static fn (Builder $query): int => $query->count()),
@@ -408,6 +410,7 @@ final class Workload
             'delete owner' => fn () => DB::table('owners')->where('id', $this->id())->delete(),
             'delete pets range' => fn () => DB::table('pets')->whereBetween('id', [$this->id(), $this->id() + 1])->delete(),
             'delete note' => fn () => DB::table('owner_notes')->where('id', $this->id())->delete(),
+            'tag note' => fn () => DB::table('owner_note_tags')->insert(['owner_note_id' => $this->existingId('owner_notes'), 'name' => $this->name()]),
             'rename toy' => fn () => DB::table('pet_toys')->where('id', $this->id())->update(['name' => $this->name()]),
             'raw update pet' => fn () => DB::update("update {$this->table('pets')} set name = ? where id = ?", [$this->name(), $this->id()]),
             'raw insert note' => fn () => DB::insert("insert into {$this->table('owner_notes')} (owner_id, body) values (?, ?)", [$this->existingId('owners'), $this->name()]),

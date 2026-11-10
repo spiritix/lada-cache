@@ -16,7 +16,7 @@ namespace Spiritix\LadaCache;
  * - `<base><generation>:e:<hash>`       entry: 40 character fingerprint followed by the payload
  * - `<base><generation>:v:<tag>`        current version token of a tag
  * - `<base><generation>:w:<tag>`        present while reads of the tag may come from a lagging replica
- * - `<base><generation>:d:<name>`       hash of WriteKind field => newline separated tables changed along with it,
+ * - `<base><generation>:d:<name>`       hash of `Write` dependents field => newline separated tables changed along with it,
  *                                       named by database and dependency configuration
  * - `<base>legacy:<tag>`                with legacy invalidation, a token listed in the 5.x tag set `<base><tag>`,
  *                                       so a 5.x host invalidating the tag deletes it
@@ -138,7 +138,7 @@ final class LuaScripts
 
     /**
      * ARGV: base, fresh token, ttl seconds, replica lag seconds, tag count, tags...,
-     *       group count, then per group: dependents name, prefix count, prefixes..., field count, dependents fields (see WriteKind)...
+     *       group count, then per group: dependents name, prefix count, prefixes..., field count, dependents fields (see `Write`)...
      * Replaces the tokens of the tags, and of every table-wide tag of the tables the database
      * changes along with each group's tables. Returns {0} when nothing was ever cached, else
      * {generation, 1-based indexes of the groups whose dependents are not known yet...}.
@@ -207,7 +207,7 @@ final class LuaScripts
         LUA;
 
     /**
-     * ARGV: base, generation, dependents name, ttl seconds, then pairs of WriteKind field and newline separated dependents
+     * ARGV: base, generation, dependents name, ttl seconds, then pairs of `Write` dependents field and newline separated dependents
      * Returns 1 when stored and 0 when the generation was retired meanwhile.
      */
     public const string STORE_DEPENDENTS = <<<'LUA'

@@ -7,37 +7,37 @@ namespace Spiritix\LadaCache\Support;
 use Illuminate\Database\Connection;
 use InvalidArgumentException;
 use RuntimeException;
+use UnexpectedValueException;
 
 /**
  * Tables the database changes along with a written table, so their cached reads are
  * invalidated too: views over the table, tables its triggers write and
- * `lada-cache.dependent_tables` change with every write, while foreign keys with cascading or
- * nulling actions only fire on updates and deletes. Writing an updatable view writes its base
- * tables. A changed table changes its own dependents in turn.
+ * `lada-cache.dependent_tables` change with every write, while foreign keys fire their delete
+ * rules on deletes and their update rules on updates that assign a referenced column. Writing an
+ * updatable view writes its base tables. A changed table changes its own dependents in turn:
+ * a cascading delete deletes the child rows, while a cascading or nulling update, and a nulling
+ * delete, only assign the child's foreign key columns. Tables reached through views, triggers
+ * or configuration are written in ways not known, so all of their dependents change.
+ *
+ * @phpstan-type ForeignKey array{child: string, parentColumns: list<string>, childColumns: list<string>, onDelete: ReferentialAction, onUpdate: ReferentialAction}
+ * @phpstan-type Change array{0: 'any'|'delete'|'update', 1: string, 2?: string}
  */
 final class DependentTables
 {
-    private const array CHANGING_ACTIONS = ['cascade', 'set null', 'set_null', 'set default', 'set_default', 'c', 'n', 'd'];
+    /**
+     * Part of the name of the dependency map in Redis, so hosts reading another field layout
+     * keep their own map.
+     */
+    public const int LAYOUT = 2;
 
     /**
-     * @return array<string, list<string>> `WriteKind::dependentsField()` => tables changed along with it
+     * @return array<string, list<string>> `Write` dependents field => tables changed along with it
      */
     public static function load(Connection $connection): array
     {
         $prefix = $connection->getTablePrefix();
         $everyWrite = self::configured();
-        $modifications = [];
         $viewBases = [];
-
-        foreach ($connection->select(self::foreignKeyQuery($connection), [], false) as $foreignKey) {
-            $foreignKey = (array) $foreignKey;
-
-            if (! self::changesDependents((string) $foreignKey['delete_rule']) && ! self::changesDependents((string) $foreignKey['update_rule'])) {
-                continue;
-            }
-
-            $modifications[TableName::withoutPrefix((string) $foreignKey['parent_table'], $prefix)][TableName::withoutPrefix((string) $foreignKey['child_table'], $prefix)] = true;
-        }
 
         foreach (self::viewDependencies($connection) as [$table, $view]) {
             $table = TableName::withoutPrefix($table, $prefix);
@@ -52,7 +52,7 @@ final class DependentTables
             }
         }
 
-        return self::closure($everyWrite, $modifications, $viewBases);
+        return self::fields($everyWrite, $viewBases, self::foreignKeys($connection, $prefix));
     }
 
     /**
@@ -80,19 +80,92 @@ final class DependentTables
         return $direct;
     }
 
+    /**
+     * @return array<string, list<ForeignKey>> parent table => foreign keys referencing it
+     */
+    private static function foreignKeys(Connection $connection, string $prefix): array
+    {
+        $constraints = [];
+
+        foreach ($connection->select(self::foreignKeyQuery($connection), [], false) as $row) {
+            $row = (array) $row;
+            $child = TableName::withoutPrefix(self::text($row, 'child_table'), $prefix);
+            $parent = TableName::withoutPrefix(self::text($row, 'parent_table'), $prefix);
+            $childColumn = self::text($row, 'child_column');
+
+            if ($row['parent_column'] === null) {
+                throw new RuntimeException("Lada Cache cannot tell which column of {$parent} the foreign key of {$child} on {$childColumn} references");
+            }
+
+            $id = $child."\0".self::text($row, 'constraint_id');
+            $constraints[$id] ??= [
+                'parent' => $parent,
+                'child' => $child,
+                'parentColumns' => [],
+                'childColumns' => [],
+                'onDelete' => ReferentialAction::parse(self::text($row, 'delete_rule')),
+                'onUpdate' => ReferentialAction::parse(self::text($row, 'update_rule')),
+            ];
+            $constraints[$id]['parentColumns'][] = strtolower(self::text($row, 'parent_column'));
+            $constraints[$id]['childColumns'][] = strtolower($childColumn);
+        }
+
+        ksort($constraints, SORT_STRING);
+
+        $byParent = [];
+        foreach ($constraints as $constraint) {
+            $parent = $constraint['parent'];
+            unset($constraint['parent']);
+            $byParent[$parent][] = $constraint;
+        }
+
+        return $byParent;
+    }
+
+    /**
+     * @param  array<mixed>  $row
+     */
+    private static function text(array $row, string $column): string
+    {
+        $value = $row[$column] ?? null;
+
+        if (! is_string($value) && ! is_int($value)) {
+            throw new UnexpectedValueException("Lada Cache read {$column} of a foreign key as ".get_debug_type($value).', expected text');
+        }
+
+        return (string) $value;
+    }
+
+    /**
+     * One row per referencing column, with an id shared by the columns of one constraint.
+     */
     private static function foreignKeyQuery(Connection $connection): string
     {
         return match ($connection->getDriverName()) {
-            'mysql', 'mariadb' => 'select table_name as child_table, referenced_table_name as parent_table, delete_rule as delete_rule, update_rule as update_rule'
-                .' from information_schema.referential_constraints where constraint_schema = database()',
-            'pgsql' => 'select child.relname as child_table, parent.relname as parent_table, c.confdeltype as delete_rule, c.confupdtype as update_rule'
+            'mysql', 'mariadb' => 'select r.constraint_name as constraint_id, k.table_name as child_table, k.referenced_table_name as parent_table,'
+                .' k.column_name as child_column, k.referenced_column_name as parent_column, r.delete_rule as delete_rule, r.update_rule as update_rule'
+                .' from information_schema.referential_constraints r join information_schema.key_column_usage k'
+                .' on k.constraint_schema = r.constraint_schema and k.constraint_name = r.constraint_name and k.table_name = r.table_name'
+                .' where r.constraint_schema = database() order by k.ordinal_position',
+            'pgsql' => 'select c.oid as constraint_id, child.relname as child_table, parent.relname as parent_table,'
+                .' child_column.attname as child_column, parent_column.attname as parent_column, c.confdeltype as delete_rule, c.confupdtype as update_rule'
                 .' from pg_constraint c join pg_class child on child.oid = c.conrelid join pg_class parent on parent.oid = c.confrelid'
                 .' join pg_namespace n on n.oid = child.relnamespace'
-                ." where c.contype = 'f' and n.nspname = any(current_schemas(false))",
-            'sqlite' => 'select m.name as child_table, p."table" as parent_table, p.on_delete as delete_rule, p.on_update as update_rule'
-                ." from sqlite_master m join pragma_foreign_key_list(m.name) p where m.type = 'table'",
-            'sqlsrv' => 'select object_name(parent_object_id) as child_table, object_name(referenced_object_id) as parent_table,'
-                .' delete_referential_action_desc as delete_rule, update_referential_action_desc as update_rule from sys.foreign_keys',
+                .' cross join lateral unnest(c.conkey, c.confkey) with ordinality as k(child_attnum, parent_attnum, position)'
+                .' join pg_attribute child_column on child_column.attrelid = c.conrelid and child_column.attnum = k.child_attnum'
+                .' join pg_attribute parent_column on parent_column.attrelid = c.confrelid and parent_column.attnum = k.parent_attnum'
+                ." where c.contype = 'f' and n.nspname = any(current_schemas(false)) order by k.position",
+            'sqlite' => 'select p.id as constraint_id, m.name as child_table, p."table" as parent_table, p."from" as child_column,'
+                .' coalesce(p."to", (select t.name from pragma_table_info(p."table") t where t.pk = p.seq + 1)) as parent_column,'
+                .' p.on_delete as delete_rule, p.on_update as update_rule'
+                ." from sqlite_master m join pragma_foreign_key_list(m.name) p where m.type = 'table' order by p.seq",
+            'sqlsrv' => 'select fk.object_id as constraint_id, object_name(fk.parent_object_id) as child_table, object_name(fk.referenced_object_id) as parent_table,'
+                .' child_column.name as child_column, parent_column.name as parent_column,'
+                .' fk.delete_referential_action_desc as delete_rule, fk.update_referential_action_desc as update_rule'
+                .' from sys.foreign_keys fk join sys.foreign_key_columns fkc on fkc.constraint_object_id = fk.object_id'
+                .' join sys.columns child_column on child_column.object_id = fkc.parent_object_id and child_column.column_id = fkc.parent_column_id'
+                .' join sys.columns parent_column on parent_column.object_id = fkc.referenced_object_id and parent_column.column_id = fkc.referenced_column_id'
+                .' order by fkc.constraint_column_id',
             default => throw new RuntimeException('Lada Cache cannot read foreign keys of driver '.$connection->getDriverName()),
         };
     }
@@ -161,34 +234,44 @@ final class DependentTables
         return $pairs;
     }
 
-    private static function changesDependents(string $action): bool
-    {
-        return in_array(strtolower(trim($action)), self::CHANGING_ACTIONS, true);
-    }
-
     /**
      * @param  array<string, array<string, true>>  $everyWrite  table => tables every write to it changes
-     * @param  array<string, array<string, true>>  $modifications  table => tables its updates and deletes change
      * @param  array<string, array<string, true>>  $viewBases  view => base tables a write through it changes
+     * @param  array<string, list<ForeignKey>>  $foreignKeys  parent table => foreign keys referencing it
      * @return array<string, list<string>>
      */
-    private static function closure(array $everyWrite, array $modifications, array $viewBases): array
+    private static function fields(array $everyWrite, array $viewBases, array $foreignKeys): array
     {
         $fields = [];
 
-        foreach (array_keys($everyWrite + $modifications + $viewBases) as $table) {
+        foreach (array_keys($everyWrite + $viewBases + $foreignKeys) as $table) {
             $table = (string) $table;
-            $everyWriteChanges = ($everyWrite[$table] ?? []) + ($viewBases[$table] ?? []);
-            $direct = [
-                WriteKind::Insert->value => $everyWriteChanges,
-                WriteKind::Modify->value => $everyWriteChanges + ($modifications[$table] ?? []),
-            ];
+            $everyWriteChanges = array_map(
+                static fn (int|string $dependent): array => ['any', (string) $dependent],
+                array_keys(($everyWrite[$table] ?? []) + ($viewBases[$table] ?? [])),
+            );
+            $keys = $foreignKeys[$table] ?? [];
+            $updatedColumns = [];
+            foreach ($keys as $foreignKey) {
+                if ($foreignKey['onUpdate'] !== ReferentialAction::KeepsRows) {
+                    $updatedColumns += array_fill_keys($foreignKey['parentColumns'], true);
+                }
+            }
 
-            foreach (WriteKind::cases() as $kind) {
-                $changed = self::reachableFrom(array_keys($direct[$kind->value]), $everyWrite, $modifications);
+            $starts = [
+                Write::everyWriteField($table) => $everyWriteChanges,
+                Write::deleteField($table) => [...$everyWriteChanges, ...self::changesOfDelete($keys)],
+                Write::anyUpdateField($table) => [...$everyWriteChanges, ...self::changesOfUpdate($keys, null)],
+            ];
+            foreach (array_keys($updatedColumns) as $column) {
+                $starts[Write::columnUpdateField($table, (string) $column)] = [...$everyWriteChanges, ...self::changesOfUpdate($keys, (string) $column)];
+            }
+
+            foreach ($starts as $field => $changes) {
+                $changed = self::reachableFrom($changes, $everyWrite, $foreignKeys);
 
                 if ($changed !== []) {
-                    $fields[$kind->dependentsField($table)] = $changed;
+                    $fields[$field] = $changed;
                 }
             }
         }
@@ -199,33 +282,92 @@ final class DependentTables
     }
 
     /**
-     * Tables changed when the start tables change: a changed table is modified, so both its
-     * every-write and its modification dependents change as well.
+     * Tables changed when the start changes are made, following each change to what it fires.
      *
-     * @param  list<int|string>  $start
+     * @param  list<Change>  $start
      * @param  array<string, array<string, true>>  $everyWrite
-     * @param  array<string, array<string, true>>  $modifications
+     * @param  array<string, list<ForeignKey>>  $foreignKeys
      * @return list<string>
      */
-    private static function reachableFrom(array $start, array $everyWrite, array $modifications): array
+    private static function reachableFrom(array $start, array $everyWrite, array $foreignKeys): array
     {
-        $reached = [];
-        $queue = array_map('strval', $start);
+        $tables = [];
+        $seen = [];
+        $queue = $start;
 
         while ($queue !== []) {
-            $table = array_shift($queue);
+            $change = array_shift($queue);
+            $id = implode("\0", $change);
 
-            if (isset($reached[$table])) {
+            if (isset($seen[$id])) {
                 continue;
             }
 
-            $reached[$table] = true;
-            array_push($queue, ...array_map('strval', array_keys(($everyWrite[$table] ?? []) + ($modifications[$table] ?? []))));
+            $seen[$id] = true;
+            [$kind, $table] = $change;
+            $tables[$table] = true;
+            $keys = $foreignKeys[$table] ?? [];
+
+            foreach (array_keys($everyWrite[$table] ?? []) as $dependent) {
+                $queue[] = ['any', (string) $dependent];
+            }
+
+            array_push($queue, ...match ($kind) {
+                'any' => [...self::changesOfDelete($keys), ...self::changesOfUpdate($keys, null)],
+                'delete' => self::changesOfDelete($keys),
+                'update' => self::changesOfUpdate($keys, $change[2] ?? null),
+            });
         }
 
-        $tables = array_map('strval', array_keys($reached));
-        sort($tables, SORT_STRING);
+        $names = array_map('strval', array_keys($tables));
+        sort($names, SORT_STRING);
 
-        return $tables;
+        return $names;
+    }
+
+    /**
+     * @param  list<ForeignKey>  $foreignKeys
+     * @return list<Change>
+     */
+    private static function changesOfDelete(array $foreignKeys): array
+    {
+        $changes = [];
+        foreach ($foreignKeys as $foreignKey) {
+            array_push($changes, ...match ($foreignKey['onDelete']) {
+                ReferentialAction::Cascades => [['delete', $foreignKey['child']]],
+                ReferentialAction::SetsColumns => self::columnUpdates($foreignKey),
+                ReferentialAction::KeepsRows => [],
+            });
+        }
+
+        return $changes;
+    }
+
+    /**
+     * @param  list<ForeignKey>  $foreignKeys
+     * @param  string|null  $column  the assigned column, null for any
+     * @return list<Change>
+     */
+    private static function changesOfUpdate(array $foreignKeys, ?string $column): array
+    {
+        $changes = [];
+        foreach ($foreignKeys as $foreignKey) {
+            if ($foreignKey['onUpdate'] === ReferentialAction::KeepsRows || ($column !== null && ! in_array($column, $foreignKey['parentColumns'], true))) {
+                continue;
+            }
+
+            array_push($changes, ...self::columnUpdates($foreignKey));
+        }
+
+        return $changes;
+    }
+
+    /**
+     * @param  ForeignKey  $foreignKey
+     * @return list<Change>
+     */
+    private static function columnUpdates(array $foreignKey): array
+    {
+        return array_map(static fn (string $column): array => ['update', $foreignKey['child'], $column], $foreignKey['childColumns']);
     }
 }

@@ -12,6 +12,7 @@ use Spiritix\LadaCache\Encoder;
 use Spiritix\LadaCache\ExpirationPolicy;
 use Spiritix\LadaCache\QueryHandler;
 use Spiritix\LadaCache\Redis;
+use Spiritix\LadaCache\Support\Write;
 use Spiritix\LadaCache\Tests\Concerns\RecordsRedisCommands;
 use Spiritix\LadaCache\Tests\TestCase;
 
@@ -77,10 +78,10 @@ class QueryHandlerTest extends TestCase
         $handler = new QueryHandler($this->cache);
         $builder = DB::table('cars')->where('id', 1);
         $handler->cacheQuery(DB::table('drivers'), fn (): array => []);
-        $handler->invalidateQuery(DB::table('drivers'), 'update', ['name' => 'warm up foreign keys']);
+        $handler->invalidateQuery(DB::table('drivers'), 'update', Write::update(['name']), ['name' => 'warm up foreign keys']);
 
         $missCommands = $this->recordRedisCommands(fn () => $handler->cacheQuery($builder, fn (): array => [['id' => 1]]));
-        $invalidationCommands = $this->recordRedisCommands(fn () => $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', ['name' => 'x']));
+        $invalidationCommands = $this->recordRedisCommands(fn () => $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'x']));
 
         $this->assertSame(['evalsha', 'evalsha'], $missCommands);
         $this->assertSame(['evalsha'], $invalidationCommands);
@@ -120,7 +121,7 @@ class QueryHandlerTest extends TestCase
         $builder = DB::table('cars')->where('id', 1);
 
         $handler->cacheQuery($builder, function () use ($handler): array {
-            $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', ['name' => 'after']);
+            $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'after']);
 
             return [['id' => 1, 'name' => 'before']];
         });
@@ -174,7 +175,7 @@ class QueryHandlerTest extends TestCase
         for ($query = 0; $query < 5; $query++) {
             $handler->cacheQuery(DB::table('cars'), fn (): array => []);
         }
-        $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', ['name' => 'x']);
+        $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'x']);
 
         Log::shouldHaveReceived('warning')->once()->withArgs(fn (string $message): bool => ! str_contains($message, 'cooldown'));
         Log::shouldHaveReceived('error')->once()->withArgs(fn (string $message): bool => str_contains($message, 'cooldown'));
@@ -185,8 +186,8 @@ class QueryHandlerTest extends TestCase
         Log::spy();
         $handler = $this->handlerWithUnreachableRedis();
 
-        $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', ['name' => 'x']);
-        $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', ['name' => 'y']);
+        $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'x']);
+        $handler->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'y']);
 
         Log::shouldHaveReceived('error')->twice();
     }

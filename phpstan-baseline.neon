@@ -139,12 +139,6 @@ parameters:
 			path: src/Database/QueryBuilder.php
 
 		-
-			message: '#^Method Spiritix\\LadaCache\\Database\\QueryBuilder\:\:upsert\(\) has parameter \$update with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: src/Database/QueryBuilder.php
-
-		-
 			message: '#^Method Spiritix\\LadaCache\\Database\\QueryBuilder\:\:upsert\(\) has parameter \$values with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
@@ -163,13 +157,7 @@ parameters:
 			path: src/Database/QueryBuilder.php
 
 		-
-			message: '#^Parameter \#3 \$update of method Illuminate\\Database\\Query\\Builder\:\:upsert\(\) expects array\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Database/QueryBuilder.php
-
-		-
-			message: '#^Parameter \#3 \$values of method Spiritix\\LadaCache\\QueryHandler\:\:invalidateQuery\(\) expects array\<string, mixed\>, array given\.$#'
+			message: '#^Parameter \#4 \$values of method Spiritix\\LadaCache\\QueryHandler\:\:invalidateQuery\(\) expects array\<string, mixed\>, array given\.$#'
 			identifier: argument.type
 			count: 1
 			path: src/Database/QueryBuilder.php
@@ -591,7 +579,7 @@ parameters:
 		-
 			message: '#^Cannot cast mixed to string\.$#'
 			identifier: cast.string
-			count: 11
+			count: 7
 			path: src/Support/DependentTables.php
 
 		-

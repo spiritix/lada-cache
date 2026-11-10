@@ -19,6 +19,7 @@ use Spiritix\LadaCache\Support\FailedInvalidations;
 use Spiritix\LadaCache\Support\Invalidation;
 use Spiritix\LadaCache\Support\RedisAvailability;
 use Spiritix\LadaCache\Support\RedisCooldown;
+use Spiritix\LadaCache\Support\Write;
 use Spiritix\LadaCache\Tests\TestCase;
 
 final class SoundnessTest extends TestCase
@@ -132,7 +133,7 @@ final class SoundnessTest extends TestCase
         $this->assertSame('before', $read()[0]->name);
 
         DB::connection()->getPdo()->exec("update cars set name = 'after' where id = 1");
-        $unreachable->invalidateQuery(DB::table('cars')->where('id', 1), 'update', ['name' => 'after']);
+        $unreachable->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'after']);
 
         $this->assertTrue($failed->hasPending());
         $this->assertSame('after', $read()[0]->name);
@@ -233,7 +234,7 @@ final class SoundnessTest extends TestCase
             }
         });
 
-        $handler->invalidateQuery(DB::table('owners')->where('id', 1), 'delete');
+        $handler->invalidateQuery(DB::table('owners')->where('id', 1), 'delete', Write::delete());
 
         $this->assertNotSame($generation, $this->generationId());
         $this->assertFalse($failed->hasPending());
@@ -282,7 +283,7 @@ final class SoundnessTest extends TestCase
         $this->assertSame('before', $read($otherHost));
 
         DB::connection()->getPdo()->exec("update cars set name = 'after' where id = 1");
-        $unreachable->invalidateQuery(DB::table('cars')->where('id', 1), 'update', ['name' => 'after']);
+        $unreachable->invalidateQuery(DB::table('cars')->where('id', 1), 'update', Write::update(['name']), ['name' => 'after']);
         $this->assertTrue($availability->isCoolingDown());
         $sameProcess->replayFailedInvalidations(RedisCooldown::Ignore);
 

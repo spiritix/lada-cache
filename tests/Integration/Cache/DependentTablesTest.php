@@ -33,11 +33,17 @@ final class DependentTablesTest extends TestCase
         $dependents = DependentTables::load(DB::connection());
 
         $this->assertSame(['owner_names', 'owner_pet_counts'], $dependents['a:owners']);
-        $this->assertSame(['owner_names', 'owner_notes', 'owner_pet_counts', 'pet_events', 'pet_toys', 'pets'], $dependents['m:owners']);
+        $this->assertSame(['owner_names', 'owner_notes', 'owner_pet_counts', 'pet_events', 'pet_toys', 'pets'], $dependents['d:owners']);
+        $this->assertSame(['owner_names', 'owner_notes', 'owner_pet_counts', 'pet_events', 'pets'], $dependents['u:owners']);
+        $this->assertSame($dependents['u:owners'], $dependents['u:owners:id']);
         $this->assertSame(['owner_pet_counts', 'pet_events'], $dependents['a:pets']);
-        $this->assertSame(['owner_pet_counts', 'pet_events', 'pet_toys'], $dependents['m:pets']);
+        $this->assertSame(['owner_pet_counts', 'pet_events', 'pet_toys'], $dependents['d:pets']);
+        $this->assertSame($dependents['a:pets'], $dependents['u:pets']);
+        $this->assertArrayNotHasKey('u:pets:id', $dependents);
+        $this->assertSame(['owner_note_tags'], $dependents['d:owner_notes']);
         $this->assertContains('owners', $dependents['a:owner_names']);
-        $this->assertArrayNotHasKey('m:owner_audits', $dependents);
+        $this->assertArrayNotHasKey('d:owner_audits', $dependents);
+        $this->assertArrayNotHasKey('u:owners:name', $dependents);
     }
 
     public function testInsertsRefreshCachedReadsOfViewsOverTheTable(): void
@@ -117,6 +123,85 @@ final class DependentTablesTest extends TestCase
         DB::table('owners')->where('id', 1)->update(['id' => 10]);
 
         $this->assertSame(10, (int) DB::table('pets')->where('id', 1)->value('owner_id'));
+    }
+
+    public function testUpdatingAParentWithoutChangingItsKeyKeepsCachedReadsOfChildren(): void
+    {
+        DB::table('pets')->where('owner_id', 1)->get();
+        DB::table('pet_toys')->where('pet_id', 1)->get();
+        [$petsKey, $petsTags] = $this->cacheKeyAndTags(DB::table('pets')->where('owner_id', 1));
+        [$toysKey, $toysTags] = $this->cacheKeyAndTags(DB::table('pet_toys')->where('pet_id', 1));
+
+        DB::table('owners')->where('id', 1)->update(['name' => 'renamed']);
+
+        $this->assertCacheHas($petsKey, $petsTags, 'owners.id did not change, so no foreign key fired');
+        $this->assertCacheHas($toysKey, $toysTags);
+    }
+
+    public function testUpdatingAParentKeyKeepsCachedReadsOfDeleteOnlyGrandchildren(): void
+    {
+        DB::connection()->getPdo()->exec('delete from owner_notes');
+        DB::table('pet_toys')->where('pet_id', 1)->get();
+        [$toysKey, $toysTags] = $this->cacheKeyAndTags(DB::table('pet_toys')->where('pet_id', 1));
+
+        DB::table('owners')->where('id', 1)->update(['id' => 10]);
+
+        $this->assertSame(10, (int) DB::table('pets')->where('id', 1)->value('owner_id'));
+        $this->assertCacheHas($toysKey, $toysTags, 'pets.id did not change and pet_toys has no update rule');
+    }
+
+    public function testUpdatingAQualifiedParentKeyRefreshesCachedReadsOfCascadedChildren(): void
+    {
+        DB::connection()->getPdo()->exec('delete from owner_notes');
+        $this->assertSame(1, (int) DB::table('pets')->where('id', 1)->value('owner_id'));
+
+        DB::table('owners')->where('id', 1)->update(['owners.id' => 10]);
+
+        $this->assertSame(10, (int) DB::table('pets')->where('id', 1)->value('owner_id'));
+    }
+
+    public function testUpsertingParentsWithoutChangingTheirKeysKeepsCachedReadsOfChildren(): void
+    {
+        DB::table('pets')->where('owner_id', 1)->get();
+        [$petsKey, $petsTags] = $this->cacheKeyAndTags(DB::table('pets')->where('owner_id', 1));
+
+        DB::table('owners')->upsert([['id' => 1, 'name' => 'renamed'], ['id' => 3, 'name' => 'carol']], ['id'], ['name']);
+
+        $this->assertSame('renamed', DB::table('owners')->where('id', 1)->value('name'));
+        $this->assertCacheHas($petsKey, $petsTags, 'The upsert assigned no referenced column');
+    }
+
+    public function testDeletingAParentKeepsCachedReadsBelowANulledChild(): void
+    {
+        DB::table('owner_note_tags')->insert(['id' => 1, 'owner_note_id' => 1, 'name' => 'gold']);
+        DB::table('owner_note_tags')->get();
+        [$tagsKey, $tagsTags] = $this->cacheKeyAndTags(DB::table('owner_note_tags'));
+
+        DB::table('owners')->where('id', 1)->delete();
+
+        $this->assertNull(DB::table('owner_notes')->where('id', 1)->value('owner_id'));
+        $this->assertCacheHas($tagsKey, $tagsTags, 'The note survived with its id, so its tags did not change');
+    }
+
+    public function testDeletingANulledChildRefreshesCachedReadsOfItsCascadedChildren(): void
+    {
+        DB::table('owner_note_tags')->insert(['id' => 1, 'owner_note_id' => 1, 'name' => 'gold']);
+        $this->assertSame(1, DB::table('owner_note_tags')->count());
+
+        DB::table('owner_notes')->where('id', 1)->delete();
+
+        $this->assertSame(0, DB::table('owner_note_tags')->count());
+    }
+
+    public function testWritesMatchingNoRowsDoNotCascade(): void
+    {
+        DB::table('pets')->get();
+        [$petsKey, $petsTags] = $this->cacheKeyAndTags(DB::table('pets'));
+
+        DB::table('owners')->where('id', 999)->delete();
+        DB::table('owners')->where('id', 999)->update(['id' => 1000]);
+
+        $this->assertCacheHas($petsKey, $petsTags);
     }
 
     public function testRawDeleteRefreshesCachedReadsOfCascadedChildren(): void
