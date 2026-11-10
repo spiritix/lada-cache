@@ -6,6 +6,7 @@ namespace Spiritix\LadaCache;
 
 use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\Invalidation;
+use Spiritix\LadaCache\Support\RedisCooldown;
 use Throwable;
 use UnexpectedValueException;
 
@@ -101,7 +102,7 @@ final class Cache
      *
      * @return array{generation: Generation|null, databasesWithUnknownDependents: list<string>}
      */
-    public function invalidate(Invalidation $invalidation): array
+    public function invalidate(Invalidation $invalidation, RedisCooldown $cooldown = RedisCooldown::Respect): array
     {
         $arguments = [
             self::freshToken(),
@@ -120,10 +121,10 @@ final class Cache
             array_push($arguments, count($fields), ...$fields);
         }
 
-        $reply = $this->redis->evaluate(LuaScripts::INVALIDATE, $arguments);
+        $reply = $this->redis->evaluate(LuaScripts::INVALIDATE, $arguments, $cooldown);
 
         if ($this->legacyInvalidation()) {
-            $this->redis->evaluate(LuaScripts::PURGE_LEGACY, [$this->redis->ladaPrefix(), ...$invalidation->tags()]);
+            $this->redis->evaluate(LuaScripts::PURGE_LEGACY, [$this->redis->ladaPrefix(), ...$invalidation->tags()], $cooldown);
         }
 
         if (! is_array($reply) || ! isset($reply[0])) {
@@ -147,7 +148,7 @@ final class Cache
      * @param  array<string, list<string>>  $dependents  `WriteKind::dependentsField()` => tables changed along with it
      * @return bool Whether they were stored, false when the generation was retired meanwhile
      */
-    public function storeDependents(Generation $generation, string $database, array $dependents): bool
+    public function storeDependents(Generation $generation, string $database, array $dependents, RedisCooldown $cooldown = RedisCooldown::Respect): bool
     {
         $arguments = [$generation->id, self::dependentsName($database), $this->expiration->nextTtl()];
 
@@ -155,7 +156,7 @@ final class Cache
             array_push($arguments, $table, implode("\n", $tables));
         }
 
-        return (int) $this->redis->evaluate(LuaScripts::STORE_DEPENDENTS, $arguments) === 1;
+        return (int) $this->redis->evaluate(LuaScripts::STORE_DEPENDENTS, $arguments, $cooldown) === 1;
     }
 
     private function legacyInvalidation(): bool
@@ -197,7 +198,7 @@ final class Cache
     {
         foreach (self::SCHEMA_CHANGE_RETRY_DELAYS_MICROSECONDS as $delay) {
             try {
-                $this->redis->evaluateIgnoringCooldown(LuaScripts::RETIRE, [self::freshToken()]);
+                $this->redis->evaluate(LuaScripts::RETIRE, [self::freshToken()], RedisCooldown::Ignore);
 
                 return;
             } catch (Throwable) {
@@ -205,7 +206,7 @@ final class Cache
             }
         }
 
-        $this->redis->evaluateIgnoringCooldown(LuaScripts::RETIRE, [self::freshToken()]);
+        $this->redis->evaluate(LuaScripts::RETIRE, [self::freshToken()], RedisCooldown::Ignore);
     }
 
     public function pruneRetiredGenerations(): int

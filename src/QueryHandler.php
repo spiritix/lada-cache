@@ -19,6 +19,7 @@ use Spiritix\LadaCache\Support\FailureReporter;
 use Spiritix\LadaCache\Support\Invalidation;
 use Spiritix\LadaCache\Support\PendingInvalidations;
 use Spiritix\LadaCache\Support\RawStatementEffect;
+use Spiritix\LadaCache\Support\RedisCooldown;
 use Spiritix\LadaCache\Support\ReplicaReads;
 use Spiritix\LadaCache\Support\WriteKind;
 use Throwable;
@@ -253,8 +254,8 @@ final class QueryHandler
         }
 
         try {
-            $this->replayPendingInvalidations();
-            $this->apply($invalidation);
+            $this->replayPendingInvalidations(RedisCooldown::Respect);
+            $this->apply($invalidation, RedisCooldown::Respect);
         } catch (Throwable $exception) {
             $this->failed->record($invalidation);
             FailureReporter::report(
@@ -267,14 +268,15 @@ final class QueryHandler
 
     /**
      * Applies invalidations Redis rejected earlier, if any. Also run when a request or worker
-     * ends, so invalidations kept only in memory are not lost with it when Redis is back.
+     * ends, ignoring the cooldown the rejection started, so invalidations kept only in memory
+     * are not lost with the process when Redis is back.
      *
      * @return bool Whether nothing is pending anymore, so the cache can be trusted again
      */
-    public function replayFailedInvalidations(): bool
+    public function replayFailedInvalidations(RedisCooldown $cooldown = RedisCooldown::Respect): bool
     {
         try {
-            $this->replayPendingInvalidations();
+            $this->replayPendingInvalidations($cooldown);
 
             return true;
         } catch (Throwable $exception) {
@@ -284,16 +286,16 @@ final class QueryHandler
         }
     }
 
-    private function replayPendingInvalidations(): void
+    private function replayPendingInvalidations(RedisCooldown $cooldown): void
     {
         if (! $this->failed->hasPending()) {
             return;
         }
 
-        $this->failed->replay($this->apply(...));
+        $this->failed->replay(fn (Invalidation $invalidation) => $this->apply($invalidation, $cooldown));
     }
 
-    private function apply(Invalidation $invalidation): void
+    private function apply(Invalidation $invalidation, RedisCooldown $cooldown): void
     {
         if ($invalidation->retiresEverything) {
             $this->cache->retireAfterSchemaChange();
@@ -301,7 +303,7 @@ final class QueryHandler
             return;
         }
 
-        $result = $this->cache->invalidate($invalidation);
+        $result = $this->cache->invalidate($invalidation, $cooldown);
         $generation = $result['generation'];
         $unknown = $result['databasesWithUnknownDependents'];
 
@@ -320,13 +322,13 @@ final class QueryHandler
                 return;
             }
 
-            if ($this->cache->storeDependents($generation, $database, $dependents)) {
+            if ($this->cache->storeDependents($generation, $database, $dependents, $cooldown)) {
                 $stored[] = $database;
             }
         }
 
         if ($stored !== []) {
-            $this->cache->invalidate($invalidation->onlyCascadesOf($stored));
+            $this->cache->invalidate($invalidation->onlyCascadesOf($stored), $cooldown);
         }
     }
 

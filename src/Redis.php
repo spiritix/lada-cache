@@ -12,6 +12,7 @@ use Predis\Response\ServerException;
 use Redis as PhpRedisClient;
 use RuntimeException;
 use Spiritix\LadaCache\Support\RedisAvailability;
+use Spiritix\LadaCache\Support\RedisCooldown;
 use Throwable;
 
 /**
@@ -75,23 +76,12 @@ final class Redis
      *
      * @param  list<string|int>  $arguments
      */
-    public function evaluate(string $script, array $arguments): mixed
+    public function evaluate(string $script, array $arguments, RedisCooldown $cooldown = RedisCooldown::Respect): mixed
     {
-        if ($this->availability->isCoolingDown()) {
+        if ($cooldown === RedisCooldown::Respect && $this->availability->isCoolingDown()) {
             throw new CacheUnavailableException('Redis is skipped for a cooldown period after a previous failure');
         }
 
-        return $this->evaluateNow($script, $arguments);
-    }
-
-    /**
-     * Like `evaluate()`, but tries Redis even during a cooldown. For rare operations whose
-     * failure compromises freshness, such as retiring the generation after a schema change.
-     *
-     * @param  list<string|int>  $arguments
-     */
-    public function evaluateIgnoringCooldown(string $script, array $arguments): mixed
-    {
         return $this->evaluateNow($script, $arguments);
     }
 

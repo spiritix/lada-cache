@@ -37,6 +37,7 @@ use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\FailedInvalidations;
 use Spiritix\LadaCache\Support\FailureReporter;
 use Spiritix\LadaCache\Support\FrameworkTables;
+use Spiritix\LadaCache\Support\RedisCooldown;
 use Spiritix\LadaCache\Support\ReplicaReads;
 use Throwable;
 
@@ -122,7 +123,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
 
         $this->app->terminating(function (): void {
             if ($this->app->resolved('lada.handler')) {
-                $this->app->make('lada.handler')->replayFailedInvalidations();
+                $this->app->make('lada.handler')->replayFailedInvalidations(RedisCooldown::Ignore);
             }
         });
     }

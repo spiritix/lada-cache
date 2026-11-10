@@ -18,6 +18,7 @@ use Spiritix\LadaCache\Redis;
 use Spiritix\LadaCache\Support\FailedInvalidations;
 use Spiritix\LadaCache\Support\Invalidation;
 use Spiritix\LadaCache\Support\RedisAvailability;
+use Spiritix\LadaCache\Support\RedisCooldown;
 use Spiritix\LadaCache\Tests\TestCase;
 
 final class SoundnessTest extends TestCase
@@ -266,6 +267,29 @@ final class SoundnessTest extends TestCase
         $this->assertFalse($failed->hasPending());
     }
 
+    public function testInvalidationRejectedByRedisIsReplayedWhenTheRequestEndsDuringTheCooldown(): void
+    {
+        $availability = RedisAvailability::processLocal();
+        $failed = FailedInvalidations::processLocal();
+        $unreachable = new QueryHandler($this->unreachableCache($availability), $failed);
+        $sameProcess = new QueryHandler(new Cache(new Redis(null, $availability), new Encoder), $failed);
+        $otherHost = new QueryHandler(app('lada.cache'), FailedInvalidations::processLocal());
+        DB::table('cars')->insert(['id' => 1, 'name' => 'before', 'engine_id' => null, 'driver_id' => null]);
+        $read = fn (QueryHandler $handler): string => $handler->cacheQuery(
+            DB::table('cars')->where('id', 1),
+            fn (): array => DB::connection()->select('select name from cars where id = 1'),
+        )[0]->name;
+        $this->assertSame('before', $read($otherHost));
+
+        DB::connection()->getPdo()->exec("update cars set name = 'after' where id = 1");
+        $unreachable->invalidateQuery(DB::table('cars')->where('id', 1), 'update', ['name' => 'after']);
+        $this->assertTrue($availability->isCoolingDown());
+        $sameProcess->replayFailedInvalidations(RedisCooldown::Ignore);
+
+        $this->assertFalse($failed->hasPending(), 'The replay at the end of the request was refused by the cooldown');
+        $this->assertSame('after', $read($otherHost));
+    }
+
     public function testRejectedSchemaChangeRetiresTheGenerationOnceRedisIsBack(): void
     {
         $failed = FailedInvalidations::processLocal();
@@ -286,11 +310,11 @@ final class SoundnessTest extends TestCase
         }
     }
 
-    private function unreachableCache(): Cache
+    private function unreachableCache(?RedisAvailability $availability = null): Cache
     {
         $configured = config('lada-cache.redis_connection');
         config(['lada-cache.redis_connection' => 'unreachable']);
-        $redis = new Redis(null, RedisAvailability::processLocal());
+        $redis = new Redis(null, $availability ?? RedisAvailability::processLocal());
         config(['lada-cache.redis_connection' => $configured]);
 
         return new Cache($redis, new Encoder, new ExpirationPolicy(0));
