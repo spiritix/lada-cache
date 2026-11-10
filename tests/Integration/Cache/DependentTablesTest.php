@@ -227,6 +227,17 @@ final class DependentTablesTest extends TestCase
         $this->assertSame(0, DB::table('owner_audits')->count(), 'TRUNCATE ... CASCADE empties restricting children too');
     }
 
+    public function testRawWritesMatchingNoRowsDoNotCascade(): void
+    {
+        DB::table('pets')->get();
+        [$petsKey, $petsTags] = $this->cacheKeyAndTags(DB::table('pets'));
+
+        DB::delete('delete from owners where id = ?', [999]);
+        DB::update('update owners set id = ? where id = ?', [1000, 999]);
+
+        $this->assertCacheHas($petsKey, $petsTags);
+    }
+
     public function testRawDeleteRefreshesCachedReadsOfCascadedChildren(): void
     {
         $this->assertSame(2, DB::table('pets')->count());

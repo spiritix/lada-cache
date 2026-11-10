@@ -36,15 +36,22 @@ trait InvalidatesRawStatements
         $result = parent::run($query, $bindings, $callback);
 
         if ($this->builderStatementDepth === 0 && ! $this->pretending() && (bool) config('lada-cache.active', true)) {
-            $this->invalidateForRawStatement((string) $query);
+            $this->invalidateForRawStatement((string) $query, is_int($result) ? $result : null);
         }
 
         return $result;
     }
 
-    private function invalidateForRawStatement(string $query): void
+    /**
+     * @param  int|null  $affectedRows  the rows `affectingStatement()` reports changed, null for other statements
+     */
+    private function invalidateForRawStatement(string $query, ?int $affectedRows): void
     {
-        $effect = RawStatementClassifier::classify($query, $this->getTablePrefix(), Dialects::forDriver($this->getDriverName()));
+        $effect = RawStatementClassifier::classify($query, $this->getTablePrefix(), Dialects::of($this));
+
+        if ($affectedRows !== null) {
+            $effect = $effect->affecting($affectedRows);
+        }
 
         if ($effect->isNone()) {
             return;

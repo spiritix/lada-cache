@@ -33,6 +33,14 @@ final readonly class RawStatementEffect
         return new self([], Write::unknown(), true);
     }
 
+    /**
+     * Narrows the write to the rows the database reported as affected.
+     */
+    public function affecting(int $rows): self
+    {
+        return $this->changesEverything ? $this : new self($this->tables, $this->write->affecting($rows), false);
+    }
+
     public function isNone(): bool
     {
         return ! $this->changesEverything && $this->tables === [];
