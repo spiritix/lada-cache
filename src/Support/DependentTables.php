@@ -7,7 +7,16 @@ namespace Spiritix\LadaCache\Support;
 use Illuminate\Database\Connection;
 use InvalidArgumentException;
 use RuntimeException;
+use Spiritix\LadaCache\Support\Sql\DeleteStatement;
 use Spiritix\LadaCache\Support\Sql\Dialects;
+use Spiritix\LadaCache\Support\Sql\InsertStatement;
+use Spiritix\LadaCache\Support\Sql\MergeStatement;
+use Spiritix\LadaCache\Support\Sql\SQLiteDialect;
+use Spiritix\LadaCache\Support\Sql\Token;
+use Spiritix\LadaCache\Support\Sql\Tokenizer;
+use Spiritix\LadaCache\Support\Sql\TruncateStatement;
+use Spiritix\LadaCache\Support\Sql\UpdateStatement;
+use Spiritix\LadaCache\Support\Sql\WriteTargets;
 use UnexpectedValueException;
 
 /**
@@ -23,7 +32,8 @@ use UnexpectedValueException;
  * update of them changes change.
  *
  * @phpstan-type ForeignKey array{child: string, parentColumns: list<string>, childColumns: list<string>, onDelete: ReferentialAction, onUpdate: ReferentialAction}
- * @phpstan-type Change array{0: 'any'|'delete'|'truncate', 1: string}|array{0: 'update', 1: string, 2: string}
+ * @phpstan-type Change array{0: 'any'|'insert'|'delete'|'truncate', 1: string}|array{0: 'update', 1: string, 2: string}
+ * @phpstan-type Trigger array{events: list<TriggerEvent>, columns: list<string>|null, changes: list<Change>}
  */
 final class DependentTables
 {
@@ -31,7 +41,7 @@ final class DependentTables
      * Part of the name of the dependency map in Redis, so hosts reading another field layout
      * keep their own map.
      */
-    public const int LAYOUT = 3;
+    public const int LAYOUT = 4;
 
     /**
      * @return array<string, list<string>> `Write` dependents field => tables changed along with it
@@ -49,13 +59,7 @@ final class DependentTables
             $viewBases[$view][$table] = true;
         }
 
-        foreach (self::triggerBodies($connection) as [$table, $body]) {
-            foreach (SqlTableScanner::writtenTables($body, $prefix, Dialects::forDriver($connection->getDriverName())) as $target) {
-                $everyWrite[TableName::withoutPrefix($table, $prefix)][TableName::unqualified($target)] = true;
-            }
-        }
-
-        return self::fields($everyWrite, $viewBases, self::foreignKeys($connection, $prefix));
+        return self::fields($everyWrite, $viewBases, self::foreignKeys($connection, $prefix), self::triggers($connection, $prefix));
     }
 
     /**
@@ -133,7 +137,7 @@ final class DependentTables
         $value = $row[$column] ?? null;
 
         if (! is_string($value) && ! is_int($value)) {
-            throw new UnexpectedValueException("Lada Cache read {$column} of a foreign key as ".get_debug_type($value).', expected text');
+            throw new UnexpectedValueException("Lada Cache read {$column} of the schema as ".get_debug_type($value).', expected text');
         }
 
         return (string) $value;
@@ -213,66 +217,217 @@ final class DependentTables
     }
 
     /**
-     * @return list<array{string, string}> pairs of table and the SQL its triggers run
+     * The triggers of every table: the events they fire on, the columns an `UPDATE OF` trigger
+     * is limited to, and how their bodies write each table, read from the parsed statements.
+     *
+     * @return array<string, list<Trigger>>
      */
-    private static function triggerBodies(Connection $connection): array
+    private static function triggers(Connection $connection, string $prefix): array
     {
-        $query = match ($connection->getDriverName()) {
-            'mysql', 'mariadb' => 'select event_object_table as table_name, action_statement as body from information_schema.triggers where trigger_schema = database()',
-            'pgsql' => 'select c.relname as table_name, p.prosrc as body from pg_trigger t join pg_class c on c.oid = t.tgrelid'
-                .' join pg_proc p on p.oid = t.tgfoid join pg_namespace n on n.oid = c.relnamespace'
-                .' where not t.tgisinternal and n.nspname = any(current_schemas(false))',
-            'sqlite' => "select tbl_name as table_name, sql as body from sqlite_master where type = 'trigger'",
-            'sqlsrv' => 'select object_name(t.parent_id) as table_name, m.definition as body from sys.triggers t'
-                .' join sys.sql_modules m on m.object_id = t.object_id where t.parent_class = 1',
-            default => throw new RuntimeException('Lada Cache cannot read triggers of driver '.$connection->getDriverName()),
-        };
+        $dialect = Dialects::of($connection);
+        $triggers = [];
 
-        $pairs = [];
-        foreach ($connection->select($query, [], false) as $row) {
-            $row = (array) $row;
-            $pairs[] = [(string) $row['table_name'], (string) $row['body']];
+        foreach (self::triggerDefinitions($connection) as [$table, $events, $columns, $body]) {
+            $changes = [];
+            foreach (SqlTableScanner::writeStatements($body, $dialect) as $statement) {
+                array_push($changes, ...self::changesOfStatement($statement, $prefix));
+            }
+
+            $triggers[TableName::withoutPrefix($table, $prefix)][] = ['events' => $events, 'columns' => $columns, 'changes' => $changes];
         }
 
-        return $pairs;
+        return $triggers;
+    }
+
+    /**
+     * @return list<Change>
+     */
+    private static function changesOfStatement(InsertStatement|UpdateStatement|DeleteStatement|TruncateStatement|MergeStatement $statement, string $prefix): array
+    {
+        $changes = [];
+
+        foreach (WriteTargets::of($statement) as $name) {
+            $table = TableName::withoutPrefix($name[array_key_last($name)], $prefix);
+            $columns = $statement instanceof InsertStatement || $statement instanceof UpdateStatement ? WriteTargets::assignedColumns($statement) ?? [] : [];
+            $updates = array_map(static fn (string $column): array => ['update', $table, Write::columnName($column)], $columns);
+
+            array_push($changes, ...match (true) {
+                $statement instanceof InsertStatement => [['insert', $table], ...($statement->replacesRows ? [['delete', $table]] : []), ...$updates],
+                $statement instanceof UpdateStatement => $updates,
+                $statement instanceof DeleteStatement => [['delete', $table]],
+                $statement instanceof TruncateStatement => [['truncate', $table]],
+                $statement instanceof MergeStatement => [['any', $table]],
+            });
+        }
+
+        return $changes;
+    }
+
+    /**
+     * @return list<array{string, list<TriggerEvent>, list<string>|null, string}> table, events, `UPDATE OF` columns (null for any) and body of each trigger
+     */
+    private static function triggerDefinitions(Connection $connection): array
+    {
+        return match ($connection->getDriverName()) {
+            'mysql', 'mariadb' => array_map(
+                static fn (array $row): array => [self::text($row, 'table_name'), [self::event(self::text($row, 'event'))], null, self::text($row, 'body')],
+                self::rows($connection, 'select event_object_table as table_name, event_manipulation as event, action_statement as body from information_schema.triggers where trigger_schema = database()'),
+            ),
+            'pgsql' => array_map(
+                static fn (array $row): array => [
+                    self::text($row, 'table_name'),
+                    self::postgresEvents((int) self::text($row, 'type')),
+                    self::text($row, 'columns') === '' ? null : array_map(Write::columnName(...), explode(',', self::text($row, 'columns'))),
+                    self::text($row, 'body'),
+                ],
+                self::rows(
+                    $connection,
+                    'select c.relname as table_name, t.tgtype as type, p.prosrc as body,'
+                    ." coalesce((select string_agg(a.attname, ',') from pg_attribute a where a.attrelid = t.tgrelid and a.attnum = any(t.tgattr)), '') as columns"
+                    .' from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_proc p on p.oid = t.tgfoid join pg_namespace n on n.oid = c.relnamespace'
+                    .' where not t.tgisinternal and n.nspname = any(current_schemas(false))',
+                ),
+            ),
+            'sqlite' => array_map(
+                static fn (array $row): array => [self::text($row, 'table_name'), ...self::sqliteEvents(self::text($row, 'body')), self::text($row, 'body')],
+                self::rows($connection, "select tbl_name as table_name, sql as body from sqlite_master where type = 'trigger'"),
+            ),
+            'sqlsrv' => self::sqlServerTriggers($connection),
+            default => throw new RuntimeException('Lada Cache cannot read triggers of driver '.$connection->getDriverName()),
+        };
+    }
+
+    /**
+     * @return list<TriggerEvent>
+     */
+    private static function postgresEvents(int $type): array
+    {
+        return array_values(array_filter([
+            $type & 4 ? TriggerEvent::Insert : null,
+            $type & 8 ? TriggerEvent::Delete : null,
+            $type & 16 ? TriggerEvent::Update : null,
+            $type & 32 ? TriggerEvent::Truncate : null,
+        ]));
+    }
+
+    /**
+     * Reads `CREATE TRIGGER ... [BEFORE|AFTER|INSTEAD OF] DELETE|INSERT|UPDATE [OF columns] ON table`.
+     *
+     * @return array{list<TriggerEvent>, list<string>|null}
+     */
+    private static function sqliteEvents(string $sql): array
+    {
+        $tokens = array_values(array_filter(
+            (new Tokenizer(new SQLiteDialect, $sql))->tokenize(),
+            static fn (Token $token): bool => ! $token->isTrivia(),
+        ));
+
+        foreach ($tokens as $position => $token) {
+            if (! $token->isKeyword('INSERT', 'UPDATE', 'DELETE')) {
+                continue;
+            }
+
+            if (! $token->isKeyword('UPDATE') || ($tokens[$position + 1] ?? null)?->isKeyword('OF') !== true) {
+                return [[self::event($token->value)], null];
+            }
+
+            $columns = [];
+            for ($column = $position + 2; isset($tokens[$column]) && ! $tokens[$column]->isKeyword('ON'); $column++) {
+                if ($tokens[$column]->isWord()) {
+                    $columns[] = Write::columnName($tokens[$column]->value);
+                }
+            }
+
+            return [[TriggerEvent::Update], $columns];
+        }
+
+        throw new UnexpectedValueException('Lada Cache cannot read the event of trigger '.json_encode($sql));
+    }
+
+    /**
+     * @return list<array{string, list<TriggerEvent>, null, string}>
+     */
+    private static function sqlServerTriggers(Connection $connection): array
+    {
+        $triggers = [];
+
+        foreach (self::rows(
+            $connection,
+            'select t.object_id as id, object_name(t.parent_id) as table_name, e.type_desc as event, m.definition as body from sys.triggers t'
+            .' join sys.trigger_events e on e.object_id = t.object_id join sys.sql_modules m on m.object_id = t.object_id where t.parent_class = 1',
+        ) as $row) {
+            $id = self::text($row, 'id');
+            $triggers[$id] ??= [self::text($row, 'table_name'), [], null, self::text($row, 'body')];
+            $triggers[$id][1][] = self::event(self::text($row, 'event'));
+        }
+
+        return array_values($triggers);
+    }
+
+    private static function event(string $event): TriggerEvent
+    {
+        return match (strtoupper(trim($event))) {
+            'INSERT' => TriggerEvent::Insert,
+            'UPDATE' => TriggerEvent::Update,
+            'DELETE' => TriggerEvent::Delete,
+            'TRUNCATE' => TriggerEvent::Truncate,
+            default => throw new UnexpectedValueException('Unknown trigger event '.json_encode($event)),
+        };
+    }
+
+    /**
+     * @return list<array<mixed>>
+     */
+    private static function rows(Connection $connection, string $query): array
+    {
+        return array_map(static fn (mixed $row): array => (array) $row, array_values($connection->select($query, [], false)));
     }
 
     /**
      * @param  array<string, array<string, true>>  $everyWrite  table => tables every write to it changes
      * @param  array<string, array<string, true>>  $viewBases  view => base tables a write through it changes
      * @param  array<string, list<ForeignKey>>  $foreignKeys  parent table => foreign keys referencing it
+     * @param  array<string, list<Trigger>>  $triggers  table => its triggers
      * @return array<string, list<string>>
      */
-    private static function fields(array $everyWrite, array $viewBases, array $foreignKeys): array
+    private static function fields(array $everyWrite, array $viewBases, array $foreignKeys, array $triggers): array
     {
+        $graph = ['everyWrite' => $everyWrite, 'foreignKeys' => $foreignKeys, 'triggers' => $triggers];
         $fields = [];
 
-        foreach (array_keys($everyWrite + $viewBases + $foreignKeys) as $table) {
+        foreach (array_keys($everyWrite + $viewBases + $foreignKeys + $triggers) as $table) {
             $table = (string) $table;
-            $everyWriteChanges = array_map(
-                static fn (int|string $dependent): array => ['any', (string) $dependent],
-                array_keys(($everyWrite[$table] ?? []) + ($viewBases[$table] ?? [])),
-            );
             $keys = $foreignKeys[$table] ?? [];
-            $updatedColumns = [];
-            foreach ($keys as $foreignKey) {
-                if ($foreignKey['onUpdate'] !== ReferentialAction::KeepsRows) {
-                    $updatedColumns += array_fill_keys($foreignKey['parentColumns'], true);
-                }
-            }
+            $tableTriggers = $triggers[$table] ?? [];
 
             $starts = [
-                Write::everyWriteField($table) => $everyWriteChanges,
-                Write::deleteField($table) => [...$everyWriteChanges, ...self::changesOfDelete($keys)],
-                Write::truncateField($table) => [...$everyWriteChanges, ...self::changesOfTruncate($keys)],
-                Write::anyUpdateField($table) => [...$everyWriteChanges, ...self::changesOfUpdate($keys, null)],
+                Write::everyWriteField($table) => array_map(
+                    static fn (int|string $dependent): array => ['any', (string) $dependent],
+                    array_keys(($everyWrite[$table] ?? []) + ($viewBases[$table] ?? [])),
+                ),
+                Write::deleteField($table) => self::changesOfDelete($keys),
+                Write::truncateField($table) => self::changesOfTruncate($keys),
+                Write::anyUpdateField($table) => self::changesOfUpdate($keys, null),
+                Write::anyColumnTriggerField($table) => self::triggerChanges($tableTriggers, static fn (array $trigger): bool => in_array(TriggerEvent::Update, $trigger['events'], true) && $trigger['columns'] !== null),
             ];
-            foreach (array_keys($updatedColumns) as $column) {
-                $starts[Write::columnUpdateField($table, (string) $column)] = [...$everyWriteChanges, ...self::changesOfUpdate($keys, (string) $column)];
+            foreach (TriggerEvent::cases() as $event) {
+                $starts[Write::triggerField($event, $table)] = self::triggerChanges(
+                    $tableTriggers,
+                    static fn (array $trigger): bool => in_array($event, $trigger['events'], true) && ($event !== TriggerEvent::Update || $trigger['columns'] === null),
+                );
+            }
+            foreach (self::updatedColumns($keys) as $column) {
+                $starts[Write::columnUpdateField($table, $column)] = self::changesOfUpdate($keys, $column);
+            }
+            foreach (self::triggerColumns($tableTriggers) as $column) {
+                $starts[Write::columnTriggerField($table, $column)] = self::triggerChanges(
+                    $tableTriggers,
+                    static fn (array $trigger): bool => in_array(TriggerEvent::Update, $trigger['events'], true) && in_array($column, $trigger['columns'] ?? [], true),
+                );
             }
 
             foreach ($starts as $field => $changes) {
-                $changed = self::reachableFrom($changes, $everyWrite, $foreignKeys);
+                $changed = self::reachableFrom($changes, $graph);
 
                 if ($changed !== []) {
                     $fields[$field] = $changed;
@@ -286,14 +441,15 @@ final class DependentTables
     }
 
     /**
-     * Tables changed when the start changes are made, following each change to what it fires.
+     * Tables changed when the start changes are made, following each change to what it fires:
+     * the views and configured dependents of every changed table, the triggers of its event and
+     * the foreign key rules of its rows.
      *
      * @param  list<Change>  $start
-     * @param  array<string, array<string, true>>  $everyWrite
-     * @param  array<string, list<ForeignKey>>  $foreignKeys
+     * @param  array{everyWrite: array<string, array<string, true>>, foreignKeys: array<string, list<ForeignKey>>, triggers: array<string, list<Trigger>>}  $graph
      * @return list<string>
      */
-    private static function reachableFrom(array $start, array $everyWrite, array $foreignKeys): array
+    private static function reachableFrom(array $start, array $graph): array
     {
         $tables = [];
         $seen = [];
@@ -310,17 +466,26 @@ final class DependentTables
             $seen[$id] = true;
             [$kind, $table] = $change;
             $tables[$table] = true;
-            $keys = $foreignKeys[$table] ?? [];
+            $keys = $graph['foreignKeys'][$table] ?? [];
+            $triggers = $graph['triggers'][$table] ?? [];
+            $column = $change[2] ?? null;
 
-            foreach (array_keys($everyWrite[$table] ?? []) as $dependent) {
+            foreach (array_keys($graph['everyWrite'][$table] ?? []) as $dependent) {
                 $queue[] = ['any', (string) $dependent];
             }
 
             array_push($queue, ...match ($kind) {
-                'any' => [...self::changesOfDelete($keys), ...self::changesOfUpdate($keys, null)],
-                'delete' => self::changesOfDelete($keys),
-                'truncate' => self::changesOfTruncate($keys),
-                'update' => self::changesOfUpdate($keys, $change[2] ?? null),
+                'any' => [...self::triggerChanges($triggers, static fn (): bool => true), ...self::changesOfDelete($keys), ...self::changesOfUpdate($keys, null)],
+                'insert' => self::triggerChanges($triggers, static fn (array $trigger): bool => in_array(TriggerEvent::Insert, $trigger['events'], true)),
+                'delete' => [...self::triggerChanges($triggers, static fn (array $trigger): bool => in_array(TriggerEvent::Delete, $trigger['events'], true)), ...self::changesOfDelete($keys)],
+                'truncate' => [
+                    ...self::triggerChanges($triggers, static fn (array $trigger): bool => in_array(TriggerEvent::Truncate, $trigger['events'], true) || in_array(TriggerEvent::Delete, $trigger['events'], true)),
+                    ...self::changesOfTruncate($keys),
+                ],
+                'update' => [
+                    ...self::triggerChanges($triggers, static fn (array $trigger): bool => in_array(TriggerEvent::Update, $trigger['events'], true) && ($trigger['columns'] === null || in_array($column, $trigger['columns'], true))),
+                    ...self::changesOfUpdate($keys, $column),
+                ],
             });
         }
 
@@ -328,6 +493,53 @@ final class DependentTables
         sort($names, SORT_STRING);
 
         return $names;
+    }
+
+    /**
+     * @param  list<Trigger>  $triggers
+     * @param  callable(Trigger): bool  $fires
+     * @return list<Change>
+     */
+    private static function triggerChanges(array $triggers, callable $fires): array
+    {
+        $changes = [];
+        foreach ($triggers as $trigger) {
+            if ($fires($trigger)) {
+                array_push($changes, ...$trigger['changes']);
+            }
+        }
+
+        return $changes;
+    }
+
+    /**
+     * @param  list<Trigger>  $triggers
+     * @return list<string>
+     */
+    private static function triggerColumns(array $triggers): array
+    {
+        $columns = [];
+        foreach ($triggers as $trigger) {
+            $columns += array_fill_keys($trigger['columns'] ?? [], true);
+        }
+
+        return array_map('strval', array_keys($columns));
+    }
+
+    /**
+     * @param  list<ForeignKey>  $foreignKeys
+     * @return list<string>
+     */
+    private static function updatedColumns(array $foreignKeys): array
+    {
+        $columns = [];
+        foreach ($foreignKeys as $foreignKey) {
+            if ($foreignKey['onUpdate'] !== ReferentialAction::KeepsRows) {
+                $columns += array_fill_keys($foreignKey['parentColumns'], true);
+            }
+        }
+
+        return array_map('strval', array_keys($columns));
     }
 
     /**

@@ -14,5 +14,6 @@ enum WriteKind
     case AnyUpdate;
     case Delete;
     case Truncate;
+    case Merge;
     case Unknown;
 }

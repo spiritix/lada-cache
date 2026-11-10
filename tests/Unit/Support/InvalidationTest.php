@@ -29,7 +29,7 @@ final class InvalidationTest extends TestCase
         }
 
         $this->assertSame(['cars:wide'], $merged->tags());
-        $this->assertSame(['db' => ['d:cars']], $merged->cascadeSources());
+        $this->assertSame(['db' => ['a:cars', 'd:cars', 'gd:cars']], $merged->cascadeSources());
         $this->assertSame(7, $merged->replicaLagSeconds);
     }
 

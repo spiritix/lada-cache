@@ -33,13 +33,15 @@ final class DependentTablesTest extends TestCase
         $dependents = DependentTables::load(DB::connection());
 
         $this->assertSame(['owner_names', 'owner_pet_counts'], $dependents['a:owners']);
-        $this->assertSame(['owner_names', 'owner_notes', 'owner_pet_counts', 'pet_events', 'pet_toys', 'pets'], $dependents['d:owners']);
-        $this->assertSame(['owner_names', 'owner_notes', 'owner_pet_counts', 'pet_events', 'pets'], $dependents['u:owners']);
+        $this->assertSame(['owner_notes', 'owner_pet_counts', 'pet_toys', 'pets'], $dependents['d:owners']);
+        $this->assertSame(['owner_notes', 'owner_pet_counts', 'pets'], $dependents['u:owners']);
         $this->assertSame($dependents['u:owners'], $dependents['u:owners:id']);
-        $this->assertSame(['owner_pet_counts', 'pet_events'], $dependents['a:pets']);
-        $this->assertSame(['owner_pet_counts', 'pet_events', 'pet_toys'], $dependents['d:pets']);
-        $this->assertSame($dependents['a:pets'], $dependents['u:pets']);
-        $this->assertArrayNotHasKey('u:pets:id', $dependents);
+        $this->assertSame(['owner_pet_counts'], $dependents['a:pets']);
+        $this->assertSame(['pet_events'], $dependents['gi:pets']);
+        $this->assertSame(['pet_toys'], $dependents['d:pets']);
+        $this->assertArrayNotHasKey('gu:pets', $dependents);
+        $this->assertArrayNotHasKey('gd:pets', $dependents);
+        $this->assertArrayNotHasKey('u:pets', $dependents);
         $this->assertSame(['owner_note_tags'], $dependents['d:owner_notes']);
         $this->assertContains('owners', $dependents['a:owner_names']);
         $this->assertArrayNotHasKey('d:owner_audits', $dependents);
@@ -74,6 +76,17 @@ final class DependentTablesTest extends TestCase
         DB::table('pets')->insert(['id' => 3, 'owner_id' => 1, 'name' => 'new']);
 
         $this->assertSame(3, $events());
+    }
+
+    public function testUpdatesKeepCachedReadsOfTablesOnlyInsertTriggersWrite(): void
+    {
+        DB::table('pet_events')->get();
+        [$eventsKey, $eventsTags] = $this->cacheKeyAndTags(DB::table('pet_events'));
+
+        DB::table('pets')->where('id', 1)->update(['name' => 'renamed']);
+        DB::table('pets')->where('id', 2)->delete();
+
+        $this->assertCacheHas($eventsKey, $eventsTags, 'The trigger fires on inserts only');
     }
 
     public function testWritesThroughAnUpdatableViewRefreshCachedReadsOfItsBaseTable(): void

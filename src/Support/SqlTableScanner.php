@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Support;
 
+use Spiritix\LadaCache\Support\Sql\DeleteStatement;
 use Spiritix\LadaCache\Support\Sql\Dialect;
+use Spiritix\LadaCache\Support\Sql\InsertStatement;
+use Spiritix\LadaCache\Support\Sql\MergeStatement;
 use Spiritix\LadaCache\Support\Sql\Parser;
 use Spiritix\LadaCache\Support\Sql\ParserException;
 use Spiritix\LadaCache\Support\Sql\Token;
 use Spiritix\LadaCache\Support\Sql\Tokenizer;
 use Spiritix\LadaCache\Support\Sql\TokenKind;
-use Spiritix\LadaCache\Support\Sql\WriteTargets;
+use Spiritix\LadaCache\Support\Sql\TruncateStatement;
+use Spiritix\LadaCache\Support\Sql\UpdateStatement;
 
 /**
  * Finds the tables SQL text reads or writes, including those only named inside raw expressions
@@ -59,18 +63,19 @@ final class SqlTableScanner
     }
 
     /**
-     * Every table an INSERT, REPLACE, UPDATE, DELETE, MERGE or TRUNCATE in the SQL writes, such
-     * as the statements of a trigger body.
+     * Every INSERT, REPLACE, UPDATE, DELETE, MERGE or TRUNCATE statement in the SQL, such as the
+     * statements of a trigger body. A statement head that does not parse throws, since its table
+     * would be missed.
      *
-     * @return list<string>
+     * @return list<InsertStatement|UpdateStatement|DeleteStatement|TruncateStatement|MergeStatement>
      */
-    public static function writtenTables(string $sql, string $tablePrefix, Dialect $dialect): array
+    public static function writeStatements(string $sql, Dialect $dialect): array
     {
         $tokens = array_values(array_filter(
             (new Tokenizer($dialect, $sql))->tokenize(),
             static fn (Token $token): bool => ! $token->isTrivia(),
         ));
-        $tables = [];
+        $statements = [];
         $statementEnd = -1;
 
         foreach ($tokens as $position => $token) {
@@ -81,17 +86,13 @@ final class SqlTableScanner
             $statementEnd = self::statementEnd($tokens, $position);
 
             try {
-                $statement = (new Parser($dialect, array_slice($tokens, $position)))->parseWriteStatement();
+                $statements[] = (new Parser($dialect, array_slice($tokens, $position)))->parseWriteStatement();
             } catch (ParserException $exception) {
                 throw new ParserException("Lada Cache cannot tell which table the {$token->value} at offset {$token->offset} writes: {$exception->getMessage()}", 0, $exception);
             }
-
-            foreach (WriteTargets::of($statement) as $name) {
-                $tables[self::tableName($name, $tablePrefix)] = true;
-            }
         }
 
-        return array_map('strval', array_keys($tables));
+        return $statements;
     }
 
     /**

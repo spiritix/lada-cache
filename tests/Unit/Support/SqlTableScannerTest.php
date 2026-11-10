@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Spiritix\LadaCache\Support\Sql\Dialects;
 use Spiritix\LadaCache\Support\Sql\ParserException;
+use Spiritix\LadaCache\Support\Sql\WriteTargets;
 use Spiritix\LadaCache\Support\SqlTableScanner;
 
 final class SqlTableScannerTest extends TestCase
@@ -92,14 +93,23 @@ final class SqlTableScannerTest extends TestCase
     #[DataProvider('triggerBodies')]
     public function testWrittenTablesAreFoundInTriggerBodies(string $sql, array $expected, string $driver): void
     {
-        $this->assertSame($expected, SqlTableScanner::writtenTables($sql, '', Dialects::forDriver($driver)));
+        $tables = [];
+        foreach (SqlTableScanner::writeStatements($sql, Dialects::forDriver($driver)) as $statement) {
+            foreach (WriteTargets::of($statement) as $name) {
+                $tables[] = implode('.', $name);
+            }
+        }
+
+        $this->assertSame($expected, $tables);
     }
 
     public function testTriggerWritesThatDoNotParseThrowRatherThanMissATable(): void
     {
         $this->expectException(ParserException::class);
 
-        SqlTableScanner::writtenTables('begin update (select 1) set x = 1; end', '', Dialects::forDriver('mysql'));
+        foreach (SqlTableScanner::writeStatements('begin update (select 1) set x = 1; end', Dialects::forDriver('mysql')) as $statement) {
+            WriteTargets::of($statement);
+        }
     }
 
     public function testTablePrefixIsStripped(): void
