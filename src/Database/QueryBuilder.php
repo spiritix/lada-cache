@@ -237,7 +237,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     public function truncate()
     {
         $this->runStatement(fn () => parent::truncate());
-        $this->invalidate(Reflector::QUERY_TYPE_TRUNCATE, Write::unknown());
+        $this->invalidate(Reflector::QUERY_TYPE_TRUNCATE, Write::truncate());
     }
 
     /**

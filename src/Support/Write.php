@@ -7,8 +7,10 @@ namespace Spiritix\LadaCache\Support;
 /**
  * What a write did to the rows of its tables, which decides what else the database changed along
  * with them: every write changes the views over the table and what its triggers write, a delete
- * fires the delete rules of foreign keys referencing the table, and an update fires their update
- * rules only when it assigns a referenced column. A write matching no rows fires no foreign key.
+ * fires the delete rules of foreign keys referencing the table, an update fires their update rules
+ * only when it assigns a referenced column, and a truncate empties every referencing table, as
+ * PostgreSQL's `TRUNCATE ... CASCADE` does whatever the rules say. A write matching no rows fires
+ * no foreign key.
  *
  * Each dependents field names, for one table, everything one kind of write to it changes; a write
  * looks up the fields that together cover it.
@@ -16,16 +18,16 @@ namespace Spiritix\LadaCache\Support;
 final readonly class Write
 {
     /**
-     * @param  list<string>|null  $updatedColumns  null when any column may have been assigned
+     * @param  list<string>  $columns  the assigned columns of a `WriteKind::ColumnUpdate`, empty otherwise
      */
     private function __construct(
-        private bool $deletesRows,
-        private ?array $updatedColumns,
+        private WriteKind $kind,
+        private array $columns = [],
     ) {}
 
     public static function insert(): self
     {
-        return new self(false, []);
+        return new self(WriteKind::Insert);
     }
 
     /**
@@ -38,20 +40,30 @@ final readonly class Write
             $names[self::columnName((string) $column)] = true;
         }
 
-        return new self(false, array_map('strval', array_keys($names)));
+        return new self(WriteKind::ColumnUpdate, array_map('strval', array_keys($names)));
+    }
+
+    public static function updateOfAnyColumn(): self
+    {
+        return new self(WriteKind::AnyUpdate);
     }
 
     public static function delete(): self
     {
-        return new self(true, []);
+        return new self(WriteKind::Delete);
+    }
+
+    public static function truncate(): self
+    {
+        return new self(WriteKind::Truncate);
     }
 
     /**
-     * A write whose rows and columns are not known, such as a raw statement or a truncate.
+     * A write whose kind is not known, such as an explicit invalidation of a table.
      */
     public static function unknown(): self
     {
-        return new self(true, null);
+        return new self(WriteKind::Unknown);
     }
 
     /**
@@ -68,15 +80,14 @@ final readonly class Write
      */
     public function dependentsFields(string $table): array
     {
-        if ($this->deletesRows) {
-            return $this->updatedColumns === null ? [self::deleteField($table), self::anyUpdateField($table)] : [self::deleteField($table)];
-        }
-
-        if ($this->updatedColumns === null) {
-            return [self::anyUpdateField($table)];
-        }
-
-        return [self::everyWriteField($table), ...array_map(static fn (string $column): string => self::columnUpdateField($table, $column), $this->updatedColumns)];
+        return match ($this->kind) {
+            WriteKind::Insert => [self::everyWriteField($table)],
+            WriteKind::ColumnUpdate => [self::everyWriteField($table), ...array_map(static fn (string $column): string => self::columnUpdateField($table, $column), $this->columns)],
+            WriteKind::AnyUpdate => [self::anyUpdateField($table)],
+            WriteKind::Delete => [self::deleteField($table)],
+            WriteKind::Truncate => [self::truncateField($table)],
+            WriteKind::Unknown => [self::truncateField($table), self::anyUpdateField($table)],
+        };
     }
 
     public static function everyWriteField(string $table): string
@@ -87,6 +98,11 @@ final readonly class Write
     public static function deleteField(string $table): string
     {
         return 'd:'.$table;
+    }
+
+    public static function truncateField(string $table): string
+    {
+        return 't:'.$table;
     }
 
     public static function anyUpdateField(string $table): string

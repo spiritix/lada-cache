@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Spiritix\LadaCache\Support\RawStatementClassifier;
 use Spiritix\LadaCache\Support\RawStatementEffect;
+use Spiritix\LadaCache\Support\Write;
 
 final class RawStatementClassifierTest extends TestCase
 {
@@ -58,7 +59,6 @@ final class RawStatementClassifierTest extends TestCase
         yield 'comma update' => ['update cars, drivers set cars.name = drivers.name'];
         yield 'multi-table delete' => ['delete cars from cars join drivers on drivers.id = cars.driver_id'];
         yield 'schema qualified' => ['update other_db.cars set name = ?'];
-        yield 'truncate cascade' => ['truncate cars cascade'];
         yield 'stored procedure' => ['call recalculate_prices()'];
         yield 'writable cte' => ['with moved as (delete from cars returning *) insert into archive select * from moved'];
         yield 'two statements' => ['update cars set name = 1; drop table drivers'];
@@ -107,7 +107,33 @@ final class RawStatementClassifierTest extends TestCase
         $this->assertTrue(RawStatementClassifier::classify('call report_prices()', '')->changesEverything);
         $this->assertTrue(RawStatementClassifier::classify('with recent as (select 1) update cars set name = 1', '')->changesEverything);
         $this->assertTrue(RawStatementClassifier::classify('table cars', '')->isNone());
-        $this->assertEquals(RawStatementEffect::writesTable('cars'), RawStatementClassifier::classify('insert into cars (name) values (?) returning id', ''));
-        $this->assertEquals(RawStatementEffect::writesTable('cars'), RawStatementClassifier::classify('delete from cars where id = ? returning *', ''));
+        $this->assertEquals(RawStatementEffect::writes(['cars'], Write::insert()), RawStatementClassifier::classify('insert into cars (name) values (?) returning id', ''));
+        $this->assertEquals(RawStatementEffect::writes(['cars'], Write::delete()), RawStatementClassifier::classify('delete from cars where id = ? returning *', ''));
+    }
+
+    /**
+     * @return iterable<string, array{string, list<string>, Write}>
+     */
+    public static function classifiedWrites(): iterable
+    {
+        yield 'insert' => ['insert into cars (name) values (?)', ['cars'], Write::insert()];
+        yield 'insert naming update in a literal' => ["insert into cars (name) values ('update')", ['cars'], Write::insert()];
+        yield 'insert on duplicate key update' => ['INSERT INTO cars (id) SELECT id FROM drivers ON DUPLICATE KEY UPDATE name = ?', ['cars'], Write::updateOfAnyColumn()];
+        yield 'insert on conflict do update' => ['insert into cars (id) values (1) on conflict (id) do update set name = excluded.name', ['cars'], Write::updateOfAnyColumn()];
+        yield 'insert or replace' => ['insert or replace into cars (id) values (?)', ['cars'], Write::delete()];
+        yield 'replace' => ['replace into cars (id) values (?)', ['cars'], Write::delete()];
+        yield 'update' => ['update cars set name = ?', ['cars'], Write::updateOfAnyColumn()];
+        yield 'delete' => ['delete from cars where id = ?', ['cars'], Write::delete()];
+        yield 'truncate' => ['truncate table cars', ['cars'], Write::truncate()];
+        yield 'truncate cascade' => ['truncate cars cascade', ['cars'], Write::truncate()];
+    }
+
+    /**
+     * @param  list<string>  $tables
+     */
+    #[DataProvider('classifiedWrites')]
+    public function testWritesAreClassifiedByWhatTheyDoToRows(string $sql, array $tables, Write $write): void
+    {
+        $this->assertEquals(RawStatementEffect::writes($tables, $write), RawStatementClassifier::classify($sql, ''));
     }
 }

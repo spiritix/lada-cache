@@ -70,7 +70,7 @@ final class SqlTableScanner
         return array_values(array_unique(self::tableNames($matches['name'], $tablePrefix)));
     }
 
-    private static function withoutLiterals(string $sql): string
+    public static function withoutLiterals(string $sql): string
     {
         return (string) preg_replace(self::LITERALS, "''", $sql);
     }

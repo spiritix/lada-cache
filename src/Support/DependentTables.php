@@ -16,11 +16,13 @@ use UnexpectedValueException;
  * rules on deletes and their update rules on updates that assign a referenced column. Writing an
  * updatable view writes its base tables. A changed table changes its own dependents in turn:
  * a cascading delete deletes the child rows, while a cascading or nulling update, and a nulling
- * delete, only assign the child's foreign key columns. Tables reached through views, triggers
- * or configuration are written in ways not known, so all of their dependents change.
+ * delete, only assign the child's foreign key columns. A truncate empties every referencing
+ * table whatever its rules, as PostgreSQL's `TRUNCATE ... CASCADE` does. Tables reached through
+ * views, triggers or configuration are written in ways not known, so the dependents any delete or
+ * update of them changes change.
  *
  * @phpstan-type ForeignKey array{child: string, parentColumns: list<string>, childColumns: list<string>, onDelete: ReferentialAction, onUpdate: ReferentialAction}
- * @phpstan-type Change array{0: 'any'|'delete'|'update', 1: string, 2?: string}
+ * @phpstan-type Change array{0: 'any'|'delete'|'truncate', 1: string}|array{0: 'update', 1: string, 2: string}
  */
 final class DependentTables
 {
@@ -28,7 +30,7 @@ final class DependentTables
      * Part of the name of the dependency map in Redis, so hosts reading another field layout
      * keep their own map.
      */
-    public const int LAYOUT = 2;
+    public const int LAYOUT = 3;
 
     /**
      * @return array<string, list<string>> `Write` dependents field => tables changed along with it
@@ -261,6 +263,7 @@ final class DependentTables
             $starts = [
                 Write::everyWriteField($table) => $everyWriteChanges,
                 Write::deleteField($table) => [...$everyWriteChanges, ...self::changesOfDelete($keys)],
+                Write::truncateField($table) => [...$everyWriteChanges, ...self::changesOfTruncate($keys)],
                 Write::anyUpdateField($table) => [...$everyWriteChanges, ...self::changesOfUpdate($keys, null)],
             ];
             foreach (array_keys($updatedColumns) as $column) {
@@ -315,6 +318,7 @@ final class DependentTables
             array_push($queue, ...match ($kind) {
                 'any' => [...self::changesOfDelete($keys), ...self::changesOfUpdate($keys, null)],
                 'delete' => self::changesOfDelete($keys),
+                'truncate' => self::changesOfTruncate($keys),
                 'update' => self::changesOfUpdate($keys, $change[2] ?? null),
             });
         }
@@ -341,6 +345,15 @@ final class DependentTables
         }
 
         return $changes;
+    }
+
+    /**
+     * @param  list<ForeignKey>  $foreignKeys
+     * @return list<Change>
+     */
+    private static function changesOfTruncate(array $foreignKeys): array
+    {
+        return array_map(static fn (array $foreignKey): array => ['truncate', $foreignKey['child']], $foreignKeys);
     }
 
     /**

@@ -204,6 +204,16 @@ final class DependentTablesTest extends TestCase
         $this->assertCacheHas($petsKey, $petsTags);
     }
 
+    public function testTruncatingAParentRefreshesCachedReadsOfEveryReferencingTable(): void
+    {
+        $this->requireDatabaseDriver('pgsql');
+        $this->assertSame(1, DB::table('owner_audits')->count());
+
+        DB::table('owners')->truncate();
+
+        $this->assertSame(0, DB::table('owner_audits')->count(), 'TRUNCATE ... CASCADE empties restricting children too');
+    }
+
     public function testRawDeleteRefreshesCachedReadsOfCascadedChildren(): void
     {
         $this->assertSame(2, DB::table('pets')->count());

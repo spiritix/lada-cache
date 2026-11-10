@@ -11,22 +11,26 @@ final readonly class RawStatementEffect
      */
     private function __construct(
         public array $tables,
+        public Write $write,
         public bool $changesEverything,
     ) {}
 
     public static function none(): self
     {
-        return new self([], false);
+        return new self([], Write::insert(), false);
     }
 
-    public static function writesTable(string $table): self
+    /**
+     * @param  non-empty-list<string>  $tables
+     */
+    public static function writes(array $tables, Write $write): self
     {
-        return new self([$table], false);
+        return new self($tables, $write, false);
     }
 
     public static function everything(): self
     {
-        return new self([], true);
+        return new self([], Write::unknown(), true);
     }
 
     public function isNone(): bool

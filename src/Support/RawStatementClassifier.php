@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Support;
 
+use LogicException;
+
 final class RawStatementClassifier
 {
     private const string TABLE = '(?<table>[`"\[]?[\w$]+[`"\]]?(?:\.[`"\[]?[\w$]+[`"\]]?)?)';
@@ -18,11 +20,11 @@ final class RawStatementClassifier
     ];
 
     private const array TABLE_WRITE_PATTERNS = [
-        '/^insert\s+(?:(?:low_priority|delayed|high_priority|ignore)\s+)*(?:or\s+\w+\s+)?(?:into\s+)?'.self::TABLE.'(?=[\s(]|$)/i',
-        '/^replace\s+(?:(?:low_priority|delayed)\s+)*(?:into\s+)?'.self::TABLE.'(?=[\s(]|$)/i',
-        '/^update\s+(?:(?:low_priority|ignore|only)\s+)*'.self::TABLE.'(?:\s+(?:as\s+)?(?!set\b)\w+)?\s+set\s/i',
-        '/^delete\s+(?:(?:low_priority|quick|ignore)\s+)*from\s+(?:only\s+)?'.self::TABLE.'(?:\s+(?:as\s+)?(?!(?:where|using|order|limit|returning)\b)\w+)?(?:\s+(?:where|using|order|limit|returning)\b|\s*$)/i',
-        '/^truncate\s+(?:table\s+)?(?:only\s+)?'.self::TABLE.'(?:\s+(?:restart|continue)\s+identity)?(?:\s+restrict)?\s*$/i',
+        'insert' => '/^insert\s+(?:(?:low_priority|delayed|high_priority|ignore)\s+)*(?:or\s+\w+\s+)?(?:into\s+)?'.self::TABLE.'(?=[\s(]|$)/i',
+        'replace' => '/^replace\s+(?:(?:low_priority|delayed)\s+)*(?:into\s+)?'.self::TABLE.'(?=[\s(]|$)/i',
+        'update' => '/^update\s+(?:(?:low_priority|ignore|only)\s+)*'.self::TABLE.'(?:\s+(?:as\s+)?(?!set\b)\w+)?\s+set\s/i',
+        'delete' => '/^delete\s+(?:(?:low_priority|quick|ignore)\s+)*from\s+(?:only\s+)?'.self::TABLE.'(?:\s+(?:as\s+)?(?!(?:where|using|order|limit|returning)\b)\w+)?(?:\s+(?:where|using|order|limit|returning)\b|\s*$)/i',
+        'truncate' => '/^truncate\s+(?:table\s+)?(?:only\s+)?'.self::TABLE.'(?:\s+(?:restart|continue)\s+identity)?(?:\s+(?:restrict|cascade))?\s*$/i',
     ];
 
     private const string EXPLAIN_PATTERN = '/^explain\s+(?<options>\([^)]*\)\s*|(?:(?:analy[sz]e|verbose|costs|buffers|timing|summary|settings|generic_plan|memory|serialize|wal|extended|partitions|format\s*=?\s*\w+)\s+)*)(?<statement>(?:select|insert|update|delete|replace|merge|with|values|table|execute|create|declare)\b.*)$/is';
@@ -79,7 +81,7 @@ final class RawStatementClassifier
 
     private static function classifyWrite(string $statement, string $tablePrefix): RawStatementEffect
     {
-        foreach (self::TABLE_WRITE_PATTERNS as $pattern) {
+        foreach (self::TABLE_WRITE_PATTERNS as $kind => $pattern) {
             if (preg_match($pattern, $statement, $matches) !== 1) {
                 continue;
             }
@@ -90,10 +92,32 @@ final class RawStatementClassifier
                 return RawStatementEffect::everything();
             }
 
-            return RawStatementEffect::writesTable(TableName::withoutPrefix(trim($table, '`"[]'), $tablePrefix));
+            return RawStatementEffect::writes([TableName::withoutPrefix(trim($table, '`"[]'), $tablePrefix)], self::singleTableWrite($kind, $statement));
         }
 
         return RawStatementEffect::everything();
+    }
+
+    /**
+     * An INSERT that names UPDATE or REPLACE anywhere outside literals may update or replace
+     * existing rows (`ON DUPLICATE KEY UPDATE`, `ON CONFLICT DO UPDATE`, `INSERT OR REPLACE`);
+     * REPLACE deletes the rows it conflicts with.
+     */
+    private static function singleTableWrite(string $kind, string $statement): Write
+    {
+        $code = SqlTableScanner::withoutLiterals($statement);
+
+        return match ($kind) {
+            'insert' => match (true) {
+                preg_match('/\\breplace\\b/i', $code) === 1 => Write::delete(),
+                preg_match('/\\bupdate\\b/i', $code) === 1 => Write::updateOfAnyColumn(),
+                default => Write::insert(),
+            },
+            'replace', 'delete' => Write::delete(),
+            'update' => Write::updateOfAnyColumn(),
+            'truncate' => Write::truncate(),
+            default => throw new LogicException('Unknown raw write kind '.$kind),
+        };
     }
 
     private static function normalize(string $sql): string

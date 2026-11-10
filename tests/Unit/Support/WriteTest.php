@@ -29,7 +29,7 @@ final class WriteTest extends TestCase
 
     public function testUnknownWritesChangeWhatAnyDeleteOrUpdateFires(): void
     {
-        $this->assertSame(['d:cars', 'u:cars'], Write::unknown()->dependentsFields('cars'));
+        $this->assertSame(['t:cars', 'u:cars'], Write::unknown()->dependentsFields('cars'));
     }
 
     public function testWritesAffectingNoRowsFireNoForeignKey(): void

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\QueryHandler;
 use Spiritix\LadaCache\Support\RedisCooldown;
+use Spiritix\LadaCache\Support\Write;
 use Throwable;
 
 /**
@@ -58,7 +59,7 @@ final class InvalidateCommand extends Command
 
         /** @var QueryHandler $handler */
         $handler = app('lada.handler');
-        $handler->invalidateTables($connection, $tables);
+        $handler->invalidateTables($connection, $tables, Write::unknown());
 
         if (! $handler->replayFailedInvalidations(RedisCooldown::Ignore)) {
             $this->error('Redis rejected the invalidation; it is kept and replayed once Redis accepts it.');
