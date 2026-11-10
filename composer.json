@@ -35,7 +35,7 @@
         "phpstan/phpstan": "^2.1"
     },
     "suggest": {
-        "barryvdh/laravel-debugbar": "Provides debug information about the cache"
+        "fruitcake/laravel-debugbar": "Provides debug information about the cache"
     },
     "autoload": {
         "psr-4": {
@@ -46,11 +46,6 @@
         "psr-4": {
             "Spiritix\\LadaCache\\Tests\\": "tests/"
         }
-    },
-    "scripts": {
-        "test": "vendor/bin/phpunit --configuration phpunit.xml --coverage-clover coverage.xml",
-        "bugs": "vendor/bin/phpstan analyse --level=max src/",
-        "format": "vendor/bin/pint src/"
     },
     "minimum-stability": "stable",
     "prefer-stable": true,
