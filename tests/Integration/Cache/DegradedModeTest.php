@@ -51,6 +51,21 @@ final class DegradedModeTest extends TestCase
         $this->assertInvalidConfigurationDisablesTheCache(['lada-cache.expiration_jitter' => 150]);
     }
 
+    public function testNonStringPrefixDisablesTheCacheInsteadOfCrashing(): void
+    {
+        $this->assertInvalidConfigurationDisablesTheCache(['lada-cache.prefix' => ['lada:']]);
+    }
+
+    public function testNonStringRedisConnectionDisablesTheCacheInsteadOfCrashing(): void
+    {
+        $this->assertInvalidConfigurationDisablesTheCache(['lada-cache.redis_connection' => 7]);
+    }
+
+    public function testNonStringExcludedTableDisablesTheCacheInsteadOfCrashing(): void
+    {
+        $this->assertInvalidConfigurationDisablesTheCache(['lada-cache.exclude_tables' => ['cars', ['engines']]]);
+    }
+
     public function testConfigurationOfAnEarlierVersionDisablesTheCacheNamingTheRenamedKeys(): void
     {
         $this->assertInvalidConfigurationDisablesTheCache(['lada-cache.expiration-time' => 3600, 'lada-cache.consider-rows' => true]);

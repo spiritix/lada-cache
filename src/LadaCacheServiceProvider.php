@@ -164,6 +164,8 @@ final class LadaCacheServiceProvider extends ServiceProvider
             CacheScope::fromConfig();
             ConfigValue::strings('lada-cache.include_tables');
             ConfigValue::strings('lada-cache.exclude_tables');
+            ConfigValue::string('lada-cache.prefix', Redis::DEFAULT_PREFIX);
+            ConfigValue::string('lada-cache.redis_connection', Redis::DEFAULT_CONNECTION);
             ExpirationPolicy::fromConfig();
             EntrySizeLimit::fromConfig();
             ReplicaReads::configuredLagSeconds();

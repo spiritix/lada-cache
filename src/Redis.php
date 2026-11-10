@@ -31,6 +31,10 @@ use Throwable;
  */
 final class Redis
 {
+    public const string DEFAULT_PREFIX = 'lada:';
+
+    public const string DEFAULT_CONNECTION = 'cache';
+
     private readonly string $prefix;
 
     private readonly string $connectionName;
@@ -43,8 +47,8 @@ final class Redis
         private ?Connection $connection = null,
         ?RedisAvailability $availability = null,
     ) {
-        $this->prefix = ConfigValue::string('lada-cache.prefix', 'lada:');
-        $this->connectionName = $connection?->getName() ?? ConfigValue::string('lada-cache.redis_connection', 'cache');
+        $this->prefix = ConfigValue::string('lada-cache.prefix', self::DEFAULT_PREFIX);
+        $this->connectionName = $connection?->getName() ?? ConfigValue::string('lada-cache.redis_connection', self::DEFAULT_CONNECTION);
         $this->availability = $availability ?? RedisAvailability::detect($this->processStateKey('unavailable'));
     }
 
