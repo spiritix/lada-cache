@@ -95,4 +95,14 @@ interface Dialect
     public function supportsLeftAssociativeJoinsWithoutParens(): bool;
 
     public function supportsCrossJoinConstraint(): bool;
+
+    public function supportsCommaJoinConstraint(): bool;
+
+    public function supportsTableVersioning(): bool;
+
+    public function supportsObjectNameDoubleDotNotation(): bool;
+
+    public function supportsStringLiteralTableAlias(bool $explicit): bool;
+
+    public function supportsInTableExpression(): bool;
 }

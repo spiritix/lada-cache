@@ -10,7 +10,7 @@ namespace Spiritix\LadaCache\Support\Sql;
 final readonly class MergeStatement
 {
     /**
-     * @param  list<string>  $target
+     * @param  non-empty-list<string>  $target
      */
     public function __construct(public array $target) {}
 }

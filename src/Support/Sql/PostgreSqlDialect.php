@@ -96,4 +96,9 @@ final class PostgreSqlDialect implements Dialect
     {
         return true;
     }
+
+    public function supportsStringLiteralTableAlias(bool $explicit): bool
+    {
+        return false;
+    }
 }

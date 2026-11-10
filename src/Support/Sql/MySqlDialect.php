@@ -91,4 +91,9 @@ final class MySqlDialect implements Dialect
     {
         return false;
     }
+
+    public function supportsStringLiteralTableAlias(bool $explicit): bool
+    {
+        return false;
+    }
 }

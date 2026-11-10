@@ -12,7 +12,7 @@ namespace Spiritix\LadaCache\Support\Sql;
 final readonly class TableFactor
 {
     /**
-     * @param  list<string>|null  $name  the parts of a named table's name, null for any other relation
+     * @param  non-empty-list<string>|null  $name  the parts of a named table's name, null for any other relation
      * @param  list<TableFactor>  $nested  the relations of a parenthesized join
      */
     private function __construct(
@@ -22,7 +22,7 @@ final readonly class TableFactor
     ) {}
 
     /**
-     * @param  list<string>  $name
+     * @param  non-empty-list<string>  $name
      */
     public static function table(array $name, ?string $alias): self
     {

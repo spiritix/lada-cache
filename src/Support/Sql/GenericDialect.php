@@ -76,6 +76,16 @@ final class GenericDialect implements Dialect
         return true;
     }
 
+    public function supportsCommaJoinConstraint(): bool
+    {
+        return true;
+    }
+
+    public function supportsInTableExpression(): bool
+    {
+        return true;
+    }
+
     public function supportsTablePartitions(): bool
     {
         return true;

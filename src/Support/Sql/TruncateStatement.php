@@ -10,7 +10,7 @@ namespace Spiritix\LadaCache\Support\Sql;
 final readonly class TruncateStatement
 {
     /**
-     * @param  non-empty-list<list<string>>  $tables
+     * @param  non-empty-list<non-empty-list<string>>  $tables
      */
     public function __construct(public array $tables) {}
 }

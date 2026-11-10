@@ -11,7 +11,7 @@ namespace Spiritix\LadaCache\Support\Sql;
 final readonly class InsertStatement
 {
     /**
-     * @param  list<string>  $table
+     * @param  non-empty-list<string>  $table
      * @param  list<Assignment>|null  $conflictAssignments  what `ON DUPLICATE KEY UPDATE` or `ON CONFLICT DO UPDATE` assigns, null without one
      */
     public function __construct(

@@ -55,4 +55,14 @@ final class MsSqlDialect implements Dialect
     {
         return ! $word->isKeyword(...self::RESERVED_FOR_ALIAS) && ($explicit || $this->isTableAlias($word, $next));
     }
+
+    public function supportsTableVersioning(): bool
+    {
+        return true;
+    }
+
+    public function supportsObjectNameDoubleDotNotation(): bool
+    {
+        return true;
+    }
 }

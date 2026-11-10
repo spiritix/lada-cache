@@ -202,4 +202,29 @@ trait DialectDefaults
     {
         return false;
     }
+
+    public function supportsCommaJoinConstraint(): bool
+    {
+        return false;
+    }
+
+    public function supportsTableVersioning(): bool
+    {
+        return false;
+    }
+
+    public function supportsObjectNameDoubleDotNotation(): bool
+    {
+        return false;
+    }
+
+    public function supportsStringLiteralTableAlias(bool $explicit): bool
+    {
+        return true;
+    }
+
+    public function supportsInTableExpression(): bool
+    {
+        return false;
+    }
 }

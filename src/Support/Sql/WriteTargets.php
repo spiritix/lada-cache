@@ -12,7 +12,7 @@ namespace Spiritix\LadaCache\Support\Sql;
 final class WriteTargets
 {
     /**
-     * @return non-empty-list<list<string>>
+     * @return non-empty-list<non-empty-list<string>>
      */
     public static function of(InsertStatement|UpdateStatement|DeleteStatement|TruncateStatement|MergeStatement $statement): array
     {
@@ -50,7 +50,7 @@ final class WriteTargets
     }
 
     /**
-     * @return non-empty-list<list<string>>
+     * @return non-empty-list<non-empty-list<string>>
      */
     private static function ofUpdate(UpdateStatement $statement): array
     {
@@ -61,9 +61,8 @@ final class WriteTargets
         $targets = [];
         foreach ($statement->assignments as $assignment) {
             foreach ($assignment->targets as $target) {
-                $resolved = count($target) === 1
-                    ? self::namedTables($statement->tables)
-                    : self::resolve(array_slice($target, 0, -1), $statement->tables);
+                $qualifier = array_slice($target, 0, -1);
+                $resolved = $qualifier === [] ? self::namedTables($statement->tables) : self::resolve($qualifier, $statement->tables);
                 foreach ($resolved as $name) {
                     $targets[implode("\0", $name)] = $name;
                 }
@@ -78,7 +77,7 @@ final class WriteTargets
      * relations after FROM, both resolved among the joined relations; otherwise the relations
      * after FROM are the targets.
      *
-     * @return non-empty-list<list<string>>
+     * @return non-empty-list<non-empty-list<string>>
      */
     private static function ofDelete(DeleteStatement $statement): array
     {
@@ -108,9 +107,9 @@ final class WriteTargets
     }
 
     /**
-     * @param  list<string>  $qualifier
+     * @param  non-empty-list<string>  $qualifier
      * @param  list<TableFactor>  $relations
-     * @return list<list<string>>
+     * @return list<non-empty-list<string>>
      */
     private static function resolve(array $qualifier, array $relations): array
     {
@@ -124,7 +123,7 @@ final class WriteTargets
 
     /**
      * @param  list<TableFactor>  $relations
-     * @return array<string, list<list<string>>> lowercase alias or unqualified name => the tables it may refer to
+     * @return array<string, list<non-empty-list<string>>> lowercase alias or unqualified name => the tables it may refer to
      */
     private static function references(array $relations): array
     {
@@ -132,8 +131,11 @@ final class WriteTargets
 
         foreach ($relations as $relation) {
             foreach ($relation->tables() as $table) {
-                $name = $table->name ?? [];
-                foreach (array_filter([$table->alias, $name[array_key_last($name)] ?? null]) as $reference) {
+                $name = $table->name;
+                if ($name === null) {
+                    continue;
+                }
+                foreach (array_filter([$table->alias, $name[array_key_last($name)]]) as $reference) {
                     $references[strtolower($reference)][implode("\0", $name)] = $name;
                 }
             }
@@ -144,7 +146,7 @@ final class WriteTargets
 
     /**
      * @param  list<TableFactor>  $relations
-     * @return list<list<string>>
+     * @return list<non-empty-list<string>>
      */
     private static function namedTables(array $relations, bool $requireAllNamed = false): array
     {
@@ -168,8 +170,8 @@ final class WriteTargets
     }
 
     /**
-     * @param  list<list<string>>  $targets
-     * @return non-empty-list<list<string>>
+     * @param  list<non-empty-list<string>>  $targets
+     * @return non-empty-list<non-empty-list<string>>
      */
     private static function nonEmpty(array $targets, string $statement): array
     {

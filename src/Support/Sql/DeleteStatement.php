@@ -11,7 +11,7 @@ namespace Spiritix\LadaCache\Support\Sql;
 final readonly class DeleteStatement
 {
     /**
-     * @param  list<list<string>>  $targets  the tables listed before FROM (`DELETE a, b FROM ...`)
+     * @param  list<non-empty-list<string>>  $targets  the tables listed before FROM (`DELETE a, b FROM ...`)
      * @param  list<TableFactor>  $from  the relations after FROM, joins included
      * @param  list<TableFactor>|null  $using  the relations after USING, null without USING
      */

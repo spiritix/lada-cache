@@ -64,6 +64,16 @@ final class SQLiteDialect implements Dialect
         return true;
     }
 
+    public function supportsCommaJoinConstraint(): bool
+    {
+        return true;
+    }
+
+    public function supportsInTableExpression(): bool
+    {
+        return true;
+    }
+
     public function isTableAlias(Token $word, ?Token $next): bool
     {
         return match (true) {

@@ -5,23 +5,34 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Support\Sql;
 
 /**
- * Ported from sqlparser-rs src/parser/mod.rs (Apache-2.0), commit 8a176d9: `parse_insert`,
- * `parse_replace`, `parse_update`, `parse_assignment`, `parse_delete`, `parse_truncate`,
- * `parse_merge`, `parse_table_and_joins`, `parse_joins`, `parse_table_factor`,
- * `maybe_parse_table_alias`, `parse_table_index_hints`, `parse_join_constraint` and
- * `parse_object_name`, reduced to the relations and assigned columns a statement names.
+ * Ported from sqlparser-rs src/parser/mod.rs and src/parser/merge.rs (Apache-2.0), commit 8a176d9:
+ * `parse_insert`, `parse_replace`, `parse_update`, `parse_assignment`, `parse_delete`,
+ * `parse_truncate`, `parse_merge`, `maybe_parse_output_clause`, `parse_table_with_joins`,
+ * `parse_table_and_joins`, `parse_joins`, `parse_table_factor`, `parse_derived_table_factor`,
+ * `maybe_parse_table_alias`, `parse_table_index_hints`, `maybe_parse_table_version`,
+ * `maybe_parse_table_sample`, `parse_join_constraint`, `parse_object_name`, `parse_identifier`
+ * and the table target of `parse_in`, reduced to the relations and assigned columns a statement
+ * names.
  *
  * Expressions are not parsed but skipped as balanced token runs up to the keyword or punctuation
- * that ends them in the surrounding grammar. Beyond upstream, MySQL's DELETE and UPDATE modifiers
- * (`LOW_PRIORITY`, `QUICK`, `IGNORE`), its comma-separated UPDATE table list, `t.*` delete targets
- * and SQLite's `REPLACE INTO` are accepted, as both databases document them.
+ * that ends them in the surrounding grammar, so a parenthesis after FROM is told to open a
+ * subquery rather than a join by looking ahead for the start of a query. Beyond upstream, MySQL's
+ * DELETE and UPDATE modifiers (`LOW_PRIORITY`, `QUICK`, `IGNORE`), its comma-separated UPDATE
+ * table list, `t.*` delete targets and SQLite's `REPLACE INTO` are accepted, as both databases
+ * document them; `TABLE t` query bodies count as reads of `t`; and writes whose effect a table list
+ * cannot describe throw: SQLite's `UPDATE OR REPLACE`, which deletes the rows it conflicts with,
+ * and T-SQL's `OUTPUT ... INTO` a table rather than a table variable.
  */
 final class Parser
 {
     private const array CLAUSE_KEYWORDS = [
         'WHERE', 'GROUP', 'HAVING', 'ORDER', 'LIMIT', 'OFFSET', 'FETCH', 'UNION', 'EXCEPT', 'INTERSECT',
-        'WINDOW', 'QUALIFY', 'FOR', 'LOCK', 'INTO', 'RETURNING', 'OUTPUT', 'SET', 'USING', 'ON',
+        'WINDOW', 'QUALIFY', 'LOCK', 'INTO', 'RETURNING', 'OUTPUT', 'SET', 'USING',
     ];
+
+    private const array LOCKING_AND_FOR_CLAUSE_KEYWORDS = ['UPDATE', 'SHARE', 'NO', 'KEY', 'READ', 'XML', 'JSON', 'BROWSE'];
+
+    private const array QUERY_CONTINUATION_KEYWORDS = ['UNION', 'EXCEPT', 'INTERSECT', 'ORDER', 'LIMIT', 'OFFSET', 'FETCH'];
 
     private const array JOIN_KEYWORDS = ['JOIN', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'CROSS', 'NATURAL', 'STRAIGHT_JOIN', 'OUTER'];
 
@@ -31,9 +42,6 @@ final class Parser
     private readonly array $tokens;
 
     private int $index = 0;
-
-    /** @var array<int, true> */
-    private array $tableFactorStarts = [];
 
     /**
      * @param  list<Token>  $tokens
@@ -66,9 +74,9 @@ final class Parser
     }
 
     /**
-     * Every relation named after FROM or JOIN anywhere in the statement, subqueries included.
-     * Throws when a FROM clause has a shape this port does not know, since a relation in it
-     * could be missed.
+     * Every relation named after FROM or JOIN anywhere in the statement, subqueries included, the
+     * tables of `TABLE t` query bodies and those SQLite's `x IN t` tests against. Throws when a FROM clause has a shape this port
+     * does not know, since a relation in it could be missed.
      *
      * @return list<TableFactor>
      */
@@ -76,19 +84,53 @@ final class Parser
     {
         $openers = $this->enclosingOpeners();
         $relations = [];
+        $parsedUntil = 0;
 
         foreach ($this->tokens as $position => $token) {
+            $this->index = $position + 1;
+
             if ($token->isKeyword('FROM') && ! $this->isFunctionArgumentFrom($position, $openers)) {
-                $this->index = $position + 1;
-                $relations = [...$relations, ...$this->parseCommaSeparatedTablesAndJoins()];
+                $relations = [...$relations, ...$this->parseTableWithJoins()];
                 $this->expectEndOfFromClause();
-            } elseif ($token->isKeyword('JOIN') && ! isset($this->tableFactorStarts[$position + 1])) {
-                $this->index = $position + 1;
+            } elseif ($token->isKeyword('JOIN') && $position >= $parsedUntil) {
                 $relations[] = $this->parseTableFactor();
+            } elseif ($this->startsTableQueryBody($position)) {
+                $relations[] = TableFactor::table($this->parseObjectName(), null);
+            } elseif ($this->startsInTableTarget($position)) {
+                $name = $this->parseObjectName();
+                if (! $this->peekIs(TokenKind::LParen)) {
+                    $relations[] = TableFactor::table($name, null);
+                }
+            } else {
+                continue;
             }
+
+            $parsedUntil = max($parsedUntil, $this->index);
         }
 
         return $relations;
+    }
+
+    private function startsInTableTarget(int $position): bool
+    {
+        $next = $this->tokens[$position + 1] ?? null;
+
+        return $this->dialect->supportsInTableExpression()
+            && $this->tokens[$position]->isKeyword('IN')
+            && $next !== null && $next->isWord() && $this->dialect->isTableFactor($next);
+    }
+
+    /**
+     * Whether the position holds the `TABLE` of a `TABLE t` query body, which reads all of `t`.
+     */
+    private function startsTableQueryBody(int $position): bool
+    {
+        $previous = $this->tokens[$position - 1] ?? null;
+        $next = $this->tokens[$position + 1] ?? null;
+
+        return $this->tokens[$position]->isKeyword('TABLE')
+            && $next !== null && ! $next->is(TokenKind::LParen)
+            && ($previous === null || $previous->is(TokenKind::LParen) || $previous->isKeyword('UNION', 'EXCEPT', 'INTERSECT', 'ALL', 'DISTINCT'));
     }
 
     private function parseReplace(): InsertStatement
@@ -102,15 +144,7 @@ final class Parser
 
     private function parseInsert(bool $replaceInto): InsertStatement
     {
-        $replaces = $replaceInto;
-
-        if ($this->parseKeyword('OR')) {
-            $conflict = $this->next();
-            if (! $conflict->isKeyword('REPLACE', 'ROLLBACK', 'ABORT', 'FAIL', 'IGNORE')) {
-                throw $this->expected('REPLACE, ROLLBACK, ABORT, FAIL or IGNORE after OR', $conflict);
-            }
-            $replaces = $replaces || $conflict->isKeyword('REPLACE');
-        }
+        $replaces = $this->parseConflictClause() === 'REPLACE' || $replaceInto;
 
         if ($this->dialect instanceof MySqlDialect) {
             $this->parseOneOfKeywords('LOW_PRIORITY', 'DELAYED', 'HIGH_PRIORITY');
@@ -152,7 +186,9 @@ final class Parser
                 continue;
             }
 
-            $this->index++;
+            if (! $this->maybeParseOutputClause()) {
+                $this->index++;
+            }
         }
 
         return $assignments;
@@ -160,7 +196,9 @@ final class Parser
 
     private function parseUpdate(): UpdateStatement
     {
-        $this->parseConflictClause();
+        if ($this->parseConflictClause() === 'REPLACE') {
+            throw new ParserException('UPDATE OR REPLACE deletes the rows it conflicts with');
+        }
 
         if ($this->dialect instanceof MySqlDialect) {
             $this->parseOneOfKeywords('LOW_PRIORITY');
@@ -168,19 +206,27 @@ final class Parser
         }
 
         $tables = $this->dialect instanceof MySqlDialect ? $this->parseCommaSeparatedTablesAndJoins() : $this->parseTableAndJoins();
-        $this->expectKeyword('SET');
 
-        return new UpdateStatement($tables, $this->parseAssignments());
+        if ($this->parseKeyword('FROM')) {
+            $this->parseTableWithJoins();
+        }
+
+        $this->expectKeyword('SET');
+        $assignments = $this->parseAssignments();
+        $this->maybeParseOutputClause();
+
+        return new UpdateStatement($tables, $assignments);
     }
 
-    private function parseConflictClause(): void
+    private function parseConflictClause(): ?string
     {
-        if ($this->parseKeyword('OR')) {
-            $conflict = $this->next();
-            if (! $conflict->isKeyword('REPLACE', 'ROLLBACK', 'ABORT', 'FAIL', 'IGNORE')) {
-                throw $this->expected('REPLACE, ROLLBACK, ABORT, FAIL or IGNORE after OR', $conflict);
-            }
+        if (! $this->parseKeyword('OR')) {
+            return null;
         }
+
+        $conflict = $this->parseOneOfKeywords('REPLACE', 'ROLLBACK', 'ABORT', 'FAIL', 'IGNORE');
+
+        return $conflict ?? throw $this->expected('REPLACE, ROLLBACK, ABORT, FAIL or IGNORE after OR', $this->peek());
     }
 
     /**
@@ -214,9 +260,55 @@ final class Parser
             throw $this->expected('= for assignment', $equals);
         }
 
-        $this->skipExpression('FROM', 'WHERE', 'RETURNING', 'OUTPUT', 'ORDER', 'LIMIT', 'ON');
+        $this->skipExpression('FROM', 'WHERE', 'ORDER', 'LIMIT', 'ON', ...$this->returningKeywords());
 
         return new Assignment($targets);
+    }
+
+    /**
+     * The keyword that starts the clause returning a write's rows: none in MySQL, whose UPDATE
+     * returns none, and T-SQL's `OUTPUT` instead of `RETURNING`. Either is a column name elsewhere.
+     *
+     * @return list<string>
+     */
+    private function returningKeywords(): array
+    {
+        return match (true) {
+            $this->dialect instanceof MySqlDialect => [],
+            $this->dialect instanceof MsSqlDialect => ['OUTPUT'],
+            default => ['RETURNING'],
+        };
+    }
+
+    /**
+     * Skips a T-SQL `OUTPUT` clause, which may also insert the returned rows into a table variable;
+     * inserting them into a table throws, as the statement then writes a table besides its target.
+     */
+    private function maybeParseOutputClause(): bool
+    {
+        if (! $this->dialect instanceof MsSqlDialect || ! $this->parseKeyword('OUTPUT')) {
+            return false;
+        }
+
+        do {
+            $this->skipExpression('INTO', 'FROM', 'WHERE', 'VALUES', 'SELECT', 'DEFAULT', 'WITH', 'EXEC', 'EXECUTE', 'OPTION');
+        } while ($this->consume(TokenKind::Comma));
+
+        if (! $this->parseKeyword('INTO')) {
+            return true;
+        }
+
+        $target = $this->peek();
+        if ($target === null || ! $target->isWord() || $target->quoteStyle !== null || ! str_starts_with($target->value, '@') || $this->peekIs(TokenKind::Period, 1)) {
+            throw new ParserException('OUTPUT INTO writes a table besides the statement\'s target'.($target === null ? '' : " at offset {$target->offset}"));
+        }
+
+        $this->index++;
+        if ($this->peekIs(TokenKind::LParen)) {
+            $this->skipGroup();
+        }
+
+        return true;
     }
 
     private function parseDelete(): DeleteStatement
@@ -237,13 +329,14 @@ final class Parser
         }
 
         $from = $this->parseCommaSeparatedTablesAndJoins();
+        $this->maybeParseOutputClause();
         $using = $this->parseKeyword('USING') ? $this->parseCommaSeparatedTablesAndJoins() : null;
 
         return new DeleteStatement($targets, $from, $using);
     }
 
     /**
-     * @return list<string>
+     * @return non-empty-list<string>
      */
     private function parseDeleteTarget(): array
     {
@@ -277,8 +370,20 @@ final class Parser
     private function parseMerge(): MergeStatement
     {
         $this->parseKeyword('INTO');
+        $table = $this->parseTableFactor();
+        $this->expectKeyword('USING');
+        $this->parseTableFactor();
+        $this->expectKeyword('ON');
 
-        return new MergeStatement($this->parseObjectName());
+        while (($token = $this->peek()) !== null) {
+            if ($token->is(TokenKind::LParen)) {
+                $this->skipGroup();
+            } elseif (! $this->maybeParseOutputClause()) {
+                $this->index++;
+            }
+        }
+
+        return new MergeStatement($table->name ?? throw new ParserException('MERGE writes a relation that is not a table'));
     }
 
     /**
@@ -290,6 +395,30 @@ final class Parser
 
         while ($this->consume(TokenKind::Comma)) {
             $relations = [...$relations, ...$this->parseTableAndJoins()];
+        }
+
+        return $relations;
+    }
+
+    /**
+     * The relations of a FROM clause; SQLite also joins a relation after a comma on a constraint
+     * (`FROM a, b ON a.id = b.id`).
+     *
+     * @return list<TableFactor>
+     */
+    private function parseTableWithJoins(): array
+    {
+        $relations = $this->parseTableAndJoins();
+
+        while ($this->consume(TokenKind::Comma)) {
+            $table = $this->parseTableAndJoins();
+
+            if ($this->dialect->supportsCommaJoinConstraint() && count($table) === 1 && $this->peek()?->isKeyword('ON', 'USING') === true) {
+                $this->parseJoinConstraint(false);
+                $table = [...$table, ...$this->parseJoins()];
+            }
+
+            $relations = [...$relations, ...$table];
         }
 
         return $relations;
@@ -311,6 +440,8 @@ final class Parser
         $relations = [];
 
         while (true) {
+            $global = $this->parseKeyword('GLOBAL');
+
             if ($this->parseKeyword('CROSS')) {
                 $isJoin = $this->parseKeyword('JOIN');
                 if (! $isJoin && ! $this->parseKeyword('APPLY')) {
@@ -357,6 +488,8 @@ final class Parser
                 $this->index++;
             } elseif ($natural) {
                 throw $this->expected('a join type after NATURAL', $peek);
+            } elseif ($global) {
+                throw $this->expected('a join after GLOBAL', $peek);
             } else {
                 break;
             }
@@ -387,7 +520,7 @@ final class Parser
         }
 
         if ($this->parseKeyword('ON')) {
-            $this->skipExpression(...self::JOIN_KEYWORDS, ...self::CLAUSE_KEYWORDS);
+            $this->skipExpression('ON', 'FOR', ...self::JOIN_KEYWORDS, ...self::CLAUSE_KEYWORDS);
 
             return;
         }
@@ -402,12 +535,16 @@ final class Parser
 
     private function parseTableFactor(): TableFactor
     {
-        $this->tableFactorStarts[$this->index] = true;
-
         if ($this->parseKeyword('LATERAL')) {
-            if (! $this->peekIs(TokenKind::LParen)) {
-                $this->parseObjectName();
+            if ($this->peekIs(TokenKind::LParen)) {
+                if (! $this->isDerivedTableAhead()) {
+                    throw $this->expected('a subquery after LATERAL', $this->peek(1));
+                }
+
+                return $this->parseDerivedTableFactor();
             }
+
+            $this->parseObjectName();
             $this->expectGroup();
             $this->parseWithOrdinality();
 
@@ -461,7 +598,7 @@ final class Parser
         $onlyParenthesized = $only && $this->consume(TokenKind::LParen);
 
         $first = $this->peek();
-        if ($first === null || ! $first->isWord() || ! $this->dialect->isTableFactor($first)) {
+        if ($first === null || ($first->isWord() && ! $this->dialect->isTableFactor($first))) {
             throw $this->expected('table name', $first);
         }
 
@@ -476,6 +613,8 @@ final class Parser
         if ($this->dialect->supportsTablePartitions() && $this->parseKeyword('PARTITION')) {
             $this->expectGroup();
         }
+
+        $this->maybeParseTableVersion();
 
         if ($this->peekIs(TokenKind::LParen)) {
             $this->expectGroup();
@@ -505,15 +644,40 @@ final class Parser
             $this->expectGroup();
         }
 
-        if ($this->parseKeyword('TABLESAMPLE')) {
-            $this->parseIdentifier();
-            $this->expectGroup();
-            if ($this->parseKeyword('REPEATABLE')) {
-                $this->expectGroup();
-            }
-        }
+        $this->maybeParseTableSample();
 
         return TableFactor::table($name, $alias);
+    }
+
+    private function maybeParseTableVersion(): void
+    {
+        if ($this->dialect->supportsTableVersioning() && $this->peekKeywords('FOR', 'SYSTEM_TIME', 'AS', 'OF')) {
+            $this->index += 4;
+            $this->skipExpression('AS', ...Keywords::RESERVED_FOR_TABLE_ALIAS);
+        }
+    }
+
+    private function maybeParseTableSample(): void
+    {
+        if ($this->parseOneOfKeywords('TABLESAMPLE', 'SAMPLE') === null) {
+            return;
+        }
+
+        $this->parseOneOfKeywords('BERNOULLI', 'ROW', 'SYSTEM', 'BLOCK');
+
+        if ($this->peekIs(TokenKind::LParen)) {
+            $this->skipGroup();
+        } else {
+            $quantity = $this->next();
+            if (! $quantity->is(TokenKind::Number) && ! $quantity->is(TokenKind::Placeholder) && ! $quantity->isWord()) {
+                throw $this->expected('a sample quantity', $quantity);
+            }
+            $this->parseOneOfKeywords('ROWS', 'PERCENT');
+        }
+
+        if ($this->parseOneOfKeywords('REPEATABLE', 'SEED') !== null) {
+            $this->expectGroup();
+        }
     }
 
     private function parseWithOrdinality(): void
@@ -528,20 +692,53 @@ final class Parser
      */
     private function isDerivedTableAhead(): bool
     {
-        $position = $this->index;
+        return $this->startsQuery($this->index + 1);
+    }
 
-        while (($this->tokens[$position] ?? null)?->is(TokenKind::LParen)) {
-            $position++;
+    /**
+     * Whether a query starts at the position: a query keyword, or a parenthesized query that the
+     * query goes on after or ends with.
+     */
+    private function startsQuery(int $position): bool
+    {
+        $token = $this->tokens[$position] ?? null;
+
+        if ($token === null || ! $token->is(TokenKind::LParen)) {
+            return $token !== null
+                && ($token->isKeyword('SELECT', 'WITH', 'VALUES') || ($token->isKeyword('TABLE') && ($this->tokens[$position + 1] ?? null)?->is(TokenKind::LParen) === false));
         }
 
-        return ($this->tokens[$position] ?? null)?->isKeyword('SELECT', 'WITH', 'VALUES', 'TABLE') === true;
+        if (! $this->startsQuery($position + 1)) {
+            return false;
+        }
+
+        $after = $this->tokens[$this->closingParenthesis($position) + 1] ?? null;
+
+        return $after !== null && ($after->is(TokenKind::RParen) || $after->isKeyword(...self::QUERY_CONTINUATION_KEYWORDS));
+    }
+
+    private function closingParenthesis(int $opening): int
+    {
+        $depth = 0;
+
+        for ($position = $opening; isset($this->tokens[$position]); $position++) {
+            if ($this->tokens[$position]->is(TokenKind::LParen)) {
+                $depth++;
+            } elseif ($this->tokens[$position]->is(TokenKind::RParen) && --$depth === 0) {
+                return $position;
+            }
+        }
+
+        throw new ParserException('Unbalanced parentheses');
     }
 
     private function parseDerivedTableFactor(): TableFactor
     {
         $this->expectGroup();
+        $alias = $this->maybeParseTableAlias();
+        $this->maybeParseTableSample();
 
-        return TableFactor::derived($this->maybeParseTableAlias());
+        return TableFactor::derived($alias);
     }
 
     private function parseParenthesizedTableFactor(): TableFactor
@@ -563,17 +760,14 @@ final class Parser
         $afterAs = $this->parseKeyword('AS');
         $token = $this->peek();
 
-        if ($token !== null && $token->isWord() && $this->dialect->isTableFactorAlias($afterAs, $token, $this->peek(1))) {
+        if ($token !== null
+            && (($token->isWord() && $this->dialect->isTableFactorAlias($afterAs, $token, $this->peek(1)))
+                || ($token->is(TokenKind::SingleQuotedString) && $this->dialect->supportsStringLiteralTableAlias($afterAs))
+                || $token->is(TokenKind::DoubleQuotedString))) {
             $this->index++;
             if ($this->peekIs(TokenKind::LParen)) {
-                $this->expectGroup();
+                $this->skipGroup();
             }
-
-            return $token->value;
-        }
-
-        if ($token !== null && $token->is(TokenKind::DoubleQuotedString)) {
-            $this->index++;
 
             return $token->value;
         }
@@ -604,15 +798,20 @@ final class Parser
     }
 
     /**
+     * The parts of a possibly qualified name, without a `.*` that follows it. T-SQL's `db..t`
+     * names the default schema with an empty part.
+     *
      * @return non-empty-list<string>
      */
     private function parseObjectName(): array
     {
         $parts = [$this->parseIdentifier()];
 
-        while ($this->peekIs(TokenKind::Period) && ($this->tokens[$this->index + 1] ?? null)?->isWord() === true) {
+        while ($this->peekIs(TokenKind::Period) && ! $this->peekIs(TokenKind::Mul, 1)) {
             $this->index++;
-            $parts[] = $this->parseIdentifier();
+            $parts[] = $this->dialect->supportsObjectNameDoubleDotNotation() && count($parts) === 1 && $this->peekIs(TokenKind::Period)
+                ? ''
+                : $this->parseIdentifier();
         }
 
         return $parts;
@@ -622,7 +821,7 @@ final class Parser
     {
         $token = $this->next();
 
-        if (! $token->isWord()) {
+        if (! $token->isWord() && ! $token->is(TokenKind::SingleQuotedString) && ! $token->is(TokenKind::DoubleQuotedString)) {
             throw $this->expected('identifier', $token);
         }
 
@@ -687,7 +886,13 @@ final class Parser
     {
         $token = $this->peek();
 
-        if ($token === null || $token->is(TokenKind::RParen) || $token->is(TokenKind::SemiColon) || $token->isKeyword(...self::CLAUSE_KEYWORDS)) {
+        if ($token === null
+            || $token->is(TokenKind::RParen)
+            || $token->is(TokenKind::SemiColon)
+            || $token->isKeyword(...self::CLAUSE_KEYWORDS)
+            || $this->peekKeywords('ON', 'DUPLICATE')
+            || $this->peekKeywords('ON', 'CONFLICT')
+            || ($token->isKeyword('FOR') && $this->peek(1)?->isKeyword(...self::LOCKING_AND_FOR_CLAUSE_KEYWORDS) === true)) {
             return;
         }
 
