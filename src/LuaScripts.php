@@ -189,19 +189,22 @@ final class LuaScripts
             if not known then
                 result[#result + 1] = group
             end
-            for _ = 1, fieldCount do
-                if known then
-                    local dependents = redis.call('HGET', dependentsKey, ARGV[index])
+            if known and fieldCount > 0 then
+                local changed = {}
+                for _, dependents in ipairs(redis.call('HMGET', dependentsKey, unpack(ARGV, index, index + fieldCount - 1))) do
                     if dependents then
                         for dependent in string.gmatch(dependents, '[^\n]+') do
-                            for p = 1, prefixCount do
-                                replace(prefixes[p] .. dependent)
-                            end
+                            changed[dependent] = true
                         end
                     end
                 end
-                index = index + 1
+                for dependent in pairs(changed) do
+                    for p = 1, prefixCount do
+                        replace(prefixes[p] .. dependent)
+                    end
+                end
             end
+            index = index + fieldCount
         end
         return result
         LUA;
