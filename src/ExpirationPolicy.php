@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use InvalidArgumentException;
-use Spiritix\LadaCache\Support\IntegerConfig;
+use Spiritix\LadaCache\Support\ConfigValue;
 
 final readonly class ExpirationPolicy
 {
@@ -25,8 +25,8 @@ final readonly class ExpirationPolicy
     public static function fromConfig(): self
     {
         return new self(
-            IntegerConfig::read('lada-cache.expiration_time', 0),
-            IntegerConfig::read('lada-cache.expiration_jitter', 0),
+            ConfigValue::integer('lada-cache.expiration_time', 0),
+            ConfigValue::integer('lada-cache.expiration_jitter', 0),
         );
     }
 

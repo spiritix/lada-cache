@@ -7,7 +7,7 @@ namespace Spiritix\LadaCache\Console;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Spiritix\LadaCache\Database\QueryBuilder;
-use Spiritix\LadaCache\QueryHandler;
+use Spiritix\LadaCache\Services;
 use Spiritix\LadaCache\Support\RedisCooldown;
 use Spiritix\LadaCache\Support\Write;
 use Throwable;
@@ -33,7 +33,8 @@ final class InvalidateCommand extends Command
         }
 
         try {
-            $connection = DB::connection($this->option('connection'));
+            $name = $this->option('connection');
+            $connection = DB::connection(is_string($name) ? $name : null);
         } catch (Throwable $exception) {
             $this->error('Unknown database connection: '.$exception->getMessage());
 
@@ -46,8 +47,7 @@ final class InvalidateCommand extends Command
             return self::FAILURE;
         }
 
-        /** @var list<string> $tables */
-        $tables = array_values(array_unique((array) $this->argument('tables')));
+        $tables = array_values(array_unique(array_filter((array) $this->argument('tables'), 'is_string')));
         $schema = $connection->getSchemaBuilder();
         $unknown = array_values(array_filter($tables, static fn (string $table): bool => ! $schema->hasTable($table)));
 
@@ -57,8 +57,7 @@ final class InvalidateCommand extends Command
             return self::FAILURE;
         }
 
-        /** @var QueryHandler $handler */
-        $handler = app('lada.handler');
+        $handler = Services::handler();
         $handler->invalidateTables($connection, $tables, Write::unknown());
 
         if (! $handler->replayFailedInvalidations(RedisCooldown::Ignore)) {

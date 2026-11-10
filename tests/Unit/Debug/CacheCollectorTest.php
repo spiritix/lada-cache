@@ -16,7 +16,7 @@ class CacheCollectorTest extends TestCase
         $collector->startMeasuring();
         $collector->endMeasuring(
             'miss',
-            'hash-abc',
+            ['hash-abc'],
             ['tag1', 'tag2'],
             'select * from cars where id = ?',
             [1]

@@ -8,9 +8,13 @@ use Illuminate\Redis\Connections\Connection;
 use Illuminate\Redis\Connections\PhpRedisConnection;
 use Illuminate\Redis\Connections\PredisConnection;
 use Illuminate\Support\Facades\Redis as RedisFacade;
+use Predis\ClientInterface as PredisClientInterface;
+use Predis\Command\Processor\KeyPrefixProcessor;
 use Predis\Response\ServerException;
 use Redis as PhpRedisClient;
+use RedisCluster;
 use RuntimeException;
+use Spiritix\LadaCache\Support\ConfigValue;
 use Spiritix\LadaCache\Support\RedisAvailability;
 use Spiritix\LadaCache\Support\RedisCooldown;
 use Throwable;
@@ -39,8 +43,8 @@ final class Redis
         private ?Connection $connection = null,
         ?RedisAvailability $availability = null,
     ) {
-        $this->prefix = (string) config('lada-cache.prefix', 'lada:');
-        $this->connectionName = $connection?->getName() ?? (string) config('lada-cache.redis_connection', 'cache');
+        $this->prefix = ConfigValue::string('lada-cache.prefix', 'lada:');
+        $this->connectionName = $connection?->getName() ?? ConfigValue::string('lada-cache.redis_connection', 'cache');
         $this->availability = $availability ?? RedisAvailability::detect($this->processStateKey('unavailable'));
     }
 
@@ -118,11 +122,11 @@ final class Redis
         $sha = sha1($script);
 
         if ($connection instanceof PhpRedisConnection) {
-            $client = $connection->client();
+            $client = self::phpRedisClient($connection);
             $client->clearLastError();
             $result = $connection->command('evalsha', [$sha, $arguments, 0]);
 
-            if ($result === false && str_starts_with((string) $client->getLastError(), 'NOSCRIPT')) {
+            if ($result === false && str_starts_with($client->getLastError() ?? '', 'NOSCRIPT')) {
                 $client->clearLastError();
 
                 return $connection->command('eval', [$script, $arguments, 0]);
@@ -142,6 +146,9 @@ final class Redis
         }
     }
 
+    /**
+     * @param  array<mixed>  $arguments
+     */
     public function __call(string $name, array $arguments): mixed
     {
         return $this->getConnection()->{$name}(...$arguments);
@@ -157,16 +164,43 @@ final class Redis
         $connection = $this->getConnection();
 
         return match (true) {
-            $connection instanceof PhpRedisConnection => (string) $connection->client()->getOption(PhpRedisClient::OPT_PREFIX),
-            $connection instanceof PredisConnection => (string) ($connection->client()->getOptions()->prefix?->getPrefix() ?? ''),
+            $connection instanceof PhpRedisConnection => self::phpRedisPrefix(self::phpRedisClient($connection)),
+            $connection instanceof PredisConnection => self::predisPrefix($connection),
             default => throw new RuntimeException('Unsupported Redis connection for Lada Cache: '.$connection::class),
         };
     }
 
     private function lastClientError(): string
     {
-        $client = $this->connection?->client();
+        $connection = $this->connection;
 
-        return $client instanceof PhpRedisClient ? (string) $client->getLastError() : 'no error reported';
+        return $connection instanceof PhpRedisConnection ? (self::phpRedisClient($connection)->getLastError() ?? 'no error reported') : 'no error reported';
+    }
+
+    private static function phpRedisClient(PhpRedisConnection $connection): PhpRedisClient|RedisCluster
+    {
+        $client = $connection->client();
+
+        return $client instanceof PhpRedisClient || $client instanceof RedisCluster ? $client : throw new RuntimeException('Lada Cache supports phpredis connections backed by a Redis or RedisCluster client, got '.get_debug_type($client));
+    }
+
+    private static function phpRedisPrefix(PhpRedisClient|RedisCluster $client): string
+    {
+        $prefix = $client->getOption(PhpRedisClient::OPT_PREFIX);
+
+        return is_string($prefix) ? $prefix : '';
+    }
+
+    private static function predisPrefix(PredisConnection $connection): string
+    {
+        $client = $connection->client();
+
+        if (! $client instanceof PredisClientInterface) {
+            throw new RuntimeException('Lada Cache supports Predis connections backed by a Predis client, got '.get_debug_type($client));
+        }
+
+        $prefix = $client->getOptions()->prefix;
+
+        return $prefix instanceof KeyPrefixProcessor ? $prefix->getPrefix() : '';
     }
 }

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Database;
 
-use Spiritix\LadaCache\QueryHandler;
+use Spiritix\LadaCache\Services;
 
 /**
  * Integrates Lada Cache into Eloquent models.
@@ -25,8 +25,7 @@ trait LadaCacheTrait
 
         $connection = $this->getConnection();
 
-        /** @var QueryHandler $handler */
-        $handler = app('lada.handler');
+        $handler = Services::handler();
 
         return new QueryBuilder(
             $connection,

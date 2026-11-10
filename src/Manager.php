@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use Illuminate\Support\Facades\Config;
+use Spiritix\LadaCache\Support\ConfigValue;
 use Spiritix\LadaCache\Support\NonDeterministicSql;
 
 /**
@@ -21,18 +22,18 @@ final readonly class Manager
 
     private CacheScope $scope;
 
-    /** @var string[] */
+    /** @var list<string> */
     private array $includeTables;
 
-    /** @var string[] */
+    /** @var list<string> */
     private array $excludeTables;
 
     public function __construct(private Reflector $reflector)
     {
         $this->cacheActive = (bool) Config::get('lada-cache.active', true);
-        $this->scope = CacheScope::fromConfig(Config::get('lada-cache.scope', CacheScope::All->value));
-        $this->includeTables = (array) Config::get('lada-cache.include_tables', []);
-        $this->excludeTables = (array) Config::get('lada-cache.exclude_tables', []);
+        $this->scope = CacheScope::fromConfig();
+        $this->includeTables = ConfigValue::strings('lada-cache.include_tables');
+        $this->excludeTables = ConfigValue::strings('lada-cache.exclude_tables');
     }
 
     public function shouldCache(): bool

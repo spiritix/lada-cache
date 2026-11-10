@@ -20,7 +20,7 @@ use Spiritix\LadaCache\Support\Sql\Dialects;
 final class TableExtractor
 {
     /**
-     * @return array<int, string>
+     * @return list<string>
      */
     public static function extractTables(BaseBuilder $builder): array
     {
@@ -29,8 +29,6 @@ final class TableExtractor
         $from = $builder->from;
         if (is_string($from)) {
             $tables[] = SqlAliasParser::stripAlias($from);
-        } elseif ($from instanceof BaseBuilder) {
-            $tables = array_merge($tables, self::extractTables($from));
         } elseif ($from instanceof Expression) {
             $tables = array_merge($tables, self::expressionTables($builder, $from));
         }
@@ -51,7 +49,7 @@ final class TableExtractor
         $tables = array_merge($tables, self::extractSubQueryTables($builder));
 
         foreach (($builder->unions ?? []) as $union) {
-            $sub = $union['query'] ?? null;
+            $sub = is_array($union) ? ($union['query'] ?? null) : null;
             if ($sub instanceof EloquentBuilder) {
                 $sub = $sub->toBase();
             }
@@ -82,14 +80,14 @@ final class TableExtractor
     }
 
     /**
-     * @return array<int, string>
+     * @return list<string>
      */
     private static function extractSubQueryTables(BaseBuilder $builder): array
     {
         $subQueries = $builder instanceof HasCompiledSubQueries ? $builder->getCompiledSubQueries() : [];
 
-        foreach ($builder->wheres ?? [] as $where) {
-            if (($where['query'] ?? null) instanceof BaseBuilder) {
+        foreach ($builder->wheres as $where) {
+            if (is_array($where) && ($where['query'] ?? null) instanceof BaseBuilder) {
                 $subQueries[] = $where['query'];
             }
         }

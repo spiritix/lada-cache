@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use InvalidArgumentException;
-use Spiritix\LadaCache\Support\IntegerConfig;
+use Spiritix\LadaCache\Support\ConfigValue;
 
 /**
  * Results larger than this are returned but not cached: storing and fetching them would block
@@ -22,7 +22,7 @@ final readonly class EntrySizeLimit
 
     public static function fromConfig(): self
     {
-        return new self(IntegerConfig::read('lada-cache.max_entry_size', 8 * 1024 * 1024));
+        return new self(ConfigValue::integer('lada-cache.max_entry_size', 8 * 1024 * 1024));
     }
 
     public function allows(string $payload): bool

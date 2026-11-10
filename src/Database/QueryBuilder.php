@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Database;
 
 use Closure;
-use Illuminate\Database\ConnectionInterface;
+use Illuminate\Contracts\Database\Query\Expression as ExpressionContract;
+use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Query\Expression;
@@ -13,6 +14,7 @@ use Illuminate\Database\Query\Grammars\Grammar;
 use Illuminate\Database\Query\Processors\Processor;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
+use LogicException;
 use Spiritix\LadaCache\QueryHandler;
 use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Support\AssignedRows;
@@ -36,8 +38,8 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
 
     private bool $cacheBypassed = false;
 
-    public function __construct(
-        ConnectionInterface $connection,
+    final public function __construct(
+        Connection $connection,
         QueryHandler $handler,
         ?Grammar $grammar = null,
         ?Processor $processor = null,
@@ -78,6 +80,11 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
         return $this->handler;
     }
 
+    public function getConnection(): Connection
+    {
+        return $this->connection instanceof Connection ? $this->connection : throw new LogicException('Lada Cache query builders run on database connections, got '.get_debug_type($this->connection));
+    }
+
     public function getModel(): ?Model
     {
         return $this->model;
@@ -95,16 +102,23 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
             : self::DEFAULT_PRIMARY_KEY_NAME;
     }
 
+    private function targetTable(): ?string
+    {
+        return is_string($this->from) ? SqlAliasParser::stripAlias($this->from) : null;
+    }
+
     private function primaryKeyOfTarget(): ?string
     {
-        return is_string($this->from) ? $this->primaryKeyOf(SqlAliasParser::stripAlias($this->from)) : null;
+        $table = $this->targetTable();
+
+        return $table === null ? null : $this->primaryKeyOf($table);
     }
 
     /** {@inheritDoc} */
     public function newQuery()
     {
         return new static(
-            $this->connection,
+            $this->getConnection(),
             $this->handler,
             $this->grammar,
             $this->processor,
@@ -112,13 +126,22 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
         );
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     *
+     * @param  string  $type
+     * @param  ExpressionContract|string  $table
+     */
     protected function newJoinClause(Builder $parentQuery, $type, $table)
     {
         return new JoinClause($parentQuery, $type, $table);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     *
+     * @return array<mixed>
+     */
     protected function runSelect()
     {
         if ($this->lock !== null || $this->cacheBypassed || $this->fetchUsing !== []) {
@@ -134,7 +157,11 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
         )));
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     *
+     * @param  array<int|string, mixed>  $values
+     */
     public function insert(array $values)
     {
         $result = $this->runStatement(fn () => parent::insert($values));
@@ -143,7 +170,11 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
         return $result;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     *
+     * @param  list<string>  $columns
+     */
     public function insertUsing(array $columns, $query)
     {
         $result = $this->runStatement(fn () => $this->withoutTrackingCompiledSubQueries(fn () => parent::insertUsing($columns, $query)));
@@ -152,7 +183,11 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
         return $result;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     *
+     * @param  list<string>  $columns
+     */
     public function insertOrIgnoreUsing(array $columns, $query)
     {
         $result = $this->runStatement(fn () => $this->withoutTrackingCompiledSubQueries(fn () => parent::insertOrIgnoreUsing($columns, $query)));
@@ -161,7 +196,11 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
         return $result;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     *
+     * @param  array<string, mixed>  $values
+     */
     public function updateFrom(array $values)
     {
         $result = $this->runStatement(fn () => parent::updateFrom($values));
@@ -170,7 +209,11 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
         return $result;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     *
+     * @param  array<string, mixed>  $values
+     */
     public function insertGetId(array $values, $sequence = null)
     {
         $id = $this->runStatement(fn () => parent::insertGetId($values, $sequence));
@@ -180,7 +223,11 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
         return $id;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     *
+     * @param  array<string, mixed>  $values
+     */
     public function update(array $values)
     {
         $count = $this->runStatement(fn () => parent::update($values));
@@ -192,6 +239,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     /**
      * {@inheritDoc}
      *
+     * @param  array<int|string, mixed>  $values
      * @param  array<int|string, mixed>|null  $update
      */
     public function upsert(array $values, array|string $uniqueBy, ?array $update = null)
@@ -202,7 +250,11 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
         return $result;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     *
+     * @param  array<int|string, mixed>  $values
+     */
     public function insertOrIgnore(array $values)
     {
         $result = $this->runStatement(fn () => parent::insertOrIgnore($values));
@@ -214,6 +266,7 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
     /**
      * {@inheritDoc}
      *
+     * @param  array<int|string, mixed>  $values
      * @return Collection<int, \stdClass>
      */
     public function insertOrIgnoreReturning(array $values, array $returning = ['*'], array|string|null $uniqueBy = null)
@@ -253,6 +306,9 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
             : $statement();
     }
 
+    /**
+     * @param  array<int|string, mixed>  $values
+     */
     private function invalidate(string $queryType, Write $write, array $values = [], AssignedRows $assignedRows = new AssignedRows): void
     {
         $this->handler->invalidateQuery($this, $queryType, $write, $values, $assignedRows);
@@ -310,11 +366,13 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
      */
     private function rowsAssignedBy(array $values): AssignedRows
     {
-        $primaryKey = $this->primaryKeyOfTarget();
+        $table = $this->targetTable();
 
-        if ($primaryKey === null) {
+        if ($table === null) {
             return AssignedRows::unknown();
         }
+
+        $primaryKey = $this->primaryKeyOf($table);
 
         $ids = [];
         $complete = true;
@@ -329,6 +387,6 @@ class QueryBuilder extends Builder implements HasCompiledSubQueries
             }
         }
 
-        return AssignedRows::of(SqlAliasParser::stripAlias($this->from), $ids, $complete);
+        return AssignedRows::of($table, $ids, $complete);
     }
 }

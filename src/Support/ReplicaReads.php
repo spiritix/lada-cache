@@ -21,7 +21,7 @@ final class ReplicaReads
 
     public static function configuredLagSeconds(): int
     {
-        $seconds = IntegerConfig::read('lada-cache.replica_lag', 2);
+        $seconds = ConfigValue::integer('lada-cache.replica_lag', 2);
 
         if ($seconds < 0) {
             throw new InvalidArgumentException(sprintf('Invalid lada-cache.replica_lag %d, expected 0 or more seconds', $seconds));

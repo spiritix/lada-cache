@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Database;
 
 use Illuminate\Database\SQLiteConnection as BaseSqliteConnection;
-use Spiritix\LadaCache\QueryHandler as LadaQueryHandler;
+use Spiritix\LadaCache\Services;
 
 /**
  * Lada Cache-aware SQLite connection.
@@ -21,8 +21,7 @@ final class SqliteConnection extends BaseSqliteConnection implements RunsBuilder
             return parent::query();
         }
 
-        /** @var LadaQueryHandler $handler */
-        $handler = app('lada.handler');
+        $handler = Services::handler();
 
         return new QueryBuilder(
             $this,

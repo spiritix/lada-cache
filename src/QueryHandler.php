@@ -7,8 +7,8 @@ namespace Spiritix\LadaCache;
 use Closure;
 use Illuminate\Database\Connection;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\DB;
+use LogicException;
 use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Debug\CacheCollector;
 use Spiritix\LadaCache\Support\AssignedRows;
@@ -61,7 +61,7 @@ final class QueryHandler
     /**
      * @param  string  $statementType  One of Reflector::QUERY_TYPE_*
      * @param  Write  $write  What the statement did to the rows, deciding what the database changed along with them
-     * @param  array<string, mixed>  $values  Values used by the grammar to compile the SQL (e.g., update sets)
+     * @param  array<int|string, mixed>  $values  Values used by the grammar to compile the SQL (e.g., update sets)
      */
     public function invalidateQuery(QueryBuilder $builder, string $statementType, Write $write, array $values = [], AssignedRows $assignedRows = new AssignedRows): void
     {
@@ -79,7 +79,7 @@ final class QueryHandler
             $tags = $tagger->getTags();
             $invalidation = Invalidation::ofWrite($tags, $tagger->tableWideTags(), ReplicaReads::lagSeconds($connection))->withChangesOf(
                 $reflector->getDatabase(),
-                (string) $connection->getName(),
+                $connection->getName() ?? throw new LogicException('Lada Cache invalidates writes on named connections only'),
                 self::narrowedToDeletedKeys($write, $builder, $reflector),
                 $reflector->getTables(),
             );
@@ -111,7 +111,7 @@ final class QueryHandler
      *
      * @param  list<string>  $tables
      */
-    public function invalidateTables(ConnectionInterface $connection, array $tables, Write $write): void
+    public function invalidateTables(Connection $connection, array $tables, Write $write): void
     {
         foreach ($tables as $table) {
             $builder = $connection->query()->from($table);
@@ -350,14 +350,9 @@ final class QueryHandler
             return $write;
         }
 
-        $table = $tables[array_key_first($tables)];
-
-        if (! is_string($table)) {
-            return $write;
-        }
-
+        $table = $tables[0];
         $rows = $reflector->getRows()[$table] ?? null;
-        $keys = is_array($rows) ? RowKeys::columnValues($rows) : null;
+        $keys = $rows === null ? null : RowKeys::columnValues($rows);
 
         return $keys === null ? $write : $write->deletingKeys($table, $builder->primaryKeyOf($table), $keys);
     }
@@ -369,7 +364,7 @@ final class QueryHandler
 
     private function startCollector(): ?CacheCollector
     {
-        $collector = App::bound('lada.collector') ? App::make('lada.collector') : null;
+        $collector = Services::collector();
         $collector?->startMeasuring();
 
         return $collector;

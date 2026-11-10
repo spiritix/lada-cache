@@ -70,17 +70,21 @@ final class DependentTables
         $configured = config('lada-cache.dependent_tables', []);
 
         if (! is_array($configured)) {
-            throw new InvalidArgumentException('Invalid lada-cache.dependent_tables, expected an array of table => list of tables');
+            throw self::invalidConfiguration();
         }
 
         $direct = [];
         foreach ($configured as $table => $dependents) {
             if (! is_string($table) || ! is_array($dependents)) {
-                throw new InvalidArgumentException('Invalid lada-cache.dependent_tables, expected an array of table => list of tables');
+                throw self::invalidConfiguration();
             }
 
             foreach ($dependents as $dependent) {
-                $direct[$table][(string) $dependent] = true;
+                if (! is_string($dependent)) {
+                    throw self::invalidConfiguration();
+                }
+
+                $direct[$table][$dependent] = true;
             }
         }
 
@@ -127,6 +131,11 @@ final class DependentTables
         }
 
         return $byParent;
+    }
+
+    private static function invalidConfiguration(): InvalidArgumentException
+    {
+        return new InvalidArgumentException('Invalid lada-cache.dependent_tables, expected an array of table => list of tables');
     }
 
     /**
@@ -184,11 +193,9 @@ final class DependentTables
     {
         if ($connection->getDriverName() === 'sqlite') {
             $pairs = [];
-            foreach ($connection->select("select name, sql from sqlite_master where type = 'view'", [], false) as $view) {
-                $view = (array) $view;
-
-                foreach (SqlTableScanner::tables((string) $view['sql'], '', Dialects::forDriver('sqlite')) as $table) {
-                    $pairs[] = [TableName::unqualified($table), (string) $view['name']];
+            foreach (self::rows($connection, "select name, sql from sqlite_master where type = 'view'") as $view) {
+                foreach (SqlTableScanner::tables(self::text($view, 'sql'), '', Dialects::forDriver('sqlite')) as $table) {
+                    $pairs[] = [TableName::unqualified($table), self::text($view, 'name')];
                 }
             }
 
@@ -208,9 +215,8 @@ final class DependentTables
         };
 
         $pairs = [];
-        foreach ($connection->select($query, [], false) as $row) {
-            $row = (array) $row;
-            $pairs[] = [(string) $row['base_table'], (string) $row['view_name']];
+        foreach (self::rows($connection, $query) as $row) {
+            $pairs[] = [self::text($row, 'base_table'), self::text($row, 'view_name')];
         }
 
         return $pairs;

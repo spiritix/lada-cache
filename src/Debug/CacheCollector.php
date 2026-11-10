@@ -22,9 +22,14 @@ final class CacheCollector extends TimeDataCollector
         $this->startTime = microtime(true);
     }
 
+    /**
+     * @param  list<string>  $hash
+     * @param  list<string>  $tags
+     * @param  list<mixed>  $parameters
+     */
     public function endMeasuring(
         string $type,
-        string|array $hash,
+        array $hash,
         array $tags,
         string $sql,
         array $parameters = []
@@ -48,7 +53,7 @@ final class CacheCollector extends TimeDataCollector
     public function collect(): array
     {
         $data = parent::collect();
-        $data['lada-measures'] = count($data['measures'] ?? []);
+        $data['lada-measures'] = is_array($data['measures'] ?? null) ? count($data['measures']) : 0;
 
         return $data;
     }

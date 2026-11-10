@@ -8,6 +8,7 @@ use Illuminate\Database\Query\Builder as BaseBuilder;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Query\JoinClause;
 use Spiritix\LadaCache\Database\QueryBuilder;
+use UnexpectedValueException;
 
 /**
  * Utility to extract targeted primary-key rows per table from a Query Builder.
@@ -34,7 +35,7 @@ final class RowExtractor
 
         $aliasMap = self::resolveAliasMap($builder);
 
-        foreach ($builder->wheres ?? [] as $where) {
+        foreach (self::wheres($builder) as $where) {
             $hasOr = $hasOr || str_starts_with(self::boolean($where), 'or');
 
             $match = self::matchPrimaryKey($builder, $where, $aliasMap);
@@ -72,7 +73,7 @@ final class RowExtractor
      */
     public static function extractColumnPins(BaseBuilder $builder, array $referenceCounts = []): array
     {
-        $wheres = array_values(array_filter($builder->wheres, 'is_array'));
+        $wheres = self::wheres($builder);
 
         foreach ($wheres as $where) {
             if (str_starts_with(self::boolean($where), 'or')) {
@@ -146,7 +147,7 @@ final class RowExtractor
      * since neither can scope the query to rows. The values are empty when the operator
      * does not pin specific keys.
      *
-     * @param  array<string, mixed>  $where
+     * @param  array<mixed>  $where
      * @param  array<string, string>  $aliasMap
      * @return array{0: string, 1: array<int, scalar>}|null
      */
@@ -199,7 +200,17 @@ final class RowExtractor
      */
     private static function boolean(array $where): string
     {
-        return strtolower((string) ($where['boolean'] ?? 'and'));
+        $boolean = $where['boolean'] ?? 'and';
+
+        return is_string($boolean) ? strtolower($boolean) : throw new UnexpectedValueException('Where clause boolean must be a string, got '.get_debug_type($boolean));
+    }
+
+    /**
+     * @return list<array<mixed>>
+     */
+    private static function wheres(BaseBuilder $builder): array
+    {
+        return array_values(array_filter($builder->wheres, 'is_array'));
     }
 
     /**

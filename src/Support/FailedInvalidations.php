@@ -7,6 +7,7 @@ namespace Spiritix\LadaCache\Support;
 use APCUIterator;
 use Closure;
 use RuntimeException;
+use UnexpectedValueException;
 
 /**
  * Invalidations that could not reach Redis, kept until Redis accepts them again.
@@ -59,7 +60,7 @@ final class FailedInvalidations
             return true;
         }
 
-        return $this->shared && (int) apcu_fetch($this->counterKey()) > 0;
+        return $this->shared && $this->sharedCount() > 0;
     }
 
     /**
@@ -70,7 +71,7 @@ final class FailedInvalidations
      */
     public function replay(Closure $replay): void
     {
-        $counter = $this->shared ? (int) apcu_fetch($this->counterKey()) : 0;
+        $counter = $this->shared ? $this->sharedCount() : 0;
         $sharedKeys = [];
         $merged = $this->local;
 
@@ -81,9 +82,14 @@ final class FailedInvalidations
             }
 
             foreach (new APCUIterator('/^'.preg_quote($this->itemPrefix(), '/').'/') as $item) {
-                $invalidation = @unserialize((string) $item['value'], ['allowed_classes' => [Invalidation::class]]);
+                if (! is_array($item) || ! is_string($item['key'] ?? null)) {
+                    throw new UnexpectedValueException('APCu iterator returned an item without a key: '.get_debug_type($item));
+                }
+
+                $value = $item['value'] ?? null;
+                $invalidation = is_string($value) ? @unserialize($value, ['allowed_classes' => [Invalidation::class]]) : null;
                 $merged = self::bounded($merged->merge($invalidation instanceof Invalidation ? $invalidation : Invalidation::everything()));
-                $sharedKeys[] = (string) $item['key'];
+                $sharedKeys[] = $item['key'];
             }
         }
 
@@ -117,6 +123,13 @@ final class FailedInvalidations
     private static function bounded(Invalidation $invalidation): Invalidation
     {
         return $invalidation->retiresEverything || $invalidation->size() > self::MAX_PENDING ? Invalidation::everything() : $invalidation;
+    }
+
+    private function sharedCount(): int
+    {
+        $count = apcu_fetch($this->counterKey());
+
+        return is_int($count) ? $count : 0;
     }
 
     private function counterKey(): string

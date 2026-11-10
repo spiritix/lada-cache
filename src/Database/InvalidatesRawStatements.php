@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Database;
 
 use Closure;
-use Spiritix\LadaCache\QueryHandler;
+use Spiritix\LadaCache\Services;
 use Spiritix\LadaCache\Support\RawStatementClassifier;
 use Spiritix\LadaCache\Support\Sql\Dialects;
 
@@ -30,7 +30,12 @@ trait InvalidatesRawStatements
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     *
+     * @param  string  $query
+     * @param  array<mixed>  $bindings
+     */
     protected function run($query, $bindings, Closure $callback)
     {
         $result = parent::run($query, $bindings, $callback);
@@ -57,8 +62,7 @@ trait InvalidatesRawStatements
             return;
         }
 
-        /** @var QueryHandler $handler */
-        $handler = app('lada.handler');
+        $handler = Services::handler();
         $handler->invalidateRawStatement($this, $effect);
     }
 }

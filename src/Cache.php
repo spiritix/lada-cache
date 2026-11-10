@@ -8,6 +8,7 @@ use Spiritix\LadaCache\Support\CascadeRead;
 use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\Invalidation;
 use Spiritix\LadaCache\Support\RedisCooldown;
+use Spiritix\LadaCache\Support\RedisReply;
 use Spiritix\LadaCache\Support\Write;
 use Throwable;
 use UnexpectedValueException;
@@ -79,14 +80,14 @@ final class Cache
         }
 
         if (isset($reply[2])) {
-            $rows = $this->encoder->decode((string) $reply[2]);
+            $rows = $this->encoder->decode(RedisReply::string($reply[2], 'lookup payload'));
 
             if ($rows !== null) {
                 return new CacheHit($rows);
             }
         }
 
-        return new CacheMiss(new Generation((string) $reply[0]), $key, (string) $reply[1]);
+        return new CacheMiss(new Generation(RedisReply::string($reply[0], 'lookup generation')), $key, RedisReply::string($reply[1], 'lookup fingerprint'));
     }
 
     /**
@@ -162,11 +163,11 @@ final class Cache
         }
 
         return [
-            'generation' => new Generation((string) $reply[0]),
-            'databasesWithUnknownDependents' => array_map(
-                static fn (mixed $group): string => $databases[(int) $group - 1] ?? throw new UnexpectedValueException('Unknown dependents group '.json_encode($group).' in Lada Cache invalidation reply'),
+            'generation' => new Generation(RedisReply::string($reply[0], 'invalidation generation')),
+            'databasesWithUnknownDependents' => array_values(array_map(
+                static fn (mixed $group): string => $databases[RedisReply::integer($group, 'invalidation dependents group') - 1] ?? throw new UnexpectedValueException('Unknown dependents group '.json_encode($group).' in Lada Cache invalidation reply'),
                 array_slice($reply, 1),
-            ),
+            )),
         ];
     }
 
@@ -182,7 +183,7 @@ final class Cache
             array_push($arguments, $table, implode("\n", $tables));
         }
 
-        return (int) $this->redis->evaluate(LuaScripts::STORE_DEPENDENTS, $arguments, $cooldown) === 1;
+        return RedisReply::integer($this->redis->evaluate(LuaScripts::STORE_DEPENDENTS, $arguments, $cooldown), 'store dependents reply') === 1;
     }
 
     private function legacyInvalidation(): bool
@@ -247,8 +248,8 @@ final class Cache
                 throw new UnexpectedValueException('Malformed Lada Cache prune reply at cursor '.$cursor);
             }
 
-            $cursor = (string) $reply[0];
-            $deleted += (int) $reply[1];
+            $cursor = RedisReply::string($reply[0], 'prune cursor');
+            $deleted += RedisReply::integer($reply[1], 'prune count');
         } while ($cursor !== '0');
 
         return $deleted;

@@ -42,7 +42,7 @@ final readonly class Tagger
      */
     public function getTags(): array
     {
-        $tables = array_values(array_filter($this->reflector->getTables(), 'is_string'));
+        $tables = $this->reflector->getTables();
         $pinnedRows = $this->considerRows ? $this->reflector->getRows() : [];
         $type = $this->reflector->getType();
         $tags = [];

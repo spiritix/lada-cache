@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache;
 
-use Illuminate\Database\Connection;
 use RuntimeException;
 use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Support\RowExtractor;
@@ -41,10 +40,10 @@ final class Reflector
 
     private ?string $sql = null;
 
-    /** @var array<int, string>|null */
+    /** @var list<string>|null */
     private ?array $tables = null;
 
-    /** @var array<string, array<int, mixed>>|null */
+    /** @var array<string, array<int, scalar>>|null */
     private ?array $rows = null;
 
     /** @var array<string, int>|null */
@@ -53,6 +52,9 @@ final class Reflector
     /** @var array<string, array<string, list<scalar>>>|null */
     private ?array $columnPins = null;
 
+    /**
+     * @param  array<int|string, mixed>  $values
+     */
     public function __construct(
         private readonly QueryBuilder $queryBuilder,
         string $sqlOperation = self::QUERY_TYPE_SELECT,
@@ -79,19 +81,13 @@ final class Reflector
     {
         $connection = $this->queryBuilder->getConnection();
 
-        if (! $connection instanceof Connection) {
-            return $connection->getDatabaseName();
-        }
-
-        $config = $connection->getConfig();
-
-        return (string) json_encode([
+        return json_encode([
             $connection->getDriverName(),
-            $config['host'] ?? null,
-            $config['port'] ?? null,
-            $config['unix_socket'] ?? null,
+            $connection->getConfig('host'),
+            $connection->getConfig('port'),
+            $connection->getConfig('unix_socket'),
             $connection->getDatabaseName(),
-        ]);
+        ], JSON_THROW_ON_ERROR);
     }
 
     public function isModelQuery(): bool
@@ -109,6 +105,8 @@ final class Reflector
     /**
      * Tables the query reads or writes. Reads also include tables named only inside raw SQL,
      * so a write to them still invalidates the read.
+     *
+     * @return list<string>
      */
     public function getTables(): array
     {
@@ -128,6 +126,9 @@ final class Reflector
         return $this->columnPins ??= RowExtractor::extractColumnPins($this->queryBuilder, $this->referenceCounts());
     }
 
+    /**
+     * @return array<string, array<int, scalar>>
+     */
     public function getRows(): array
     {
         return $this->rows ??= RowExtractor::extractRows($this->queryBuilder, $this->referenceCounts());
@@ -201,6 +202,9 @@ final class Reflector
         return (string) $sql;
     }
 
+    /**
+     * @return list<mixed>
+     */
     public function getParameters(): array
     {
         return $this->queryBuilder->getBindings();
@@ -208,22 +212,16 @@ final class Reflector
 
     public function qualifiersNameDatabases(): bool
     {
-        $connection = $this->queryBuilder->getConnection();
-
-        return $connection instanceof Connection && in_array($connection->getDriverName(), ['mysql', 'mariadb'], true);
+        return in_array($this->queryBuilder->getConnection()->getDriverName(), ['mysql', 'mariadb'], true);
     }
 
     public function isPretending(): bool
     {
-        $connection = $this->queryBuilder->getConnection();
-
-        return $connection instanceof Connection && $connection->pretending();
+        return $this->queryBuilder->getConnection()->pretending();
     }
 
     public function inTransaction(): bool
     {
-        $connection = $this->queryBuilder->getConnection();
-
-        return method_exists($connection, 'transactionLevel') && $connection->transactionLevel() > 0;
+        return $this->queryBuilder->getConnection()->transactionLevel() > 0;
     }
 }

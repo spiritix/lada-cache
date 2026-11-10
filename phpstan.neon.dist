@@ -2,6 +2,10 @@ parameters:
     level: max
     paths:
         - src
-
-includes:
-    - phpstan-baseline.neon
+        - tests/Database/Models/License.php
+    ignoreErrors:
+        -
+            identifier: argument.type
+            message: '#^Parameter \#3 \$table of class Spiritix\\LadaCache\\Database\\JoinClause constructor expects string, Illuminate\\Contracts\\Database\\Query\\Expression\|string given\.$#'
+            path: src/Database/QueryBuilder.php
+            count: 1

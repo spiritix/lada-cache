@@ -22,7 +22,12 @@ trait TracksCompiledSubQueries
         return $this->compiledSubQueries;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     *
+     * @param  Closure|Builder|EloquentBuilder<*>|Relation<*, *, *>|string  $query
+     * @return array<mixed>
+     */
     protected function createSub($query)
     {
         if ($query instanceof Closure) {
