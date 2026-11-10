@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Database;
 
+use Illuminate\Contracts\Database\Query\Expression as ExpressionContract;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
@@ -25,7 +26,12 @@ class JoinClause extends BaseJoinClause implements HasCompiledSubQueries
 
     private readonly ?Model $parentModel;
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     *
+     * @param  string  $type
+     * @param  ExpressionContract|string  $table
+     */
     public function __construct(Builder $parentQuery, $type, $table)
     {
         // Capture QueryBuilder-specific dependencies before parent constructor runs

@@ -1,0 +1,18 @@
+<?php
+
+namespace Illuminate\Contracts\Database\Query {
+    interface Expression {}
+}
+
+namespace Illuminate\Database\Query {
+    class Builder {}
+
+    class JoinClause extends Builder
+    {
+        /**
+         * @param  string  $type
+         * @param  \Illuminate\Contracts\Database\Query\Expression|string  $table
+         */
+        public function __construct(Builder $parentQuery, $type, $table) {}
+    }
+}
