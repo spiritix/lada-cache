@@ -7,11 +7,12 @@ namespace Spiritix\LadaCache\Tests\Unit\Support;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Spiritix\LadaCache\Support\NonDeterministicSql;
+use Spiritix\LadaCache\Support\Sql\Dialects;
 
 final class NonDeterministicSqlTest extends TestCase
 {
     /**
-     * @return iterable<string, array{string}>
+     * @return iterable<string, array{0: string, 1?: string}>
      */
     public static function nonDeterministicQueries(): iterable
     {
@@ -36,18 +37,20 @@ final class NonDeterministicSqlTest extends TestCase
     }
 
     #[DataProvider('nonDeterministicQueries')]
-    public function testNonDeterministicQueriesAreDetected(string $sql): void
+    public function testNonDeterministicQueriesAreDetected(string $sql, string $driver = 'mysql'): void
     {
-        $this->assertTrue(NonDeterministicSql::isNonDeterministic($sql));
+        $this->assertTrue(NonDeterministicSql::isNonDeterministic($sql, Dialects::forDriver($driver)));
     }
 
     /**
-     * @return iterable<string, array{string}>
+     * @return iterable<string, array{0: string, 1?: string}>
      */
     public static function deterministicQueries(): iterable
     {
         yield 'bound timestamp' => ['select * from cars where expires_at > ?'];
-        yield 'quoted identifiers named like functions' => ['select `now`, "rand" from `random` where [current_date] = 1'];
+        yield 'quoted identifiers named like functions' => ['select `now`, `rand` from `random` where `current_date` = 1'];
+        yield 'bracketed identifier named like a keyword' => ['select [current_date] from t', 'sqlsrv'];
+        yield 'double quoted identifier named like a function' => ['select "now"() from t', 'pgsql'];
         yield 'function names inside string literals' => ["select * from cars where name = 'now() and rand()'"];
         yield 'escaped quote before function name' => ["select * from cars where name = 'it''s now()'"];
         yield 'column suffixed like a keyword' => ['select created_now, rand_seed from t'];
@@ -56,8 +59,8 @@ final class NonDeterministicSqlTest extends TestCase
     }
 
     #[DataProvider('deterministicQueries')]
-    public function testDeterministicQueriesAreNotFlagged(string $sql): void
+    public function testDeterministicQueriesAreNotFlagged(string $sql, string $driver = 'mysql'): void
     {
-        $this->assertFalse(NonDeterministicSql::isNonDeterministic($sql));
+        $this->assertFalse(NonDeterministicSql::isNonDeterministic($sql, Dialects::forDriver($driver)));
     }
 }

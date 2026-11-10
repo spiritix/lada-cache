@@ -4,188 +4,205 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Support;
 
-use LogicException;
+use Spiritix\LadaCache\Support\Sql\DeleteStatement;
+use Spiritix\LadaCache\Support\Sql\Dialect;
+use Spiritix\LadaCache\Support\Sql\InsertStatement;
+use Spiritix\LadaCache\Support\Sql\MergeStatement;
+use Spiritix\LadaCache\Support\Sql\Parser;
+use Spiritix\LadaCache\Support\Sql\ParserException;
+use Spiritix\LadaCache\Support\Sql\Token;
+use Spiritix\LadaCache\Support\Sql\Tokenizer;
+use Spiritix\LadaCache\Support\Sql\TokenizerException;
+use Spiritix\LadaCache\Support\Sql\TokenKind;
+use Spiritix\LadaCache\Support\Sql\TruncateStatement;
+use Spiritix\LadaCache\Support\Sql\UpdateStatement;
+use Spiritix\LadaCache\Support\Sql\WriteTargets;
 
+/**
+ * Classifies SQL run outside the query builder by parsing it: statements known to be free of
+ * side effects change nothing, writes change the tables they target the way their kind does, and
+ * anything that does not parse, writes outside the current database or is not known changes
+ * everything.
+ */
 final class RawStatementClassifier
 {
-    private const string TABLE = '(?<table>[`"\[]?[\w$]+[`"\]]?(?:\.[`"\[]?[\w$]+[`"\]]?)?)';
-
-    private const string WRITE_KEYWORD_PATTERN = '/\b(?:insert|replace|update|delete|merge|truncate)\b/i';
-
     private const array SIDE_EFFECT_FREE_KEYWORDS = [
-        'select', 'show', 'explain', 'describe', 'desc', 'values', 'table', 'set', 'begin', 'start', 'commit',
-        'rollback', 'savepoint', 'release', 'use', 'pragma', 'analyze', 'optimize', 'check', 'checksum',
-        'lock', 'unlock', 'vacuum', 'reset', 'discard', 'listen', 'unlisten', 'notify', 'prepare',
-        'deallocate', 'xa',
+        'SELECT', 'SHOW', 'DESCRIBE', 'DESC', 'VALUES', 'TABLE', 'SET', 'BEGIN', 'START', 'COMMIT',
+        'ROLLBACK', 'SAVEPOINT', 'RELEASE', 'USE', 'PRAGMA', 'ANALYZE', 'OPTIMIZE', 'CHECK', 'CHECKSUM',
+        'LOCK', 'UNLOCK', 'VACUUM', 'RESET', 'DISCARD', 'LISTEN', 'UNLISTEN', 'NOTIFY', 'PREPARE',
+        'DEALLOCATE', 'XA',
     ];
 
-    private const array TABLE_WRITE_PATTERNS = [
-        'insert' => '/^insert\s+(?:(?:low_priority|delayed|high_priority|ignore)\s+)*(?:or\s+\w+\s+)?(?:into\s+)?'.self::TABLE.'(?=[\s(]|$)/i',
-        'replace' => '/^replace\s+(?:(?:low_priority|delayed)\s+)*(?:into\s+)?'.self::TABLE.'(?=[\s(]|$)/i',
-        'update' => '/^update\s+(?:(?:low_priority|ignore|only)\s+)*'.self::TABLE.'(?:\s+(?:as\s+)?(?!set\b)\w+)?\s+set\s/i',
-        'delete' => '/^delete\s+(?:(?:low_priority|quick|ignore)\s+)*from\s+(?:only\s+)?'.self::TABLE.'(?:\s+(?:as\s+)?(?!(?:where|using|order|limit|returning)\b)\w+)?(?:\s+(?:where|using|order|limit|returning)\b|\s*$)/i',
-        'truncate' => '/^truncate\s+(?:table\s+)?(?:only\s+)?'.self::TABLE.'(?:\s+(?:restart|continue)\s+identity)?(?:\s+(?:restrict|cascade))?\s*$/i',
+    private const array WRITE_KEYWORDS = ['INSERT', 'REPLACE', 'UPDATE', 'DELETE', 'MERGE', 'TRUNCATE'];
+
+    private const array EXPLAIN_OPTIONS = [
+        'ANALYZE', 'ANALYSE', 'VERBOSE', 'COSTS', 'BUFFERS', 'TIMING', 'SUMMARY', 'SETTINGS', 'GENERIC_PLAN',
+        'MEMORY', 'SERIALIZE', 'WAL', 'EXTENDED', 'PARTITIONS',
     ];
 
-    private const string EXPLAIN_PATTERN = '/^explain\s+(?<options>\([^)]*\)\s*|(?:(?:analy[sz]e|verbose|costs|buffers|timing|summary|settings|generic_plan|memory|serialize|wal|extended|partitions|format\s*=?\s*\w+)\s+)*)(?<statement>(?:select|insert|update|delete|replace|merge|with|values|table|execute|create|declare)\b.*)$/is';
+    private const array EXPLAINABLE_KEYWORDS = [
+        'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'REPLACE', 'MERGE', 'WITH', 'VALUES', 'TABLE', 'EXECUTE', 'CREATE', 'DECLARE',
+    ];
 
-    /**
-     * Classifies any SQL run outside the query builder: anything not known to be side-effect
-     * free or a write to a single table changes everything.
-     */
-    public static function classify(string $sql, string $tablePrefix): RawStatementEffect
+    public static function classify(string $sql, string $tablePrefix, Dialect $dialect): RawStatementEffect
     {
-        $statement = self::normalize($sql);
-
-        if ($statement === '') {
-            return RawStatementEffect::none();
-        }
-
-        if (self::containsMultipleStatements($statement)) {
+        try {
+            $tokens = array_values(array_filter(
+                (new Tokenizer($dialect, $sql))->tokenize(),
+                static fn (Token $token): bool => ! $token->isTrivia(),
+            ));
+        } catch (TokenizerException) {
             return RawStatementEffect::everything();
         }
 
-        $keyword = self::firstKeyword($statement);
-
-        if ($keyword === 'explain') {
-            return self::classifyExplain($statement, $tablePrefix);
+        while ($tokens !== [] && $tokens[array_key_last($tokens)]->is(TokenKind::SemiColon)) {
+            array_pop($tokens);
         }
 
-        if (in_array($keyword, self::SIDE_EFFECT_FREE_KEYWORDS, true) || self::isTemporaryTableStatement($statement)) {
+        foreach ($tokens as $token) {
+            if ($token->is(TokenKind::SemiColon)) {
+                return RawStatementEffect::everything();
+            }
+        }
+
+        return self::classifyStatement($tokens, $tablePrefix, $dialect);
+    }
+
+    /**
+     * @param  list<Token>  $tokens
+     */
+    private static function classifyStatement(array $tokens, string $tablePrefix, Dialect $dialect): RawStatementEffect
+    {
+        $start = 0;
+        while (($tokens[$start] ?? null)?->is(TokenKind::LParen) === true) {
+            $start++;
+        }
+
+        $statement = array_slice($tokens, $start);
+        $first = $statement[0] ?? null;
+
+        if ($first === null) {
             return RawStatementEffect::none();
         }
 
-        if ($keyword === 'with') {
-            return preg_match(self::WRITE_KEYWORD_PATTERN, $statement) === 1
-                ? RawStatementEffect::everything()
-                : RawStatementEffect::none();
+        if ($first->isKeyword('EXPLAIN')) {
+            return self::classifyExplain(array_slice($statement, 1), $tablePrefix, $dialect);
         }
 
-        return self::classifyWrite($statement, $tablePrefix);
+        if ($first->isKeyword(...self::SIDE_EFFECT_FREE_KEYWORDS) || self::isTemporaryTableStatement($statement)) {
+            return RawStatementEffect::none();
+        }
+
+        if ($first->isKeyword('WITH')) {
+            foreach ($statement as $token) {
+                if ($token->isKeyword(...self::WRITE_KEYWORDS)) {
+                    return RawStatementEffect::everything();
+                }
+            }
+
+            return RawStatementEffect::none();
+        }
+
+        if (! $first->isKeyword(...self::WRITE_KEYWORDS)) {
+            return RawStatementEffect::everything();
+        }
+
+        try {
+            return self::classifyWrite((new Parser($dialect, $statement))->parseWriteStatement(), $tablePrefix);
+        } catch (ParserException) {
+            return RawStatementEffect::everything();
+        }
+    }
+
+    private static function classifyWrite(InsertStatement|UpdateStatement|DeleteStatement|TruncateStatement|MergeStatement $statement, string $tablePrefix): RawStatementEffect
+    {
+        $tables = [];
+        foreach (WriteTargets::of($statement) as $name) {
+            if (count($name) !== 1) {
+                return RawStatementEffect::everything();
+            }
+            $tables[TableName::withoutPrefix($name[0], $tablePrefix)] = true;
+        }
+
+        $tables = array_map('strval', array_keys($tables));
+        sort($tables, SORT_STRING);
+
+        return RawStatementEffect::writes($tables, self::write($statement));
+    }
+
+    private static function write(InsertStatement|UpdateStatement|DeleteStatement|TruncateStatement|MergeStatement $statement): Write
+    {
+        return match (true) {
+            $statement instanceof InsertStatement && $statement->replacesRows, $statement instanceof DeleteStatement => Write::delete(),
+            $statement instanceof InsertStatement, $statement instanceof UpdateStatement => self::assigning(WriteTargets::assignedColumns($statement)),
+            $statement instanceof TruncateStatement => Write::truncate(),
+            $statement instanceof MergeStatement => Write::unknown(),
+        };
+    }
+
+    /**
+     * @param  list<string>|null  $columns
+     */
+    private static function assigning(?array $columns): Write
+    {
+        return $columns === null ? Write::insert() : Write::update($columns);
     }
 
     /**
      * EXPLAIN only plans a statement, except with ANALYZE, which runs it (PostgreSQL even runs
      * writes this way).
+     *
+     * @param  list<Token>  $tokens  the tokens after EXPLAIN
      */
-    private static function classifyExplain(string $statement, string $tablePrefix): RawStatementEffect
+    private static function classifyExplain(array $tokens, string $tablePrefix, Dialect $dialect): RawStatementEffect
     {
-        $analyzes = static fn (string $sql): bool => preg_match('/\banaly[sz]e\b/i', $sql) === 1;
+        $analyzes = false;
+        $position = 0;
 
-        if (preg_match(self::EXPLAIN_PATTERN, $statement, $matches) !== 1) {
-            return $analyzes($statement) ? RawStatementEffect::everything() : RawStatementEffect::none();
+        if (($tokens[0] ?? null)?->is(TokenKind::LParen) === true) {
+            for ($position = 1; isset($tokens[$position]) && ! $tokens[$position]->is(TokenKind::RParen); $position++) {
+                $analyzes = $analyzes || $tokens[$position]->isKeyword('ANALYZE', 'ANALYSE');
+            }
+            $position++;
+        } else {
+            while (isset($tokens[$position])) {
+                $token = $tokens[$position];
+                if ($token->isKeyword(...self::EXPLAIN_OPTIONS)) {
+                    $analyzes = $analyzes || $token->isKeyword('ANALYZE', 'ANALYSE');
+                    $position++;
+                } elseif ($token->isKeyword('FORMAT')) {
+                    $position += ($tokens[$position + 1] ?? null)?->is(TokenKind::Eq) === true ? 3 : 2;
+                } else {
+                    break;
+                }
+            }
         }
 
-        return $analyzes($matches['options']) ? self::classify($matches['statement'], $tablePrefix) : RawStatementEffect::none();
-    }
-
-    private static function classifyWrite(string $statement, string $tablePrefix): RawStatementEffect
-    {
-        foreach (self::TABLE_WRITE_PATTERNS as $kind => $pattern) {
-            if (preg_match($pattern, $statement, $matches) !== 1) {
-                continue;
+        if (($tokens[$position] ?? null)?->isKeyword(...self::EXPLAINABLE_KEYWORDS) !== true) {
+            foreach ($tokens as $token) {
+                if ($token->isKeyword('ANALYZE', 'ANALYSE')) {
+                    return RawStatementEffect::everything();
+                }
             }
 
-            $table = $matches['table'];
-
-            if (str_contains($table, '.')) {
-                return RawStatementEffect::everything();
-            }
-
-            return RawStatementEffect::writes([TableName::withoutPrefix(trim($table, '`"[]'), $tablePrefix)], self::singleTableWrite($kind, $statement));
+            return RawStatementEffect::none();
         }
 
-        return RawStatementEffect::everything();
+        return $analyzes ? self::classifyStatement(array_slice($tokens, $position), $tablePrefix, $dialect) : RawStatementEffect::none();
     }
 
     /**
-     * An INSERT that names UPDATE or REPLACE anywhere outside literals may update or replace
-     * existing rows (`ON DUPLICATE KEY UPDATE`, `ON CONFLICT DO UPDATE`, `INSERT OR REPLACE`);
-     * REPLACE deletes the rows it conflicts with.
+     * @param  list<Token>  $tokens
      */
-    private static function singleTableWrite(string $kind, string $statement): Write
+    private static function isTemporaryTableStatement(array $tokens): bool
     {
-        $code = SqlTableScanner::withoutLiterals($statement);
-
-        return match ($kind) {
-            'insert' => match (true) {
-                preg_match('/\\breplace\\b/i', $code) === 1 => Write::delete(),
-                preg_match('/\\bupdate\\b/i', $code) === 1 => Write::updateOfAnyColumn(),
-                default => Write::insert(),
-            },
-            'replace', 'delete' => Write::delete(),
-            'update' => Write::updateOfAnyColumn(),
-            'truncate' => Write::truncate(),
-            default => throw new LogicException('Unknown raw write kind '.$kind),
-        };
-    }
-
-    private static function normalize(string $sql): string
-    {
-        $statement = ltrim($sql);
-
-        while (true) {
-            if (str_starts_with($statement, '--') || str_starts_with($statement, '#')) {
-                $newline = strpos($statement, "\n");
-                $statement = $newline === false ? '' : ltrim(substr($statement, $newline + 1));
-
-                continue;
-            }
-
-            if (str_starts_with($statement, '/*')) {
-                $end = strpos($statement, '*/');
-                $statement = $end === false ? '' : ltrim(substr($statement, $end + 2));
-
-                continue;
-            }
-
-            if (str_starts_with($statement, '(')) {
-                $statement = ltrim(substr($statement, 1));
-
-                continue;
-            }
-
-            break;
+        if (($tokens[0] ?? null)?->isKeyword('CREATE', 'DROP') !== true) {
+            return false;
         }
 
-        return rtrim(rtrim($statement), ';');
-    }
+        $position = ($tokens[1] ?? null)?->isKeyword('GLOBAL', 'LOCAL') === true ? 2 : 1;
 
-    private static function firstKeyword(string $statement): string
-    {
-        return preg_match('/^[a-z]+/i', $statement, $matches) === 1 ? strtolower($matches[0]) : '';
-    }
-
-    private static function isTemporaryTableStatement(string $statement): bool
-    {
-        return preg_match('/^(?:create|drop)\s+(?:global\s+|local\s+)?temp(?:orary)?\s+table\b/i', $statement) === 1;
-    }
-
-    private static function containsMultipleStatements(string $statement): bool
-    {
-        $quote = null;
-        $length = strlen($statement);
-
-        for ($index = 0; $index < $length; $index++) {
-            $character = $statement[$index];
-
-            if ($quote !== null) {
-                if ($character === '\\') {
-                    $index++;
-                } elseif ($character === $quote) {
-                    $quote = null;
-                }
-
-                continue;
-            }
-
-            if ($character === "'" || $character === '"' || $character === '`') {
-                $quote = $character;
-            } elseif ($character === ';') {
-                return true;
-            }
-        }
-
-        return false;
+        return ($tokens[$position] ?? null)?->isKeyword('TEMP', 'TEMPORARY') === true
+            && ($tokens[$position + 1] ?? null)?->isKeyword('TABLE') === true;
     }
 }

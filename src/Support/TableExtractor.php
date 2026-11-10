@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Support;
 
+use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as BaseBuilder;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Query\JoinClause;
 use Spiritix\LadaCache\Database\HasCompiledSubQueries;
+use Spiritix\LadaCache\Support\Sql\Dialects;
 
 /**
  * Utility to extract table names (as strings) from a Laravel Query Builder.
@@ -30,10 +32,7 @@ final class TableExtractor
         } elseif ($from instanceof BaseBuilder) {
             $tables = array_merge($tables, self::extractTables($from));
         } elseif ($from instanceof Expression) {
-            $alias = SqlAliasParser::extractAliasFromExpression($builder->getGrammar()->getValue($from));
-            if ($alias !== null) {
-                $tables[] = $alias;
-            }
+            $tables = array_merge($tables, self::expressionTables($builder, $from));
         }
 
         foreach ($builder->joins ?? [] as $join) {
@@ -43,10 +42,7 @@ final class TableExtractor
             if (is_string($join->table)) {
                 $tables[] = SqlAliasParser::stripAlias($join->table);
             } elseif ($join->table instanceof Expression) {
-                $alias = SqlAliasParser::extractAliasFromExpression($builder->getGrammar()->getValue($join->table));
-                if ($alias !== null) {
-                    $tables[] = $alias;
-                }
+                $tables = array_merge($tables, self::expressionTables($builder, $join->table));
             }
 
             $tables = array_merge($tables, self::extractSubQueryTables($join));
@@ -65,6 +61,24 @@ final class TableExtractor
         }
 
         return array_values(array_unique($tables));
+    }
+
+    /**
+     * The tables a raw FROM or JOIN expression such as `DB::raw('files FORCE INDEX (...)')` or
+     * `DB::raw('(select ...) as sub')` reads, parsed as the relation it stands for.
+     *
+     * @param  Expression<literal-string|int|float>  $expression
+     * @return list<string>
+     */
+    private static function expressionTables(BaseBuilder $builder, Expression $expression): array
+    {
+        $connection = $builder->getConnection();
+
+        return SqlTableScanner::tables(
+            'select 1 from '.$builder->getGrammar()->getValue($expression),
+            $connection instanceof Connection ? $connection->getTablePrefix() : '',
+            Dialects::of($connection),
+        );
     }
 
     /**

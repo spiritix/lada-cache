@@ -21,10 +21,10 @@ class SqlAliasParserTest extends TestCase
         $this->assertNull(SqlAliasParser::extractAlias('drivers'));
     }
 
-    public function testExtractAliasFromExpressionHandlesQuotedAndUnquoted(): void
+    public function testAliasesAreSplitAsLaravelSplitsThem(): void
     {
-        $this->assertSame('m', SqlAliasParser::extractAliasFromExpression('(select * from materials) as m'));
-        $this->assertSame('m', SqlAliasParser::extractAliasFromExpression('(select * from materials) AS m'));
-        $this->assertSame('m', SqlAliasParser::extractAliasFromExpression('(select * from materials) as `m`'));
+        $this->assertSame('engines', SqlAliasParser::stripAlias('engines AS e'));
+        $this->assertSame('e', SqlAliasParser::extractAlias('engines   as   e'));
+        $this->assertSame('crossroads', SqlAliasParser::stripAlias('crossroads'));
     }
 }

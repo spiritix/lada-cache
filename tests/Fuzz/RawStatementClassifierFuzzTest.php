@@ -8,11 +8,13 @@ use PHPUnit\Framework\TestCase;
 use Random\Engine\Mt19937;
 use Random\Randomizer;
 use Spiritix\LadaCache\Support\RawStatementClassifier;
+use Spiritix\LadaCache\Support\Sql\Dialects;
 use Spiritix\LadaCache\Tests\Fuzz\Support\Workload;
 
 /**
  * Generates writes to a known table, decorated the ways hand-written SQL varies, and checks
- * the classifier never reports them as side-effect free or as a write to another table.
+ * the classifier, on every dialect, never reports them as side-effect free and never leaves the
+ * written table out of the tables it reports.
  */
 final class RawStatementClassifierFuzzTest extends TestCase
 {
@@ -31,72 +33,108 @@ final class RawStatementClassifierFuzzTest extends TestCase
         for ($iteration = 0; $iteration < $iterations; $iteration++) {
             $table = $this->pick(self::TABLES);
             $prefix = $this->pick(['', 'app_']);
-            $sql = $this->decorate($this->write($prefix.$table));
-            $effect = RawStatementClassifier::classify($sql, $prefix);
+            [$sql, $drivers] = $this->decorate($this->write($prefix.$table));
 
-            $this->assertFalse($effect->isNone(), "Write classified as side-effect free (seed {$seed}): {$sql}");
+            if ($drivers === []) {
+                continue;
+            }
+
+            $driver = $this->pick($drivers);
+            $effect = RawStatementClassifier::classify($sql, $prefix, Dialects::forDriver($driver));
+
+            $this->assertFalse($effect->isNone(), "Write classified as side-effect free on {$driver} (seed {$seed}): {$sql}");
             $this->assertTrue(
-                $effect->changesEverything || $effect->tables === [$table],
-                sprintf('Write to %s attributed to [%s] (seed %d): %s', $table, implode(', ', $effect->tables), $seed, $sql),
+                $effect->changesEverything || (in_array($table, $effect->tables, true) && array_diff($effect->tables, self::TABLES) === []),
+                sprintf('Write to %s attributed to [%s] on %s (seed %d): %s', $table, implode(', ', $effect->tables), $driver, $seed, $sql),
             );
         }
     }
 
-    private function write(string $table): string
+    /**
+     * A write and the databases whose syntax it is.
+     *
+     * @return array{string, list<string>}
+     */
+    private function write(string $table): array
     {
-        $name = $this->identifier($table);
-        $other = $this->identifier($this->pick(self::TABLES));
+        [$name, $nameDrivers] = $this->identifier($table);
+        [$other, $otherDrivers] = $this->identifier($this->pick(self::TABLES));
+        $all = ['mysql', 'pgsql', 'sqlite', 'sqlsrv'];
 
+        [$sql, $drivers] = $this->pick([
+            ["insert into {$name} (id, name) values (1, 'a')", $all],
+            ["INSERT IGNORE INTO {$name} VALUES (1)", ['mysql']],
+            ["insert or replace into {$name} (id) values (?)", ['sqlite']],
+            ["insert into {$name} select * from {$other}", $all],
+            ["insert into {$name}(id) values (1) on conflict (id) do update set id = excluded.id", ['pgsql', 'sqlite']],
+            ["insert into {$name} (id) values (1) on duplicate key update id = values(id)", ['mysql']],
+            ["replace into {$name} values (1)", ['mysql', 'sqlite']],
+            ["update {$name} set name = 'a' where id = 1", $all],
+            ["update {$name} t set name = ? where t.id in (select id from {$other})", ['pgsql', 'mysql']],
+            ["update {$name} as t set t.name = 'x;y'", ['pgsql', 'mysql', 'sqlite']],
+            ["UPDATE LOW_PRIORITY {$name} SET name = name", ['mysql']],
+            ["update {$name} set name = 'delete from {$other}'", $all],
+            ["update {$name} join {$other} on 1 = 1 set name = 'a'", ['mysql']],
+            ["update {$name}, {$other} set name = 'a'", ['mysql']],
+            ["update {$name} set name = 1 returning id", ['pgsql', 'sqlite']],
+            ["delete from {$name}", $all],
+            ["delete from {$name} where id = ? returning *", ['pgsql', 'sqlite']],
+            ["delete from {$name} t where t.id = 1", ['pgsql', 'sqlsrv']],
+            ["DELETE QUICK FROM {$name} WHERE id > 5 ORDER BY id LIMIT 10", ['mysql']],
+            ["delete {$name} from {$name} join {$other} on 1 = 1", ['mysql', 'sqlsrv']],
+            ["delete from {$name} using {$other} where 1 = 1", ['pgsql']],
+            ["truncate {$name}", ['mysql', 'pgsql']],
+            ["truncate table {$name}", ['mysql', 'pgsql', 'sqlsrv']],
+            ["truncate {$name} restart identity", ['pgsql']],
+            ["with ids as (select id from {$other}) delete from {$name} where id in (select id from ids)", $all],
+            ["with moved as (delete from {$name} returning *) select * from moved", ['pgsql']],
+            ["merge into {$name} using {$other} on 1 = 1 when matched then delete", ['pgsql', 'sqlsrv']],
+            ["explain analyze update {$name} set name = 'a'", ['pgsql']],
+            ["alter table {$name} add column c int", $all],
+            ["drop table {$name}", $all],
+            ["create index i on {$name} (name)", $all],
+            ["update {$name} set name = 'a'; select 1", $all],
+            ["select 1; delete from {$name}", $all],
+        ]);
+
+        return [$sql, array_values(array_intersect($drivers, $nameDrivers, $otherDrivers))];
+    }
+
+    /**
+     * @return array{string, list<string>}
+     */
+    private function identifier(string $table): array
+    {
         return $this->pick([
-            "insert into {$name} (id, name) values (1, 'a')",
-            "INSERT IGNORE INTO {$name} VALUES (1)",
-            "insert or replace into {$name} (id) values (?)",
-            "insert into {$name} select * from {$other}",
-            "insert into {$name}(id) values (1) on conflict (id) do update set id = excluded.id",
-            "insert into {$name} (id) values (1) on duplicate key update id = values(id)",
-            "replace into {$name} values (1)",
-            "update {$name} set name = 'a' where id = 1",
-            "update {$name} t set name = ? where t.id in (select id from {$other})",
-            "update {$name} as t set t.name = 'x;y'",
-            "UPDATE LOW_PRIORITY {$name} SET name = name",
-            "update {$name} set name = 'delete from {$other}'",
-            "update {$name} join {$other} on 1 = 1 set name = 'a'",
-            "update {$name}, {$other} set name = 'a'",
-            "update {$name} set name = 1 returning id",
-            "delete from {$name}",
-            "delete from {$name} where id = ? returning *",
-            "delete from {$name} t where t.id = 1",
-            "DELETE QUICK FROM {$name} WHERE id > 5 ORDER BY id LIMIT 10",
-            "delete {$name} from {$name} join {$other} on 1 = 1",
-            "delete from {$name} using {$other} where 1 = 1",
-            "truncate {$name}",
-            "truncate table {$name}",
-            "truncate {$name} restart identity",
-            "with ids as (select id from {$other}) delete from {$name} where id in (select id from ids)",
-            "with moved as (delete from {$name} returning *) select * from moved",
-            "merge into {$name} using {$other} on 1 = 1 when matched then delete",
-            "explain analyze update {$name} set name = 'a'",
-            "alter table {$name} add column c int",
-            "drop table {$name}",
-            "create index i on {$name} (name)",
-            "update {$name} set name = 'a'; select 1",
-            "select 1; delete from {$name}",
+            [$table, ['mysql', 'pgsql', 'sqlite', 'sqlsrv']],
+            ["`{$table}`", ['mysql', 'sqlite']],
+            ["\"{$table}\"", ['pgsql', 'sqlite', 'sqlsrv']],
+            ["[{$table}]", ['sqlsrv', 'sqlite']],
+            ["db.{$table}", ['mysql', 'pgsql', 'sqlite', 'sqlsrv']],
+            ["\"public\".\"{$table}\"", ['pgsql', 'sqlite', 'sqlsrv']],
         ]);
     }
 
-    private function identifier(string $table): string
+    /**
+     * @param  array{string, list<string>}  $write
+     * @return array{string, list<string>}
+     */
+    private function decorate(array $write): array
     {
-        return $this->pick([$table, "`{$table}`", "\"{$table}\"", "[{$table}]", "db.{$table}", "\"public\".\"{$table}\""]);
-    }
-
-    private function decorate(string $sql): string
-    {
+        [$sql, $drivers] = $write;
         $sql = $this->random->getInt(0, 1) === 1 ? $this->randomCase($sql) : $sql;
         $sql = (string) preg_replace_callback('/ +/', fn (): string => $this->pick([' ', '  ', "\n", "\t", " \n  "]), $sql);
-        $leading = $this->pick(['', "-- note\n", "/* job */ ", "# mysql comment\n", "/* a */ -- b\n", "\n  "]);
+        [$leading, $leadingDrivers] = $this->pick([
+            ['', $drivers],
+            ["-- note\n", $drivers],
+            ['/* job */ ', $drivers],
+            ["# mysql comment\n", ['mysql']],
+            ["/* a */ -- b\n", $drivers],
+            ["\n  ", $drivers],
+        ]);
         $trailing = $this->pick(['', ';', ' ;', "\n", ' -- done']);
 
-        return $leading.$sql.$trailing;
+        return [$leading.$sql.$trailing, array_values(array_intersect($drivers, $leadingDrivers))];
     }
 
     private function randomCase(string $sql): string

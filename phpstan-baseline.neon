@@ -649,12 +649,6 @@ parameters:
 			path: src/Support/TableExtractor.php
 
 		-
-			message: '#^Parameter \#1 \$expr of static method Spiritix\\LadaCache\\Support\\SqlAliasParser\:\:extractAliasFromExpression\(\) expects string, float\|int\|string given\.$#'
-			identifier: argument.type
-			count: 2
-			path: src/Support/TableExtractor.php
-
-		-
 			message: '#^Property Illuminate\\Database\\Query\\Builder\:\:\$wheres \(array\) on left side of \?\? is not nullable\.$#'
 			identifier: nullCoalesce.property
 			count: 1

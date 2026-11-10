@@ -8,6 +8,8 @@ use Illuminate\Database\Connection;
 use RuntimeException;
 use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Support\RowExtractor;
+use Spiritix\LadaCache\Support\Sql\Dialect;
+use Spiritix\LadaCache\Support\Sql\Dialects;
 use Spiritix\LadaCache\Support\SqlTableScanner;
 use Spiritix\LadaCache\Support\TableExtractor;
 
@@ -65,6 +67,11 @@ final class Reflector
      * The database server and database the query runs against, so results of equally named
      * databases on different servers never share cache entries.
      */
+    public function getDialect(): Dialect
+    {
+        return Dialects::of($this->queryBuilder->getConnection());
+    }
+
     public function getDatabaseServer(): string
     {
         $connection = $this->queryBuilder->getConnection();
@@ -126,6 +133,7 @@ final class Reflector
         return $this->referenceCounts ??= SqlTableScanner::tableReferenceCounts(
             $this->getSql(),
             $this->queryBuilder->getConnection()->getTablePrefix(),
+            $this->getDialect(),
         );
     }
 

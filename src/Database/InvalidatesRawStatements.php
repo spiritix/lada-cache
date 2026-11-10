@@ -7,6 +7,7 @@ namespace Spiritix\LadaCache\Database;
 use Closure;
 use Spiritix\LadaCache\QueryHandler;
 use Spiritix\LadaCache\Support\RawStatementClassifier;
+use Spiritix\LadaCache\Support\Sql\Dialects;
 
 trait InvalidatesRawStatements
 {
@@ -43,7 +44,7 @@ trait InvalidatesRawStatements
 
     private function invalidateForRawStatement(string $query): void
     {
-        $effect = RawStatementClassifier::classify($query, $this->getTablePrefix());
+        $effect = RawStatementClassifier::classify($query, $this->getTablePrefix(), Dialects::forDriver($this->getDriverName()));
 
         if ($effect->isNone()) {
             return;

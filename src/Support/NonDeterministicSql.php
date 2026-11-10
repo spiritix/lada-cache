@@ -4,22 +4,57 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Support;
 
+use Spiritix\LadaCache\Support\Sql\Dialect;
+use Spiritix\LadaCache\Support\Sql\Tokenizer;
+use Spiritix\LadaCache\Support\Sql\TokenKind;
+
+/**
+ * Whether SQL calls a function whose result depends on time, randomness or the session, which
+ * makes a cached result wrong for the next caller.
+ */
 final class NonDeterministicSql
 {
-    private const string QUOTED = '/\'(?:[^\'\\\\]|\\\\.|\'\')*\'|"(?:[^"]|"")*"|`(?:[^`]|``)*`|\[[^\]]*\]/';
+    private const array FUNCTIONS = [
+        'NOW', 'SYSDATE', 'CURDATE', 'CURTIME', 'UTC_TIMESTAMP', 'UTC_DATE', 'UTC_TIME', 'UNIX_TIMESTAMP', 'RAND', 'RANDOM',
+        'RANDOMBLOB', 'UUID', 'UUID_SHORT', 'GEN_RANDOM_UUID', 'NEWID', 'NEWSEQUENTIALID', 'GETDATE', 'GETUTCDATE',
+        'SYSDATETIME', 'SYSUTCDATETIME', 'SYSDATETIMEOFFSET', 'CLOCK_TIMESTAMP', 'STATEMENT_TIMESTAMP',
+        'TRANSACTION_TIMESTAMP', 'TIMEOFDAY', 'LAST_INSERT_ID', 'LAST_INSERT_ROWID', 'CHANGES', 'CONNECTION_ID',
+        'FOUND_ROWS', 'ROW_COUNT', 'NEXTVAL', 'CURRVAL', 'LASTVAL', 'TXID_CURRENT', 'PG_BACKEND_PID', 'USER',
+        'SESSION_USER', 'SYSTEM_USER', 'CURRENT_USER', 'CURRENT_ROLE', 'DATABASE', 'SCHEMA',
+    ];
 
-    private const string FUNCTION_CALL = '/\b(?:now|sysdate|curdate|curtime|utc_timestamp|utc_date|utc_time|unix_timestamp|rand|random|randomblob|uuid|uuid_short|gen_random_uuid|newid|newsequentialid|getdate|getutcdate|sysdatetime|sysutcdatetime|sysdatetimeoffset|clock_timestamp|statement_timestamp|transaction_timestamp|timeofday|last_insert_id|last_insert_rowid|changes|connection_id|found_rows|row_count|nextval|currval|lastval|txid_current|pg_backend_pid|user|session_user|system_user|current_user|current_role|database|schema)\s*\(/i';
+    private const array BARE_KEYWORDS = [
+        'CURRENT_TIMESTAMP', 'CURRENT_DATE', 'CURRENT_TIME', 'LOCALTIME', 'LOCALTIMESTAMP', 'CURRENT_USER', 'SESSION_USER',
+    ];
 
-    private const string BARE_KEYWORD = '/(?<!\.)\b(?:current_timestamp|current_date|current_time|localtime|localtimestamp|current_user|session_user)\b(?!\s*\.)/i';
-
-    private const string SQLITE_NOW = '/\'now\'/i';
-
-    public static function isNonDeterministic(string $sql): bool
+    /**
+     * Function calls by name, the SQL standard's bare session keywords outside qualified names,
+     * and SQLite's `'now'` time value.
+     */
+    public static function isNonDeterministic(string $sql, Dialect $dialect): bool
     {
-        $code = (string) preg_replace(self::QUOTED, "''", $sql);
+        $tokens = array_values(array_filter(
+            (new Tokenizer($dialect, $sql))->tokenize(),
+            static fn (Sql\Token $token): bool => ! $token->isTrivia(),
+        ));
 
-        return preg_match(self::FUNCTION_CALL, $code) === 1
-            || preg_match(self::BARE_KEYWORD, $code) === 1
-            || preg_match(self::SQLITE_NOW, $sql) === 1;
+        foreach ($tokens as $position => $token) {
+            $previous = $tokens[$position - 1] ?? null;
+            $next = $tokens[$position + 1] ?? null;
+
+            if ($token->isKeyword(...self::FUNCTIONS) && $next?->is(TokenKind::LParen) === true) {
+                return true;
+            }
+
+            if ($token->isKeyword(...self::BARE_KEYWORDS) && $previous?->is(TokenKind::Period) !== true && $next?->is(TokenKind::Period) !== true) {
+                return true;
+            }
+
+            if ($token->is(TokenKind::SingleQuotedString) && strtolower($token->value) === 'now') {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

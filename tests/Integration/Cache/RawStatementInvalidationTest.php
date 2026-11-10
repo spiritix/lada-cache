@@ -77,6 +77,50 @@ final class RawStatementInvalidationTest extends TestCase
         $this->assertCacheHas($key, $tags);
     }
 
+    public function testRawMultiTableDeleteRefreshesItsTargetsWithoutRetiringTheCache(): void
+    {
+        $this->requireDatabaseDriver('mysql');
+        DB::table('drivers')->insert([['id' => 1, 'name' => 'kept'], ['id' => 2, 'name' => 'orphaned']]);
+        DB::table('cars')->insert([['id' => 1, 'name' => 'a', 'engine_id' => null, 'driver_id' => 1], ['id' => 2, 'name' => 'b', 'engine_id' => null, 'driver_id' => 2]]);
+        DB::table('materials')->insert(['id' => 1, 'name' => 'steel']);
+        DB::table('materials')->get();
+        [$materialsKey, $materialsTags] = $this->cacheKeyAndTags(DB::table('materials'));
+        $this->assertSame(2, DB::table('cars')->count());
+
+        DB::delete('DELETE c FROM cars c JOIN drivers d ON d.id = c.driver_id WHERE d.name = ?', ['orphaned']);
+
+        $this->assertSame(1, DB::table('cars')->count());
+        $this->assertCacheHas($materialsKey, $materialsTags, 'Only the deleted-from table changed');
+    }
+
+    public function testRawMultiTableUpdateRefreshesItsTargetsWithoutRetiringTheCache(): void
+    {
+        $this->requireDatabaseDriver('mysql');
+        DB::table('drivers')->insert(['id' => 1, 'name' => 'driver']);
+        DB::table('cars')->insert(['id' => 1, 'name' => 'before', 'engine_id' => null, 'driver_id' => 1]);
+        DB::table('materials')->insert(['id' => 1, 'name' => 'steel']);
+        DB::table('materials')->get();
+        [$materialsKey, $materialsTags] = $this->cacheKeyAndTags(DB::table('materials'));
+        $this->assertSame('before', DB::table('cars')->where('id', 1)->value('name'));
+
+        DB::update('UPDATE cars c INNER JOIN (SELECT id, name FROM drivers) d ON d.id = c.driver_id SET c.name = d.name WHERE c.id = ?', [1]);
+
+        $this->assertSame('driver', DB::table('cars')->where('id', 1)->value('name'));
+        $this->assertCacheHas($materialsKey, $materialsTags, 'Only the updated table changed');
+    }
+
+    public function testRawDeleteUsingAnAliasRefreshesTheAliasedTable(): void
+    {
+        $this->requireDatabaseDriver('mysql');
+        DB::table('drivers')->insert(['id' => 1, 'name' => 'gone']);
+        DB::table('cars')->insert(['id' => 1, 'name' => 'a', 'engine_id' => null, 'driver_id' => 1]);
+        $this->assertSame(1, DB::table('cars')->count());
+
+        DB::delete('DELETE FROM c USING cars c JOIN drivers d ON d.id = c.driver_id WHERE d.name = ?', ['gone']);
+
+        $this->assertSame(0, DB::table('cars')->count());
+    }
+
     public function testRawSchemaChangeRetiresTheWholeCache(): void
     {
         DB::table('drivers')->insert(['id' => 1, 'name' => 'driver']);

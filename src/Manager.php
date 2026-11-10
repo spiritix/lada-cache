@@ -49,7 +49,7 @@ final readonly class Manager
             return false;
         }
 
-        return ! NonDeterministicSql::isNonDeterministic($this->reflector->getSql());
+        return ! NonDeterministicSql::isNonDeterministic($this->reflector->getSql(), $this->reflector->getDialect());
     }
 
     /**

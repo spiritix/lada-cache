@@ -7,6 +7,7 @@ namespace Spiritix\LadaCache\Support;
 use Illuminate\Database\Connection;
 use InvalidArgumentException;
 use RuntimeException;
+use Spiritix\LadaCache\Support\Sql\Dialects;
 use UnexpectedValueException;
 
 /**
@@ -49,7 +50,7 @@ final class DependentTables
         }
 
         foreach (self::triggerBodies($connection) as [$table, $body]) {
-            foreach (SqlTableScanner::writtenTables($body, $prefix) as $target) {
+            foreach (SqlTableScanner::writtenTables($body, $prefix, Dialects::forDriver($connection->getDriverName())) as $target) {
                 $everyWrite[TableName::withoutPrefix($table, $prefix)][TableName::unqualified($target)] = true;
             }
         }
@@ -182,7 +183,7 @@ final class DependentTables
             foreach ($connection->select("select name, sql from sqlite_master where type = 'view'", [], false) as $view) {
                 $view = (array) $view;
 
-                foreach (SqlTableScanner::tables((string) $view['sql'], '') as $table) {
+                foreach (SqlTableScanner::tables((string) $view['sql'], '', Dialects::forDriver('sqlite')) as $table) {
                     $pairs[] = [TableName::unqualified($table), (string) $view['name']];
                 }
             }
