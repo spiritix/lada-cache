@@ -45,6 +45,9 @@
 - `exists()` caches `select 1` instead of whole rows
 - Lada connections no longer open the primary and read PDO connections when resolved, only when first used
 - The debug collector lookup no longer throws and catches an exception for every query when Debugbar is not installed
+- `include_tables` and `exclude_tables` must be lists of table names and `prefix` and `redis_connection` strings; any other value disables Lada Cache with a logged error at boot instead of being cast, or failing on the first query. Integer settings accept integers and integer strings only, no longer floats or booleans
+- `QueryBuilder`'s constructor is `final` and takes an `Illuminate\Database\Connection` instead of any `ConnectionInterface`
+- A write on a connection without a name logs a failed invalidation and invalidates everything, instead of invalidating under an empty connection name
 
 ### Fixed
 - A failing SQL query was executed twice, and a successful query ran again when storing its result failed
