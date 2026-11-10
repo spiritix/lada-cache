@@ -67,9 +67,11 @@ fuzz *args: deps services
 concurrency *args: deps services
     #!/usr/bin/env bash
     set -euo pipefail
-    for driver in mysql pgsql; do
-        echo "== concurrency $driver"
-        just _suite "$driver" Concurrency {{args}}
+    for client in phpredis predis; do
+        for driver in mysql pgsql; do
+            echo "== concurrency $driver / $client"
+            REDIS_CLIENT="$client" just _suite "$driver" Concurrency {{args}}
+        done
     done
 
 # Run hosts of 5.x and of this version side by side, like pods during a rolling deploy.
