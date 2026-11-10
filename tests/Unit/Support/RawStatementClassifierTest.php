@@ -66,6 +66,8 @@ final class RawStatementClassifierTest extends TestCase
         yield 'explain analyze of an unrecognized statement' => ['explain analyze call recalculate_prices()', 'pgsql'];
         yield 'unterminated string' => ["update cars set name = 'x", 'mysql'];
         yield 'sql server top' => ['delete top (10) from cars', 'sqlsrv'];
+        yield 'sql server batch hiding a write behind a read' => ['select 1 delete from cars', 'sqlsrv'];
+        yield 'sql server batch of two writes' => ['update drivers set name = 1 delete from cars', 'sqlsrv'];
     }
 
     #[DataProvider('statementsThatChangeEverything')]
@@ -93,6 +95,7 @@ final class RawStatementClassifierTest extends TestCase
         yield 'explain format (mysql)' => ['explain format=json delete from cars', 'mysql'];
         yield 'empty' => ['  ;  ', 'mysql'];
         yield 'semicolon in literal' => ["set @label = 'a;b'", 'mysql'];
+        yield 'sql server read calling replace' => ["select replace(name, 'a', 'b') from cars", 'sqlsrv'];
     }
 
     #[DataProvider('sideEffectFreeStatements')]
@@ -134,7 +137,9 @@ final class RawStatementClassifierTest extends TestCase
         yield 'delete with modifiers' => ['DELETE LOW_PRIORITY QUICK IGNORE FROM cars WHERE id = ?', ['cars'], Write::delete(), 'mysql'];
         yield 'truncate' => ['truncate table cars', ['cars'], Write::truncate(), 'mysql'];
         yield 'truncate cascade' => ['truncate cars, drivers cascade', ['cars', 'drivers'], Write::truncate(), 'pgsql'];
-        yield 'merge' => ['merge into cars using drivers on cars.id = drivers.id when matched then delete', ['cars'], Write::unknown(), 'pgsql'];
+        yield 'merge' => ['merge into cars using drivers on cars.id = drivers.id when matched then delete', ['cars'], Write::merge(), 'pgsql'];
+        yield 'schema qualified (postgres)' => ['update "public"."cars" set name = ?', ['cars'], Write::update(['name']), 'pgsql'];
+        yield 'schema qualified (sql server)' => ['delete from dbo.[cars] where id = ?', ['cars'], Write::delete(), 'sqlsrv'];
         yield 'multi-table update of qualified columns' => ['update cars join drivers on drivers.id = cars.driver_id set cars.name = drivers.name where drivers.id = 1', ['cars'], Write::update(['name']), 'mysql'];
         yield 'comma update' => ['update cars, drivers set cars.name = drivers.name', ['cars'], Write::update(['name']), 'mysql'];
         yield 'multi-table update through an alias' => [

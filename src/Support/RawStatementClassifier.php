@@ -8,6 +8,8 @@ use Spiritix\LadaCache\Support\Sql\DeleteStatement;
 use Spiritix\LadaCache\Support\Sql\Dialect;
 use Spiritix\LadaCache\Support\Sql\InsertStatement;
 use Spiritix\LadaCache\Support\Sql\MergeStatement;
+use Spiritix\LadaCache\Support\Sql\MsSqlDialect;
+use Spiritix\LadaCache\Support\Sql\MySqlDialect;
 use Spiritix\LadaCache\Support\Sql\Parser;
 use Spiritix\LadaCache\Support\Sql\ParserException;
 use Spiritix\LadaCache\Support\Sql\Token;
@@ -21,7 +23,7 @@ use Spiritix\LadaCache\Support\Sql\WriteTargets;
 /**
  * Classifies SQL run outside the query builder by parsing it: statements known to be free of
  * side effects change nothing, writes change the tables they target the way their kind does, and
- * anything that does not parse, writes outside the current database or is not known changes
+ * anything that does not parse, writes to another MySQL database or is not known changes
  * everything.
  */
 final class RawStatementClassifier
@@ -65,7 +67,44 @@ final class RawStatementClassifier
             }
         }
 
+        if ($dialect instanceof MsSqlDialect && self::batchesAnotherWrite($tokens)) {
+            return RawStatementEffect::everything();
+        }
+
         return self::classifyStatement($tokens, $tablePrefix, $dialect);
+    }
+
+    /**
+     * T-SQL separates the statements of a batch without semicolons, so a write keyword after the
+     * first statement's own may start another statement. A MERGE names INSERT, UPDATE and DELETE
+     * in its own clauses and must end with a semicolon; `REPLACE(` is a function.
+     *
+     * @param  list<Token>  $tokens
+     */
+    private static function batchesAnotherWrite(array $tokens): bool
+    {
+        $first = null;
+
+        foreach ($tokens as $position => $token) {
+            if ($first === null) {
+                if ($token->is(TokenKind::LParen)) {
+                    continue;
+                }
+
+                $first = $token;
+                if ($first->isKeyword('MERGE')) {
+                    return false;
+                }
+
+                continue;
+            }
+
+            if ($token->isKeyword(...self::WRITE_KEYWORDS) && ($tokens[$position + 1] ?? null)?->is(TokenKind::LParen) !== true) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -108,20 +147,25 @@ final class RawStatementClassifier
         }
 
         try {
-            return self::classifyWrite((new Parser($dialect, $statement))->parseWriteStatement(), $tablePrefix);
+            return self::classifyWrite((new Parser($dialect, $statement))->parseWriteStatement(), $tablePrefix, $dialect);
         } catch (ParserException) {
             return RawStatementEffect::everything();
         }
     }
 
-    private static function classifyWrite(InsertStatement|UpdateStatement|DeleteStatement|TruncateStatement|MergeStatement $statement, string $tablePrefix): RawStatementEffect
+    /**
+     * MySQL qualifiers name other databases, whose tables this connection's invalidation cannot
+     * reach; elsewhere they name schemas of the connection's database, which reads are tagged
+     * without, as `Tagger` does.
+     */
+    private static function classifyWrite(InsertStatement|UpdateStatement|DeleteStatement|TruncateStatement|MergeStatement $statement, string $tablePrefix, Dialect $dialect): RawStatementEffect
     {
         $tables = [];
         foreach (WriteTargets::of($statement) as $name) {
-            if (count($name) !== 1) {
+            if (count($name) !== 1 && $dialect instanceof MySqlDialect) {
                 return RawStatementEffect::everything();
             }
-            $tables[TableName::withoutPrefix($name[0], $tablePrefix)] = true;
+            $tables[TableName::withoutPrefix($name[array_key_last($name)], $tablePrefix)] = true;
         }
 
         $tables = array_map('strval', array_keys($tables));
@@ -136,7 +180,7 @@ final class RawStatementClassifier
             $statement instanceof InsertStatement && $statement->replacesRows, $statement instanceof DeleteStatement => Write::delete(),
             $statement instanceof InsertStatement, $statement instanceof UpdateStatement => self::assigning(WriteTargets::assignedColumns($statement)),
             $statement instanceof TruncateStatement => Write::truncate(),
-            $statement instanceof MergeStatement => Write::unknown(),
+            $statement instanceof MergeStatement => Write::merge(),
         };
     }
 
