@@ -34,11 +34,14 @@ use UnexpectedValueException;
  * table whatever its rules, as PostgreSQL's `TRUNCATE ... CASCADE` does. Tables reached through
  * views, triggers or configuration are written in ways not known, so the dependents any delete or
  * update of them changes change. A trigger whose body cannot be read may write any table, so the
- * writes firing it change `EVERY_TABLE`.
+ * writes firing it change `EVERY_TABLE`. A PostgreSQL table holds the rows of the tables
+ * inheriting from it, its partitions included: a write to it is the same write to them, and a
+ * change to one of them is read through it (`read`) without being a write to it.
  *
  * @phpstan-type ForeignKey array{child: string, parentColumns: list<string>, childColumns: list<string>, onDelete: ReferentialAction, onUpdate: ReferentialAction}
- * @phpstan-type Change array{0: 'any'|'insert'|'delete'|'truncate', 1: string}|array{0: 'update', 1: string, 2: string}
+ * @phpstan-type Change array{0: 'any'|'insert'|'delete'|'truncate'|'read', 1: string}|array{0: 'update', 1: string, 2: string}
  * @phpstan-type Trigger array{events: list<TriggerEvent>, columns: list<string>|null, changes: list<Change>}
+ * @phpstan-type Graph array{everyWrite: array<string, array<string, true>>, foreignKeys: array<string, list<ForeignKey>>, triggers: array<string, list<Trigger>>, parents: array<string, list<string>>}
  * @phpstan-type TriggerDefinition array{name: string, table: string, events: list<TriggerEvent>, columns: list<string>|null, sql: string, dialect: Dialect}
  */
 final class DependentTables
@@ -87,7 +90,59 @@ final class DependentTables
             $viewBases[$view][$table] = true;
         }
 
-        return self::fields($everyWrite, $viewBases, self::foreignKeys($connection, $prefix), self::triggers($connection, $prefix));
+        $triggers = self::triggers($connection, $prefix);
+        $parents = [];
+
+        foreach (self::inheritance($connection) as [$parent, $child, $parentIsPartitioned]) {
+            $parent = TableName::withoutPrefix($parent, $prefix);
+            $child = TableName::withoutPrefix($child, $prefix);
+            $parents[$child][] = $parent;
+            $triggers[$parent] = [...$triggers[$parent] ?? [], ...self::writesReachingChild($child, $parentIsPartitioned)];
+        }
+
+        return self::fields($everyWrite, $viewBases, self::foreignKeys($connection, $prefix), $triggers, $parents);
+    }
+
+    /**
+     * Pairs of a PostgreSQL table and a table inheriting from it, with whether the parent is
+     * partitioned and so holds no rows of its own. Other databases keep partitions inside one
+     * table.
+     *
+     * @return list<array{string, string, bool}>
+     */
+    private static function inheritance(Connection $connection): array
+    {
+        if ($connection->getDriverName() !== 'pgsql') {
+            return [];
+        }
+
+        return array_map(
+            static fn (array $row): array => [self::text($row, 'parent_table'), self::text($row, 'child_table'), self::text($row, 'parent_kind') === 'p'],
+            self::rows(
+                $connection,
+                'select p.relname as parent_table, c.relname as child_table, p.relkind as parent_kind from pg_inherits i'
+                .' join pg_class p on p.oid = i.inhparent join pg_class c on c.oid = i.inhrelid join pg_namespace n on n.oid = c.relnamespace'
+                ." where c.relkind in ('r', 'p', 'f') and n.nspname = any(current_schemas(false)) order by p.relname, c.relname",
+            ),
+        );
+    }
+
+    /**
+     * What a write to a table does to a table inheriting from it, in the shape of triggers: a
+     * delete or truncate removes the child's rows too, an update may assign any of its columns or
+     * move a row to another partition, and an insert lands in a child only when the parent is
+     * partitioned.
+     *
+     * @return list<Trigger>
+     */
+    private static function writesReachingChild(string $child, bool $parentIsPartitioned): array
+    {
+        return [
+            ...($parentIsPartitioned ? [['events' => [TriggerEvent::Insert], 'columns' => null, 'changes' => [['insert', $child]]]] : []),
+            ['events' => [TriggerEvent::Delete], 'columns' => null, 'changes' => [['delete', $child]]],
+            ['events' => [TriggerEvent::Truncate], 'columns' => null, 'changes' => [['truncate', $child]]],
+            ['events' => [TriggerEvent::Update], 'columns' => null, 'changes' => [['any', $child]]],
+        ];
     }
 
     /**
@@ -486,24 +541,28 @@ final class DependentTables
      * @param  array<string, array<string, true>>  $viewBases  view => base tables a write through it changes
      * @param  array<string, list<ForeignKey>>  $foreignKeys  parent table => foreign keys referencing it
      * @param  array<string, list<Trigger>>  $triggers  table => its triggers
+     * @param  array<string, list<string>>  $parents  table => tables it inherits from
      * @return array<string, list<string>>
      */
-    private static function fields(array $everyWrite, array $viewBases, array $foreignKeys, array $triggers): array
+    private static function fields(array $everyWrite, array $viewBases, array $foreignKeys, array $triggers, array $parents): array
     {
-        $graph = ['everyWrite' => $everyWrite, 'foreignKeys' => $foreignKeys, 'triggers' => $triggers];
+        $graph = ['everyWrite' => $everyWrite, 'foreignKeys' => $foreignKeys, 'triggers' => $triggers, 'parents' => $parents];
         $fields = [];
         $cascadeColumns = [];
 
-        foreach (array_keys($everyWrite + $viewBases + $foreignKeys + $triggers) as $table) {
+        foreach (array_keys($everyWrite + $viewBases + $foreignKeys + $triggers + $parents) as $table) {
             $table = (string) $table;
             $keys = $foreignKeys[$table] ?? [];
             $tableTriggers = $triggers[$table] ?? [];
 
             $starts = [
-                Write::everyWriteField($table) => array_map(
-                    static fn (int|string $dependent): array => ['any', (string) $dependent],
-                    array_keys(($everyWrite[$table] ?? []) + ($viewBases[$table] ?? [])),
-                ),
+                Write::everyWriteField($table) => [
+                    ...array_map(
+                        static fn (int|string $dependent): array => ['any', (string) $dependent],
+                        array_keys(($everyWrite[$table] ?? []) + ($viewBases[$table] ?? [])),
+                    ),
+                    ...self::readsThrough($parents[$table] ?? []),
+                ],
                 Write::deleteField($table) => self::changesOfDelete($keys),
                 Write::truncateField($table) => self::changesOfTruncate($keys),
                 Write::anyUpdateField($table) => self::changesOfUpdate($keys, null),
@@ -601,7 +660,7 @@ final class DependentTables
      * the foreign key rules of its rows.
      *
      * @param  list<Change>  $start
-     * @param  array{everyWrite: array<string, array<string, true>>, foreignKeys: array<string, list<ForeignKey>>, triggers: array<string, list<Trigger>>}  $graph
+     * @param  Graph  $graph
      * @return list<string>
      */
     private static function reachableFrom(array $start, array $graph): array
@@ -631,10 +690,11 @@ final class DependentTables
 
     /**
      * The changes a change to a table makes in turn: its views and configured dependents, the
-     * triggers of its kind of change and the foreign key rules of its rows.
+     * tables it inherits from, which read its rows, the triggers of its kind of change and the
+     * foreign key rules of its rows. A table only read through fires neither.
      *
      * @param  Change  $change
-     * @param  array{everyWrite: array<string, array<string, true>>, foreignKeys: array<string, list<ForeignKey>>, triggers: array<string, list<Trigger>>}  $graph
+     * @param  Graph  $graph
      * @return list<Change>
      */
     private static function expand(array $change, array $graph): array
@@ -643,9 +703,13 @@ final class DependentTables
         $keys = $graph['foreignKeys'][$table] ?? [];
         $triggers = $graph['triggers'][$table] ?? [];
         $column = $change[2] ?? null;
-        $changes = array_map(static fn (int|string $dependent): array => ['any', (string) $dependent], array_keys($graph['everyWrite'][$table] ?? []));
+        $changes = [
+            ...array_map(static fn (int|string $dependent): array => ['any', (string) $dependent], array_keys($graph['everyWrite'][$table] ?? [])),
+            ...self::readsThrough($graph['parents'][$table] ?? []),
+        ];
 
         array_push($changes, ...match ($kind) {
+            'read' => [],
             'any' => [...self::triggerChanges($triggers, static fn (): bool => true), ...self::changesOfDelete($keys), ...self::changesOfUpdate($keys, null)],
             'insert' => self::triggerChanges($triggers, static fn (array $trigger): bool => in_array(TriggerEvent::Insert, $trigger['events'], true)),
             'delete' => [...self::triggerChanges($triggers, static fn (array $trigger): bool => in_array(TriggerEvent::Delete, $trigger['events'], true)), ...self::changesOfDelete($keys)],
@@ -660,6 +724,15 @@ final class DependentTables
         });
 
         return $changes;
+    }
+
+    /**
+     * @param  list<string>  $parents
+     * @return list<Change>
+     */
+    private static function readsThrough(array $parents): array
+    {
+        return array_map(static fn (string $parent): array => ['read', $parent], $parents);
     }
 
     /**

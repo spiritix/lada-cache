@@ -527,6 +527,77 @@ final class DependentTablesTest extends TestCase
         $this->assertSame(0, $petsOfAlice());
     }
 
+    public function testWritesToAPostgresPartitionRefreshCachedReadsOfItsParent(): void
+    {
+        $this->createPartitionedReadings();
+        $readings = fn (): int => DB::table('readings')->count();
+        $this->assertSame(0, $readings());
+
+        DB::table('readings_oslo')->insert(['id' => 1, 'city' => 'oslo', 'value' => 3]);
+        $this->assertSame(1, $readings());
+
+        DB::table('readings_oslo')->where('id', 1)->update(['value' => 9]);
+        $this->assertSame(9, DB::table('readings')->where('id', 1)->value('value'));
+
+        DB::table('readings_oslo')->where('id', 1)->delete();
+        $this->assertSame(0, $readings());
+    }
+
+    public function testWritesToAPostgresPartitionedTableRefreshCachedReadsOfItsPartitions(): void
+    {
+        $this->createPartitionedReadings();
+        $oslo = fn (): int => DB::table('readings_oslo')->count();
+        $this->assertSame(0, $oslo());
+
+        DB::table('readings')->insert(['id' => 1, 'city' => 'oslo', 'value' => 3]);
+        $this->assertSame(1, $oslo());
+
+        DB::table('readings')->where('id', 1)->update(['city' => 'rome']);
+        $this->assertSame(0, $oslo());
+        $this->assertSame(1, DB::table('readings_rome')->count());
+
+        DB::table('readings')->where('id', 1)->delete();
+        $this->assertSame(0, DB::table('readings_rome')->count());
+    }
+
+    public function testWritesToAPostgresPartitionKeepCachedReadsOfItsSiblings(): void
+    {
+        $this->createPartitionedReadings();
+        DB::table('readings_rome')->get();
+        [$romeKey, $romeTags] = $this->cacheKeyAndTags(DB::table('readings_rome'));
+
+        DB::table('readings_oslo')->insert(['id' => 1, 'city' => 'oslo', 'value' => 3]);
+
+        $this->assertCacheHas($romeKey, $romeTags);
+    }
+
+    public function testWritesToAPostgresTableRefreshCachedReadsOfTheTablesItInheritsFromAndBack(): void
+    {
+        $this->requireDatabaseDriver('pgsql');
+        DB::unprepared('create table places (id bigint primary key, name text not null); create table capitals (country text) inherits (places)');
+        $this->loadDependencyMap();
+        $places = fn (): int => DB::table('places')->count();
+        $this->assertSame(0, $places());
+
+        DB::table('capitals')->insert(['id' => 1, 'name' => 'oslo', 'country' => 'norway']);
+        $this->assertSame(1, $places());
+        $this->assertSame(1, DB::table('capitals')->count());
+
+        DB::table('places')->where('id', 1)->delete();
+        $this->assertSame(0, DB::table('capitals')->count());
+    }
+
+    private function createPartitionedReadings(): void
+    {
+        $this->requireDatabaseDriver('pgsql');
+        DB::unprepared(
+            'create table readings (id bigint not null, city text not null, value int not null, primary key (id, city)) partition by list (city);'
+            ." create table readings_oslo partition of readings for values in ('oslo');"
+            ." create table readings_rome partition of readings for values in ('rome')"
+        );
+        $this->loadDependencyMap();
+    }
+
     private function generationId(): string
     {
         $redis = new Redis;
