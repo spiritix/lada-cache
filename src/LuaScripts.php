@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache;
 
+use ReflectionClass;
 use Spiritix\LadaCache\Support\ColumnKeys;
 use Spiritix\LadaCache\Support\ColumnType;
 use Spiritix\LadaCache\Support\DependentTables;
@@ -32,6 +33,16 @@ use Spiritix\LadaCache\Support\Write;
  */
 final class LuaScripts
 {
+    /**
+     * The name of the constant holding the script, for messages about it.
+     */
+    public static function nameOf(string $script): string
+    {
+        $name = array_search($script, (new ReflectionClass(self::class))->getConstants(), true);
+
+        return is_string($name) ? $name : 'unknown';
+    }
+
     /**
      * Defines retireIfServerChanged(base). A restarted Redis or a promoted replica may have lost
      * the newest version tokens, which would make invalidated entries reachable again; seeing a

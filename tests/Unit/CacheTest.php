@@ -11,6 +11,7 @@ use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\Encoder;
 use Spiritix\LadaCache\EntrySizeLimit;
 use Spiritix\LadaCache\ExpirationPolicy;
+use Spiritix\LadaCache\LuaScripts;
 use Spiritix\LadaCache\Redis;
 use Spiritix\LadaCache\Support\Invalidation;
 use Spiritix\LadaCache\Tests\Concerns\RecordsRedisCommands;
@@ -169,6 +170,13 @@ class CacheTest extends TestCase
         $this->cache->invalidate(Invalidation::of(['unrelated']));
 
         $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t'], []));
+    }
+
+    public function testARejectedScriptIsNamed(): void
+    {
+        $this->assertSame('INVALIDATE', LuaScripts::nameOf(LuaScripts::INVALIDATE));
+        $this->assertSame('LOOKUP', LuaScripts::nameOf(LuaScripts::LOOKUP));
+        $this->assertSame('unknown', LuaScripts::nameOf('return 1'));
     }
 
     public function testTheSameServerNeverRetires(): void

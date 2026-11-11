@@ -112,7 +112,7 @@ final class Redis
         if ($result === false) {
             $this->availability->markUnavailable();
 
-            throw new RuntimeException('Redis rejected a Lada Cache script: '.$this->lastClientError());
+            throw new RuntimeException('Redis rejected the Lada Cache script '.LuaScripts::nameOf($script).': '.$this->lastClientError());
         }
 
         $this->availability->markAvailable();
@@ -181,7 +181,9 @@ final class Redis
     {
         $connection = $this->connection;
 
-        return $connection instanceof PhpRedisConnection ? (self::phpRedisClient($connection)->getLastError() ?? 'no error reported') : 'no error reported';
+        return $connection instanceof PhpRedisConnection
+            ? (self::phpRedisClient($connection)->getLastError() ?? 'the reply was false and the client reports no error')
+            : 'the reply was false';
     }
 
     private static function phpRedisClient(PhpRedisConnection $connection): PhpRedisClient|RedisCluster
