@@ -10,6 +10,8 @@ use InvalidArgumentException;
 
 final class ReplicaReads
 {
+    public const int DEFAULT_LAG_SECONDS = 2;
+
     public static function lagSeconds(ConnectionInterface $connection): int
     {
         if (! self::hasReplicas($connection)) {
@@ -21,7 +23,7 @@ final class ReplicaReads
 
     public static function configuredLagSeconds(): int
     {
-        $seconds = ConfigValue::integer('lada-cache.replica_lag', 2);
+        $seconds = ConfigValue::integer('lada-cache.replica_lag', self::DEFAULT_LAG_SECONDS);
 
         if ($seconds < 0) {
             throw new InvalidArgumentException(sprintf('Invalid lada-cache.replica_lag %d, expected 0 or more seconds', $seconds));

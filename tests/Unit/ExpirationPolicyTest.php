@@ -48,6 +48,16 @@ final class ExpirationPolicyTest extends TestCase
         new ExpirationPolicy(60, 101);
     }
 
+    public function testAnEmptyValueUsesTheDefaultLikeAMissingOne(): void
+    {
+        config(['lada-cache.expiration_time' => '', 'lada-cache.expiration_jitter' => '']);
+
+        $policy = ExpirationPolicy::fromConfig();
+
+        $this->assertSame(ExpirationPolicy::DEFAULT_SECONDS, $policy->seconds);
+        $this->assertSame(ExpirationPolicy::DEFAULT_JITTER_PERCENT, $policy->jitterPercent);
+    }
+
     public function testNonIntegerConfigFailsLoudly(): void
     {
         config(['lada-cache.expiration_jitter' => 'lots']);

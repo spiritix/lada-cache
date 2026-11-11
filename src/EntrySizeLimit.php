@@ -13,6 +13,8 @@ use Spiritix\LadaCache\Support\ConfigValue;
  */
 final readonly class EntrySizeLimit
 {
+    public const int DEFAULT_BYTES = 8 * 1024 * 1024;
+
     public function __construct(public int $bytes)
     {
         if ($bytes < 0) {
@@ -22,7 +24,7 @@ final readonly class EntrySizeLimit
 
     public static function fromConfig(): self
     {
-        return new self(ConfigValue::integer('lada-cache.max_entry_size', 8 * 1024 * 1024));
+        return new self(ConfigValue::integer('lada-cache.max_entry_size', self::DEFAULT_BYTES));
     }
 
     public function allows(string $payload): bool

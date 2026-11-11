@@ -9,6 +9,10 @@ use Spiritix\LadaCache\Support\ConfigValue;
 
 final readonly class ExpirationPolicy
 {
+    public const int DEFAULT_SECONDS = 604800;
+
+    public const int DEFAULT_JITTER_PERCENT = 15;
+
     public function __construct(
         public int $seconds,
         public int $jitterPercent = 0,
@@ -25,8 +29,8 @@ final readonly class ExpirationPolicy
     public static function fromConfig(): self
     {
         return new self(
-            ConfigValue::integer('lada-cache.expiration_time', 0),
-            ConfigValue::integer('lada-cache.expiration_jitter', 0),
+            ConfigValue::integer('lada-cache.expiration_time', self::DEFAULT_SECONDS),
+            ConfigValue::integer('lada-cache.expiration_jitter', self::DEFAULT_JITTER_PERCENT),
         );
     }
 

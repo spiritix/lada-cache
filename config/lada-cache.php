@@ -1,5 +1,11 @@
 <?php
 
+use Spiritix\LadaCache\CacheScope;
+use Spiritix\LadaCache\EntrySizeLimit;
+use Spiritix\LadaCache\ExpirationPolicy;
+use Spiritix\LadaCache\Redis;
+use Spiritix\LadaCache\Support\ReplicaReads;
+
 return [
 
     /*
@@ -37,7 +43,7 @@ return [
     | dedicated 'lada-cache' connection.
     |
     */
-    'redis_connection' => env('LADA_CACHE_REDIS_CONNECTION', 'cache'),
+    'redis_connection' => env('LADA_CACHE_REDIS_CONNECTION', Redis::DEFAULT_CONNECTION),
 
     /*
     |--------------------------------------------------------------------------
@@ -50,7 +56,7 @@ return [
     | previously cached entries inaccessible.
     |
     */
-    'prefix' => env('LADA_CACHE_PREFIX', 'lada:'),
+    'prefix' => env('LADA_CACHE_PREFIX', Redis::DEFAULT_PREFIX),
 
     /*
     |--------------------------------------------------------------------------
@@ -63,7 +69,7 @@ return [
     | keep entries until the cache generation is retired.
     |
     */
-    'expiration_time' => env('LADA_CACHE_EXPIRATION', 604800),
+    'expiration_time' => env('LADA_CACHE_EXPIRATION', ExpirationPolicy::DEFAULT_SECONDS),
 
     /*
     |--------------------------------------------------------------------------
@@ -76,7 +82,7 @@ return [
     | to expire every entry after exactly the configured time.
     |
     */
-    'expiration_jitter' => env('LADA_CACHE_EXPIRATION_JITTER', 15),
+    'expiration_jitter' => env('LADA_CACHE_EXPIRATION_JITTER', ExpirationPolicy::DEFAULT_JITTER_PERCENT),
 
     /*
     |--------------------------------------------------------------------------
@@ -88,7 +94,7 @@ return [
     | the query again and blocks Redis while it happens. Set to 0 for no limit.
     |
     */
-    'max_entry_size' => env('LADA_CACHE_MAX_ENTRY_SIZE', 8 * 1024 * 1024),
+    'max_entry_size' => env('LADA_CACHE_MAX_ENTRY_SIZE', EntrySizeLimit::DEFAULT_BYTES),
 
     /*
     |--------------------------------------------------------------------------
@@ -102,7 +108,7 @@ return [
     | yet. Set it to the replication lag you want to tolerate.
     |
     */
-    'replica_lag' => env('LADA_CACHE_REPLICA_LAG', 2),
+    'replica_lag' => env('LADA_CACHE_REPLICA_LAG', ReplicaReads::DEFAULT_LAG_SECONDS),
 
     /*
     |--------------------------------------------------------------------------
@@ -167,7 +173,7 @@ return [
     |           models never go stale through DB::table() or other models.
     |
     */
-    'scope' => env('LADA_CACHE_SCOPE', 'all'),
+    'scope' => env('LADA_CACHE_SCOPE', CacheScope::All->value),
 
     /*
     |--------------------------------------------------------------------------
