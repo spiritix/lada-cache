@@ -180,6 +180,7 @@ final class DependentTables
     private static function foreignKeys(Connection $connection, string $prefix): array
     {
         $constraints = [];
+        $declaredTypes = self::declaredTypes($connection);
 
         foreach ($connection->select(self::foreignKeyQuery($connection), [], false) as $row) {
             $row = (array) $row;
@@ -191,6 +192,10 @@ final class DependentTables
                 throw new RuntimeException("Lada Cache cannot tell which column of {$parent} the foreign key of {$child} on {$childColumn} references");
             }
 
+            $row += [
+                'child_type' => $declaredTypes[strtolower(self::text($row, 'child_table'))][strtolower($childColumn)] ?? null,
+                'parent_type' => $declaredTypes[strtolower(self::text($row, 'parent_table'))][strtolower(self::text($row, 'parent_column'))] ?? null,
+            ];
             $childType = ColumnType::of(self::optionalText($row, 'child_type'));
             $id = $child."\0".self::text($row, 'constraint_id');
             $constraints[$id] ??= [
@@ -238,6 +243,27 @@ final class DependentTables
     }
 
     /**
+     * The declared type of every column, for the databases whose foreign key query does not list
+     * them: on MySQL, joining `information_schema.columns` to the keys takes far longer than
+     * reading the columns of the schema once.
+     *
+     * @return array<string, array<string, string>> lowercase table => lowercase column => declared type
+     */
+    private static function declaredTypes(Connection $connection): array
+    {
+        if (! in_array($connection->getDriverName(), ['mysql', 'mariadb'], true)) {
+            return [];
+        }
+
+        $types = [];
+        foreach (self::rows($connection, 'select table_name as table_name, column_name as column_name, data_type as data_type from information_schema.columns where table_schema = database()') as $row) {
+            $types[strtolower(self::text($row, 'table_name'))][strtolower(self::text($row, 'column_name'))] = self::text($row, 'data_type');
+        }
+
+        return $types;
+    }
+
+    /**
      * @param  array<mixed>  $row
      */
     private static function optionalText(array $row, string $column): string
@@ -246,21 +272,16 @@ final class DependentTables
     }
 
     /**
-     * One row per referencing column, with an id shared by the columns of one constraint and the
-     * declared types of both columns.
+     * One row per referencing column, with an id shared by the columns of one constraint and,
+     * except on MySQL (see `declaredTypes()`), the declared types of both columns.
      */
     private static function foreignKeyQuery(Connection $connection): string
     {
         return match ($connection->getDriverName()) {
             'mysql', 'mariadb' => 'select r.constraint_name as constraint_id, k.table_name as child_table, k.referenced_table_name as parent_table,'
-                .' k.column_name as child_column, k.referenced_column_name as parent_column, r.delete_rule as delete_rule, r.update_rule as update_rule,'
-                .' child_column.data_type as child_type, parent_column.data_type as parent_type'
+                .' k.column_name as child_column, k.referenced_column_name as parent_column, r.delete_rule as delete_rule, r.update_rule as update_rule'
                 .' from information_schema.referential_constraints r join information_schema.key_column_usage k'
                 .' on k.constraint_schema = r.constraint_schema and k.constraint_name = r.constraint_name and k.table_name = r.table_name'
-                .' left join information_schema.columns child_column'
-                .' on child_column.table_schema = k.table_schema and child_column.table_name = k.table_name and child_column.column_name = k.column_name'
-                .' left join information_schema.columns parent_column on parent_column.table_schema = k.referenced_table_schema'
-                .' and parent_column.table_name = k.referenced_table_name and parent_column.column_name = k.referenced_column_name'
                 .' where r.constraint_schema = database() order by k.ordinal_position',
             'pgsql' => 'select c.oid as constraint_id, child.relname as child_table, parent.relname as parent_table,'
                 .' child_column.attname as child_column, parent_column.attname as parent_column, c.confdeltype as delete_rule, c.confupdtype as update_rule,'
