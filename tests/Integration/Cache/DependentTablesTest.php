@@ -677,6 +677,59 @@ final class DependentTablesTest extends TestCase
         $this->assertSame(1, $kids());
     }
 
+    public function testUuidKeysAreComparedWhateverTheirSpelling(): void
+    {
+        $this->requireDatabaseDriver('pgsql', 'mariadb');
+        Schema::create('devices', static function (Blueprint $table): void {
+            $table->uuid('id')->primary();
+        });
+        Schema::create('device_logs', static function (Blueprint $table): void {
+            $table->id();
+            $table->uuid('device_id');
+            $table->foreign('device_id')->references('id')->on('devices')->cascadeOnDelete();
+        });
+        $first = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
+        $second = 'b1ffcd00-0d1c-4fa9-8c7e-7cc0ce491b22';
+        DB::table('devices')->insert([['id' => $first], ['id' => $second]]);
+        DB::table('device_logs')->insert([['device_id' => $first], ['device_id' => $second]]);
+        $this->loadDependencyMap();
+        $this->assertSame(["device_id\tu"], DependentTables::load(DB::connection())['k:device_logs']);
+        $logsOf = fn (string $device): int => DB::table('device_logs')->where('device_id', $device)->count();
+        $this->assertSame([1, 1], [$logsOf($first), $logsOf($second)]);
+        [$secondKey, $secondTags] = $this->cacheKeyAndTags(DB::table('device_logs')->where('device_id', $second));
+        DB::table('device_logs')->where('device_id', $second)->get();
+
+        DB::table('devices')->where('id', strtoupper($first))->delete();
+
+        $this->assertSame(0, $logsOf($first));
+        $this->assertCacheHas($secondKey, $secondTags, 'Only the logs of the deleted device change');
+    }
+
+    public function testDecimalKeysAreComparedByValue(): void
+    {
+        Schema::create('rates', static function (Blueprint $table): void {
+            $table->decimal('id', 6, 2)->primary();
+        });
+        Schema::create('rate_uses', static function (Blueprint $table): void {
+            $table->id();
+            $table->decimal('rate_id', 6, 2);
+            $table->foreign('rate_id')->references('id')->on('rates')->cascadeOnDelete();
+        });
+        DB::table('rates')->insert([['id' => '1.50'], ['id' => '2.00']]);
+        DB::table('rate_uses')->insert([['rate_id' => '1.50'], ['rate_id' => '2.00']]);
+        $this->loadDependencyMap();
+        $this->assertSame(["rate_id\td"], DependentTables::load(DB::connection())['k:rate_uses']);
+        $usesOf = fn (string $rate): int => DB::table('rate_uses')->where('rate_id', $rate)->count();
+        $this->assertSame([1, 1], [$usesOf('1.5'), $usesOf('2')]);
+        [$twoKey, $twoTags] = $this->cacheKeyAndTags(DB::table('rate_uses')->where('rate_id', '2'));
+        DB::table('rate_uses')->where('rate_id', '2')->get();
+
+        DB::table('rates')->where('id', '1.50')->delete();
+
+        $this->assertSame(0, $usesOf('1.5'));
+        $this->assertCacheHas($twoKey, $twoTags, 'Only the uses of the deleted rate change');
+    }
+
     /**
      * PostgreSQL rejects a value of another type instead of casting it, and MySQL does so for
      * writes in strict mode.

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache;
 
+use Spiritix\LadaCache\Support\ColumnKeys;
 use Spiritix\LadaCache\Support\ColumnType;
 use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\Write;
@@ -63,16 +64,21 @@ final class LuaScripts
      * and the index after them.
      */
     private const string DEPENDENTS_NAMES = "local everyTable = '".DependentTables::EVERY_TABLE."'\nlocal anyTableField = '".Write::ANY_TABLE_FIELD."'\n"
-        ."local columnTypes = {'".ColumnType::Integer->value."', '".ColumnType::Text->value."'}\n".<<<'LUA'
+        ."local columnTypes = {'".ColumnType::Integer->value."', '".ColumnType::Decimal->value."', '".ColumnType::Text->value."', '".ColumnType::Uuid->value."'}\n"
+        .'local keysAsBefore = '.ColumnKeys::AS_BEFORE."\n".<<<'LUA'
         local function readColumnKeys(index)
             local keys = {}
+            local before
             for _, columnType in ipairs(columnTypes) do
                 local count = tonumber(ARGV[index])
                 index = index + 1
-                if count >= 0 then
+                if count == keysAsBefore then
+                    keys[columnType] = before
+                elseif count >= 0 then
                     keys[columnType] = {index, index + count - 1}
                     index = index + count
                 end
+                before = keys[columnType]
             end
             return keys, index
         end

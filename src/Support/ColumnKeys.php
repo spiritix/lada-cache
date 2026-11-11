@@ -11,6 +11,10 @@ namespace Spiritix\LadaCache\Support;
  */
 final readonly class ColumnKeys
 {
+    public const int UNKEYED = -1;
+
+    public const int AS_BEFORE = -2;
+
     /**
      * @param  array<string, list<string>>  $byType  `ColumnType` value => sorted keys
      */
@@ -60,18 +64,27 @@ final readonly class ColumnKeys
     }
 
     /**
-     * For each `ColumnType` in order: the number of keys followed by the keys, or -1 when the
-     * values cannot be keyed for it, as the scripts read them.
+     * For each `ColumnType` in order, as the scripts read them: the number of keys followed by
+     * the keys, `self::UNKEYED` when the values cannot be keyed for it, or `self::AS_BEFORE`
+     * when its keys are those of the type before it, as a decimal column's are for integers.
      *
      * @return list<int|string>
      */
     public function arguments(): array
     {
         $arguments = [];
+        $before = null;
 
         foreach (ColumnType::cases() as $type) {
             $keys = $this->byType[$type->value] ?? null;
-            array_push($arguments, $keys === null ? -1 : count($keys), ...$keys ?? []);
+
+            match (true) {
+                $keys === null => $arguments[] = self::UNKEYED,
+                $keys === $before => $arguments[] = self::AS_BEFORE,
+                default => array_push($arguments, count($keys), ...$keys),
+            };
+
+            $before = $keys;
         }
 
         return $arguments;

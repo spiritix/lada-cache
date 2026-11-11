@@ -60,9 +60,66 @@ final class RowKeys
      */
     public static function forColumn(array $values, ColumnType $type): ?array
     {
-        $keys = self::canonical($values, $type === ColumnType::Text);
+        if ($values === [] || count($values) > self::MAX_PER_TABLE) {
+            return null;
+        }
 
-        return $keys === null || $keys === [] ? null : $keys;
+        $keys = [];
+        foreach ($values as $value) {
+            $key = match ($type) {
+                ColumnType::Integer => self::integerKey($value),
+                ColumnType::Decimal => self::decimalKey($value),
+                ColumnType::Text => self::stringKey($value),
+                ColumnType::Uuid => self::uuidKey($value),
+            };
+
+            if ($key === null) {
+                return null;
+            }
+
+            $keys[$key] = true;
+        }
+
+        $canonical = array_map('strval', array_keys($keys));
+        sort($canonical, SORT_STRING);
+
+        return $canonical;
+    }
+
+    /**
+     * Decimals compare by value, so `1`, `'1.0'` and `'01.00'` share a key; an integer has the
+     * key `integerKey()` gives it. Floats that are not whole numbers have no exact decimal
+     * spelling, and other strings, such as `'1e2'` or `'1abc'`, may be cast.
+     */
+    private static function decimalKey(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return self::integerKey($value);
+        }
+
+        if (preg_match('/^\s*([+-]?)(\d*)(?:\.(\d*))?\s*$/', $value, $matches) !== 1 || $matches[2].($matches[3] ?? '') === '') {
+            return null;
+        }
+
+        $whole = ltrim($matches[2], '0');
+        $fraction = rtrim($matches[3] ?? '', '0');
+        $key = ($whole === '' ? '0' : $whole).($fraction === '' ? '' : '.'.$fraction);
+
+        return ($matches[1] === '-' && $key !== '0' ? '-' : '').$key;
+    }
+
+    /**
+     * UUIDs compare by their 32 hexadecimal digits, whatever their case, hyphens or braces.
+     */
+    private static function uuidKey(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $digits = str_replace('-', '', trim($value, '{}'));
+
+        return strlen($digits) === 32 && ctype_xdigit($digits) ? strtolower($digits) : null;
     }
 
     private static function integerKey(mixed $value): ?string
