@@ -5,11 +5,33 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Support\Sql;
 
 /**
- * Ported from sqlparser-rs src/dialect/mysql.rs (Apache-2.0), commit 8a176d9.
+ * Ported from sqlparser-rs src/dialect/mysql.rs (Apache-2.0), commit 8a176d9. The two SQL modes
+ * that change how MySQL reads quotes are options: `ANSI_QUOTES` makes `"` quote identifiers
+ * instead of strings, and `NO_BACKSLASH_ESCAPES` makes a backslash an ordinary character.
  */
-final class MySqlDialect implements Dialect
+final readonly class MySqlDialect implements Dialect
 {
     use DialectDefaults;
+
+    public function __construct(
+        private bool $ansiQuotes = false,
+        private bool $backslashEscapes = true,
+    ) {}
+
+    /**
+     * The dialect of SQL stored under a `sql_mode`, such as a trigger body, which MySQL reads in
+     * the mode it was created in. MySQL lists the modes a combination mode such as `ANSI` stands
+     * for, so `ANSI_QUOTES` is named whenever it applies.
+     */
+    public static function forSqlMode(string $sqlMode): self
+    {
+        $modes = array_fill_keys(explode(',', strtoupper($sqlMode)), true);
+
+        return new self(
+            ansiQuotes: isset($modes['ANSI_QUOTES']),
+            backslashEscapes: ! isset($modes['NO_BACKSLASH_ESCAPES']),
+        );
+    }
 
     public function isIdentifierStart(string $ch): bool
     {
@@ -27,12 +49,12 @@ final class MySqlDialect implements Dialect
 
     public function isDelimitedIdentifierStart(string $ch): bool
     {
-        return $ch === '`';
+        return $ch === '`' || ($this->ansiQuotes && $ch === '"');
     }
 
     public function supportsStringLiteralBackslashEscape(): bool
     {
-        return true;
+        return $this->backslashEscapes;
     }
 
     public function ignoresWildcardEscapes(): bool

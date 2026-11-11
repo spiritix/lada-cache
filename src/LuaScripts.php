@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache;
 
+use Spiritix\LadaCache\Support\DependentTables;
+
 /**
  * Atomic Redis operations backing the cache.
  *
@@ -209,10 +211,13 @@ final class LuaScripts
      * `<child>\t<column>`: for those only the cascade tags of the child naming the keys are
      * replaced (see `CASCADE_TAGS`). Without the keyed field, its fallback is used table-wide.
      * Replaces the tokens of the tags, and of every table-wide tag of the tables the database
-     * changes along with each group's tables. Returns {0} when nothing was ever cached, else
+     * changes along with each group's tables. A group changing `DependentTables::EVERY_TABLE`
+     * changes tables no tag names, so the generation is retired instead; its dependency map,
+     * which only a schema change outdates, moves to the fresh generation. Returns {0} when
+     * nothing was ever cached or is anymore, else
      * {generation, 1-based indexes of the groups whose dependents are not known yet...}.
      */
-    public const string INVALIDATE = self::SERVER_CHECK.self::CASCADE_TAGS.<<<'LUA'
+    public const string INVALIDATE = self::SERVER_CHECK.self::CASCADE_TAGS."local everyTable = '".DependentTables::EVERY_TABLE."'\n".<<<'LUA'
         local base, fresh, ttl, lag = ARGV[1], ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4])
         if retireIfServerChanged(base) then
             return {0}
@@ -294,6 +299,11 @@ final class LuaScripts
                         end
                     end
                 end
+            end
+            if changed[everyTable] then
+                redis.call('SET', base .. 'generation', fresh)
+                redis.call('RENAME', dependentsKey, base .. fresh .. ':d:' .. dependentsName)
+                return {0}
             end
             for dependent in pairs(changed) do
                 for p = 1, prefixCount do

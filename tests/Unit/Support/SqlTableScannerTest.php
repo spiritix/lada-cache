@@ -7,6 +7,7 @@ namespace Spiritix\LadaCache\Tests\Unit\Support;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Spiritix\LadaCache\Support\Sql\Dialects;
+use Spiritix\LadaCache\Support\Sql\MySqlDialect;
 use Spiritix\LadaCache\Support\Sql\ParserException;
 use Spiritix\LadaCache\Support\Sql\WriteTargets;
 use Spiritix\LadaCache\Support\SqlTableScanner;
@@ -105,6 +106,18 @@ final class SqlTableScannerTest extends TestCase
         }
 
         $this->assertSame($expected, $tables);
+    }
+
+    public function testMySqlIsReadInTheSqlModeItWasWrittenIn(): void
+    {
+        $sql = 'begin insert into "pet`events" (note) values (\'ends in a backslash \\\'); delete from `pet``toys`; end';
+        $tables = [];
+
+        foreach (SqlTableScanner::writeStatements($sql, MySqlDialect::forSqlMode('PIPES_AS_CONCAT,ANSI_QUOTES,NO_BACKSLASH_ESCAPES')) as $statement) {
+            $tables[] = WriteTargets::of($statement)[0][0];
+        }
+
+        $this->assertSame(['pet`events', 'pet`toys'], $tables);
     }
 
     public function testTriggerWritesThatDoNotParseThrowRatherThanMissATable(): void

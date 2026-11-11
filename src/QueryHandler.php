@@ -322,7 +322,7 @@ final class QueryHandler
             try {
                 $dependents = DependentTables::load(DB::connection($invalidation->connectionOf($database)));
             } catch (Throwable $exception) {
-                FailureReporter::report(CacheOperation::Invalidate, $exception, ['database' => $database, 'reading' => 'dependent tables']);
+                FailureReporter::report(CacheOperation::ReadDependents, $exception, ['database' => $database]);
                 $this->cache->retireAfterSchemaChange();
 
                 return;

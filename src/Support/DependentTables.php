@@ -8,12 +8,16 @@ use Illuminate\Database\Connection;
 use InvalidArgumentException;
 use RuntimeException;
 use Spiritix\LadaCache\Support\Sql\DeleteStatement;
+use Spiritix\LadaCache\Support\Sql\Dialect;
 use Spiritix\LadaCache\Support\Sql\Dialects;
 use Spiritix\LadaCache\Support\Sql\InsertStatement;
 use Spiritix\LadaCache\Support\Sql\MergeStatement;
+use Spiritix\LadaCache\Support\Sql\MySqlDialect;
+use Spiritix\LadaCache\Support\Sql\ParserException;
 use Spiritix\LadaCache\Support\Sql\SQLiteDialect;
 use Spiritix\LadaCache\Support\Sql\Token;
 use Spiritix\LadaCache\Support\Sql\Tokenizer;
+use Spiritix\LadaCache\Support\Sql\TokenizerException;
 use Spiritix\LadaCache\Support\Sql\TruncateStatement;
 use Spiritix\LadaCache\Support\Sql\UpdateStatement;
 use Spiritix\LadaCache\Support\Sql\WriteTargets;
@@ -29,11 +33,13 @@ use UnexpectedValueException;
  * delete, only assign the child's foreign key columns. A truncate empties every referencing
  * table whatever its rules, as PostgreSQL's `TRUNCATE ... CASCADE` does. Tables reached through
  * views, triggers or configuration are written in ways not known, so the dependents any delete or
- * update of them changes change.
+ * update of them changes change. A trigger whose body cannot be read may write any table, so the
+ * writes firing it change `EVERY_TABLE`.
  *
  * @phpstan-type ForeignKey array{child: string, parentColumns: list<string>, childColumns: list<string>, onDelete: ReferentialAction, onUpdate: ReferentialAction}
  * @phpstan-type Change array{0: 'any'|'insert'|'delete'|'truncate', 1: string}|array{0: 'update', 1: string, 2: string}
  * @phpstan-type Trigger array{events: list<TriggerEvent>, columns: list<string>|null, changes: list<Change>}
+ * @phpstan-type TriggerDefinition array{name: string, table: string, events: list<TriggerEvent>, columns: list<string>|null, sql: string, dialect: Dialect}
  */
 final class DependentTables
 {
@@ -41,7 +47,13 @@ final class DependentTables
      * Part of the name of the dependency map in Redis, so hosts reading another field layout
      * keep their own map.
      */
-    public const int LAYOUT = 5;
+    public const int LAYOUT = 6;
+
+    /**
+     * Listed among the tables a write changes when they cannot be told, which no table tag
+     * covers: such a write retires the cache generation (see `LuaScripts::INVALIDATE`).
+     */
+    public const string EVERY_TABLE = '*';
 
     /**
      * @return array<string, list<string>> `Write` dependents field => tables changed along with it
@@ -230,19 +242,40 @@ final class DependentTables
      */
     private static function triggers(Connection $connection, string $prefix): array
     {
-        $dialect = Dialects::of($connection);
         $triggers = [];
 
-        foreach (self::triggerDefinitions($connection) as [$table, $events, $columns, $body]) {
-            $changes = [];
-            foreach (SqlTableScanner::writeStatements($body, $dialect) as $statement) {
-                array_push($changes, ...self::changesOfStatement($statement, $prefix));
-            }
-
-            $triggers[TableName::withoutPrefix($table, $prefix)][] = ['events' => $events, 'columns' => $columns, 'changes' => $changes];
+        foreach (self::triggerDefinitions($connection) as $definition) {
+            $triggers[TableName::withoutPrefix($definition['table'], $prefix)][] = [
+                'events' => $definition['events'],
+                'columns' => $definition['columns'],
+                'changes' => self::changesOfTrigger($definition, $prefix),
+            ];
         }
 
         return $triggers;
+    }
+
+    /**
+     * How the trigger writes each table. One whose SQL does not parse is reported and taken to
+     * write every table, instead of leaving the whole dependency map unknown.
+     *
+     * @param  TriggerDefinition  $definition
+     * @return list<Change>
+     */
+    private static function changesOfTrigger(array $definition, string $prefix): array
+    {
+        try {
+            $changes = [];
+            foreach (SqlTableScanner::writeStatements($definition['sql'], $definition['dialect']) as $statement) {
+                array_push($changes, ...self::changesOfStatement($statement, $prefix));
+            }
+
+            return $changes;
+        } catch (TokenizerException|ParserException $exception) {
+            FailureReporter::report(CacheOperation::ReadTrigger, $exception, ['trigger' => $definition['name'], 'table' => $definition['table']]);
+
+            return [['any', self::EVERY_TABLE]];
+        }
     }
 
     /**
@@ -270,37 +303,70 @@ final class DependentTables
     }
 
     /**
-     * @return list<array{string, list<TriggerEvent>, list<string>|null, string}> table, events, `UPDATE OF` columns (null for any) and body of each trigger
+     * The table, events, `UPDATE OF` columns (null for any) and SQL of each trigger, with the
+     * dialect that SQL is written in.
+     *
+     * @return list<TriggerDefinition>
      */
     private static function triggerDefinitions(Connection $connection): array
     {
+        $dialect = Dialects::of($connection);
+
         return match ($connection->getDriverName()) {
             'mysql', 'mariadb' => array_map(
-                static fn (array $row): array => [self::text($row, 'table_name'), [self::event(self::text($row, 'event'))], null, self::text($row, 'body')],
-                self::rows($connection, 'select event_object_table as table_name, event_manipulation as event, action_statement as body from information_schema.triggers where trigger_schema = database()'),
+                static fn (array $row): array => self::mySqlTrigger($connection, self::text($row, 'name'), self::text($row, 'table_name'), self::text($row, 'event')),
+                self::rows($connection, 'select trigger_name as name, event_object_table as table_name, event_manipulation as event from information_schema.triggers where trigger_schema = database()'),
             ),
             'pgsql' => array_map(
                 static fn (array $row): array => [
-                    self::text($row, 'table_name'),
-                    self::postgresEvents((int) self::text($row, 'type')),
-                    self::text($row, 'columns') === '' ? null : array_map(Write::columnName(...), explode(',', self::text($row, 'columns'))),
-                    self::text($row, 'body'),
+                    'name' => self::text($row, 'name'),
+                    'table' => self::text($row, 'table_name'),
+                    'events' => self::postgresEvents((int) self::text($row, 'type')),
+                    'columns' => self::text($row, 'columns') === '' ? null : array_map(Write::columnName(...), explode(',', self::text($row, 'columns'))),
+                    'sql' => self::text($row, 'body'),
+                    'dialect' => $dialect,
                 ],
                 self::rows(
                     $connection,
-                    'select c.relname as table_name, t.tgtype as type, p.prosrc as body,'
+                    'select t.tgname as name, c.relname as table_name, t.tgtype as type, p.prosrc as body,'
                     ." coalesce((select string_agg(a.attname, ',') from pg_attribute a where a.attrelid = t.tgrelid and a.attnum = any(t.tgattr)), '') as columns"
                     .' from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_proc p on p.oid = t.tgfoid join pg_namespace n on n.oid = c.relnamespace'
                     .' where not t.tgisinternal and n.nspname = any(current_schemas(false))',
                 ),
             ),
             'sqlite' => array_map(
-                static fn (array $row): array => [self::text($row, 'table_name'), ...self::sqliteEvents(self::text($row, 'body')), self::text($row, 'body')],
-                self::rows($connection, "select tbl_name as table_name, sql as body from sqlite_master where type = 'trigger'"),
+                static function (array $row) use ($dialect): array {
+                    [$events, $columns] = self::sqliteEvents(self::text($row, 'body'));
+
+                    return ['name' => self::text($row, 'name'), 'table' => self::text($row, 'table_name'), 'events' => $events, 'columns' => $columns, 'sql' => self::text($row, 'body'), 'dialect' => $dialect];
+                },
+                self::rows($connection, "select name, tbl_name as table_name, sql as body from sqlite_master where type = 'trigger'"),
             ),
-            'sqlsrv' => self::sqlServerTriggers($connection),
+            'sqlsrv' => self::sqlServerTriggers($connection, $dialect),
             default => throw new RuntimeException('Lada Cache cannot read triggers of driver '.$connection->getDriverName()),
         };
+    }
+
+    /**
+     * Reads the trigger as it was created, in the SQL mode MySQL reads it in. The body
+     * `information_schema.triggers` lists has the escapes of its quoted strings and identifiers
+     * removed (`'it''s'` as `'it's'`), which no longer says where they end.
+     *
+     * @return TriggerDefinition
+     */
+    private static function mySqlTrigger(Connection $connection, string $name, string $table, string $event): array
+    {
+        $created = self::rows($connection, 'show create trigger `'.str_replace('`', '``', $name).'`')[0]
+            ?? throw new UnexpectedValueException('Lada Cache read no definition of trigger '.json_encode($name));
+
+        return [
+            'name' => $name,
+            'table' => $table,
+            'events' => [self::event($event)],
+            'columns' => null,
+            'sql' => self::text($created, 'SQL Original Statement'),
+            'dialect' => MySqlDialect::forSqlMode(self::text($created, 'sql_mode')),
+        ];
     }
 
     /**
@@ -351,20 +417,20 @@ final class DependentTables
     }
 
     /**
-     * @return list<array{string, list<TriggerEvent>, null, string}>
+     * @return list<TriggerDefinition>
      */
-    private static function sqlServerTriggers(Connection $connection): array
+    private static function sqlServerTriggers(Connection $connection, Dialect $dialect): array
     {
         $triggers = [];
 
         foreach (self::rows(
             $connection,
-            'select t.object_id as id, object_name(t.parent_id) as table_name, e.type_desc as event, m.definition as body from sys.triggers t'
+            'select t.object_id as id, t.name as name, object_name(t.parent_id) as table_name, e.type_desc as event, m.definition as body from sys.triggers t'
             .' join sys.trigger_events e on e.object_id = t.object_id join sys.sql_modules m on m.object_id = t.object_id where t.parent_class = 1',
         ) as $row) {
             $id = self::text($row, 'id');
-            $triggers[$id] ??= [self::text($row, 'table_name'), [], null, self::text($row, 'body')];
-            $triggers[$id][1][] = self::event(self::text($row, 'event'));
+            $triggers[$id] ??= ['name' => self::text($row, 'name'), 'table' => self::text($row, 'table_name'), 'events' => [], 'columns' => null, 'sql' => self::text($row, 'body'), 'dialect' => $dialect];
+            $triggers[$id]['events'][] = self::event(self::text($row, 'event'));
         }
 
         return array_values($triggers);

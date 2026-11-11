@@ -19,14 +19,15 @@ final class FailureReporter
             return;
         }
 
+        $message = "[LadaCache] Failed {$operation->value}, {$operation->consequenceOfFailure()}: {$exception->getMessage()}";
         $context = [...$context, 'exception' => $exception];
 
         if ($operation->compromisesFreshness()) {
-            Log::error("[LadaCache] Failed {$operation->value}, cached results may be stale until they expire: {$exception->getMessage()}", $context);
+            Log::error($message, $context);
 
             return;
         }
 
-        Log::warning("[LadaCache] Failed {$operation->value}, continuing without the cache: {$exception->getMessage()}", $context);
+        Log::warning($message, $context);
     }
 }

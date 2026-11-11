@@ -13,12 +13,27 @@ enum CacheOperation: string
     case Retire = 'retiring the cache generation';
     case Prune = 'pruning retired cache entries';
     case Replay = 'replaying pending invalidations';
+    case ReadDependents = 'reading the tables the database changes along with a write';
+    case ReadTrigger = 'reading which tables a trigger writes';
 
     public function compromisesFreshness(): bool
     {
         return match ($this) {
             self::Invalidate, self::Retire => true,
-            self::Analyze, self::Read, self::Store, self::Prune, self::Replay => false,
+            self::Analyze, self::Read, self::Store, self::Prune, self::Replay, self::ReadDependents, self::ReadTrigger => false,
+        };
+    }
+
+    /**
+     * What a failure of the operation leads to, as the log states it.
+     */
+    public function consequenceOfFailure(): string
+    {
+        return match ($this) {
+            self::Invalidate, self::Retire => 'cached results may be stale until they expire',
+            self::Analyze, self::Read, self::Store, self::Prune, self::Replay => 'continuing without the cache',
+            self::ReadDependents => 'retiring the whole cache instead',
+            self::ReadTrigger => 'every write firing it retires the whole cache',
         };
     }
 }

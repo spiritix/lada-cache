@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Integration\Cache;
 
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Redis\Events\CommandExecuted;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Spiritix\LadaCache\Redis;
 use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\Invalidation;
 use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
@@ -430,5 +433,88 @@ final class DependentTablesTest extends TestCase
         $commands = $this->recordRedisCommands(fn () => DB::table('owners')->where('id', 2)->update(['name' => 'second write']));
 
         $this->assertSame(['evalsha'], $commands);
+    }
+
+    public function testMySqlTriggersWithEscapedQuotesAreReadAsCreated(): void
+    {
+        $this->requireDatabaseDriver('mysql');
+        DB::unprepared("create trigger drivers_record_rename after update on drivers for each row insert into materials (name) values (concat('it''s ', 'a \\'quoted\\' name'))");
+        $this->loadDependencyMap();
+        DB::table('drivers')->insert(['id' => 1, 'name' => 'alice']);
+        $materials = fn (): int => DB::table('materials')->count();
+        $this->assertSame(0, $materials());
+        DB::table('pets')->get();
+        [$petsKey, $petsTags] = $this->cacheKeyAndTags(DB::table('pets'));
+        Log::spy();
+
+        DB::table('drivers')->where('id', 1)->update(['name' => 'renamed']);
+
+        $this->assertSame(1, $materials());
+        $this->assertSame(['materials'], DependentTables::load(DB::connection())['gu:drivers']);
+        $this->assertCacheHas($petsKey, $petsTags, 'Reading the trigger must not retire the cache');
+        Log::shouldNotHaveReceived('warning');
+        Log::shouldNotHaveReceived('error');
+    }
+
+    public function testMySqlTriggersAreReadInTheSqlModeTheyWereCreatedIn(): void
+    {
+        $this->requireDatabaseDriver('mysql');
+        $sqlMode = DB::scalar('select @@session.sql_mode');
+        DB::statement("set session sql_mode = 'ANSI_QUOTES,NO_BACKSLASH_ESCAPES'");
+        DB::unprepared('create trigger drivers_record_rename after update on "drivers" for each row insert into "materials" (name) values (\'ends in a backslash \\\')');
+        DB::statement('set session sql_mode = ?', [$sqlMode]);
+
+        $this->assertSame(['materials'], DependentTables::load(DB::connection())['gu:drivers']);
+    }
+
+    public function testWritesFiringATriggerThatCannotBeReadRetireTheCacheWithoutReadingTheSchemaAgain(): void
+    {
+        $this->requireDatabaseDriver('sqlite');
+        DB::unprepared('create trigger drivers_replace_material after update on drivers begin update or replace materials set name = new.name; end');
+        Log::spy();
+        $schemaReads = 0;
+        DB::listen(static function (QueryExecuted $query) use (&$schemaReads): void {
+            $schemaReads += (int) str_contains($query->sql, 'sqlite_master');
+        });
+
+        DB::table('drivers')->update(['name' => 'loads the dependency map']);
+        $schemaReadsOfOneLoad = $schemaReads;
+        $generation = $this->generationId();
+        $this->assertSame(2, DB::table('pets')->count());
+        DB::connection()->getPdo()->exec("insert into pets (id, owner_id, name) values (3, 1, 'written by the trigger')");
+
+        DB::table('drivers')->update(['name' => 'fires the trigger']);
+
+        $this->assertSame(3, DB::table('pets')->count());
+        $this->assertNotSame($generation, $this->generationId());
+        $this->assertGreaterThan(0, $schemaReadsOfOneLoad);
+        $this->assertSame($schemaReadsOfOneLoad, $schemaReads);
+        Log::shouldHaveReceived('warning')->once()->withArgs(static fn (string $message, array $context): bool => str_contains($message, 'every write firing it retires the whole cache')
+            && $context['trigger'] === 'drivers_replace_material');
+        Log::shouldNotHaveReceived('error');
+    }
+
+    public function testWritesNotFiringATriggerThatCannotBeReadKeepTheCache(): void
+    {
+        $this->requireDatabaseDriver('sqlite');
+        DB::unprepared('create trigger drivers_replace_material after update on drivers begin update or replace materials set name = new.name; end');
+        DB::table('owners')->where('id', 1)->update(['name' => 'loads the dependency map']);
+        $this->assertSame(['*'], DependentTables::load(DB::connection())['gu:drivers']);
+        DB::table('pets')->get();
+        [$petsKey, $petsTags] = $this->cacheKeyAndTags(DB::table('pets'));
+        $generation = $this->generationId();
+
+        DB::table('drivers')->insert(['id' => 1, 'name' => 'alice']);
+        DB::table('owner_audits')->where('id', 1)->update(['event' => 'renamed']);
+
+        $this->assertSame($generation, $this->generationId());
+        $this->assertCacheHas($petsKey, $petsTags);
+    }
+
+    private function generationId(): string
+    {
+        $redis = new Redis;
+
+        return (string) $redis->get($redis->prefix('generation'));
     }
 }
