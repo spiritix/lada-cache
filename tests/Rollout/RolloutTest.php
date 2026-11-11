@@ -91,6 +91,15 @@ final class RolloutTest extends TestCase
         $this->assertReadsMatchTheDatabase('new', [1, 2, 3, 4, 5, 6]);
     }
 
+    public function testForeignKeyCascadesOfNewHostsReachTheCachedReadsOfOldHosts(): void
+    {
+        $this->assertSame(['driver1'], $this->pods->run('old', 'drivers-of', 1));
+
+        $this->pods->run('new', 'delete', 1);
+
+        $this->assertSame([], $this->pods->run('old', 'drivers-of', 1));
+    }
+
     public function testRolledBackWritesLeaveBothVersionsServingTheCommittedRows(): void
     {
         $this->cacheReads('old');

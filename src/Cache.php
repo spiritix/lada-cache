@@ -128,6 +128,8 @@ final class Cache
             self::freshToken(),
             $this->expiration->nextTtl(),
             $invalidation->replicaLagSeconds,
+            (int) $this->legacyInvalidation(),
+            $this->redis->ladaPrefix(),
             count($invalidation->tags()),
             ...$invalidation->tags(),
         ];
@@ -152,10 +154,6 @@ final class Cache
         }
 
         $reply = $this->redis->evaluate(LuaScripts::INVALIDATE, $arguments, $cooldown);
-
-        if ($this->legacyInvalidation()) {
-            $this->redis->evaluate(LuaScripts::PURGE_LEGACY, [$this->redis->ladaPrefix(), ...$invalidation->tags()], $cooldown);
-        }
 
         if (! is_array($reply) || ! isset($reply[0])) {
             throw new UnexpectedValueException('Malformed Lada Cache invalidation reply');
