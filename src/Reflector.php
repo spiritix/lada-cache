@@ -11,6 +11,7 @@ use Spiritix\LadaCache\Support\Sql\Dialect;
 use Spiritix\LadaCache\Support\Sql\Dialects;
 use Spiritix\LadaCache\Support\SqlTableScanner;
 use Spiritix\LadaCache\Support\TableExtractor;
+use Spiritix\LadaCache\Support\Transactions;
 
 /**
  * Reflects an underlying Laravel Query Builder to extract metadata and SQL.
@@ -222,6 +223,6 @@ final class Reflector
 
     public function inTransaction(): bool
     {
-        return $this->queryBuilder->getConnection()->transactionLevel() > 0;
+        return Transactions::isOpen($this->queryBuilder->getConnection());
     }
 }

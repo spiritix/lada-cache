@@ -40,9 +40,15 @@ trait InvalidatesRawStatements
     {
         $result = parent::run($query, $bindings, $callback);
 
-        if ($this->builderStatementDepth === 0 && ! $this->pretending() && (bool) config('lada-cache.active', true)) {
+        if (! (bool) config('lada-cache.active', true)) {
+            return $result;
+        }
+
+        if ($this->builderStatementDepth === 0 && ! $this->pretending()) {
             $this->invalidateForRawStatement((string) $query, is_int($result) ? $result : null);
         }
+
+        Services::handler()->settleEndedTransaction($this);
 
         return $result;
     }

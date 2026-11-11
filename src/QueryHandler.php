@@ -23,6 +23,7 @@ use Spiritix\LadaCache\Support\PendingInvalidations;
 use Spiritix\LadaCache\Support\RawStatementEffect;
 use Spiritix\LadaCache\Support\RedisCooldown;
 use Spiritix\LadaCache\Support\ReplicaReads;
+use Spiritix\LadaCache\Support\Transactions;
 use Spiritix\LadaCache\Support\Write;
 use Throwable;
 
@@ -148,6 +149,7 @@ final class QueryHandler
     public function cacheQuery(QueryBuilder $builder, Closure $runQuery): array
     {
         $collector = $this->startCollector();
+        $this->settleEndedTransaction($builder->getConnection());
 
         try {
             $reflector = new Reflector($builder);
@@ -185,6 +187,19 @@ final class QueryHandler
         $collector?->endMeasuring($lookup instanceof CacheMiss ? 'Miss' : 'Bypass', [$key], $tags, $sql, $reflector->getParameters());
 
         return $rows;
+    }
+
+    /**
+     * Applies the invalidations held for a transaction Laravel reported no end of, once the
+     * connection is seen outside it: one ended with a raw `COMMIT` or `ROLLBACK`, or on the
+     * PDO object. Whether it committed is not known, and invalidating after a rollback only
+     * costs a miss.
+     */
+    public function settleEndedTransaction(ConnectionInterface $connection): void
+    {
+        if ($this->pending->has($connection) && ! self::inTransaction($connection)) {
+            $this->invalidateNow($this->pending->take($connection));
+        }
     }
 
     public function transactionCommitted(ConnectionInterface $connection): void
@@ -368,7 +383,7 @@ final class QueryHandler
 
     private static function inTransaction(ConnectionInterface $connection): bool
     {
-        return $connection->transactionLevel() > 0;
+        return Transactions::isOpen($connection);
     }
 
     private function startCollector(): ?CacheCollector

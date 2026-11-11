@@ -28,6 +28,11 @@ final class PendingInvalidations
         $this->pending[$connection] = ($this->pending[$connection] ?? Invalidation::none())->merge($invalidation);
     }
 
+    public function has(ConnectionInterface $connection): bool
+    {
+        return isset($this->pending[$connection]);
+    }
+
     public function take(ConnectionInterface $connection): Invalidation
     {
         $invalidation = $this->pending[$connection] ?? Invalidation::none();

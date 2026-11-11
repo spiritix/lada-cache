@@ -51,6 +51,7 @@
 - A write on a connection without a name logs a failed invalidation and invalidates everything, instead of invalidating under an empty connection name
 
 ### Fixed
+- Writes inside a transaction opened with a raw `START TRANSACTION` or on the PDO object invalidated at once, so another host could cache the row as committed before the commit, and nothing invalidated it afterwards; such transactions now defer their invalidations to their end, and reads inside them bypass the cache
 - A failing SQL query was executed twice, and a successful query ran again when storing its result failed
 - Tables read by subqueries Laravel compiles to raw SQL were not tagged, so writes to them never invalidated the cached result: `whereIn()`/`whereNotIn()` subqueries (https://github.com/spiritix/lada-cache/pull/157), `fromSub()` (https://github.com/spiritix/lada-cache/pull/160), subquery columns in `where()`/`whereBetween()`, `orderBy()` subqueries, `crossJoinSub()`, `joinLateral()`, subqueries inside join closures, `selectSub()`/`joinSub()` with a closure or Eloquent builder, and unions with an Eloquent builder
 - `selectSub()`/`joinSub()` subquery tags were handed to whichever query ran next instead of the query they belonged to

@@ -182,6 +182,37 @@ final class RawStatementInvalidationTest extends TestCase
         $this->assertCacheMissing($key, $tags);
     }
 
+    public function testATransactionOpenedWithRawSqlIsInvalidatedAtItsCommit(): void
+    {
+        DB::table('cars')->insert(['id' => 1, 'name' => 'before', 'engine_id' => null, 'driver_id' => null]);
+        $builder = DB::table('cars')->where('id', 1);
+        $builder->get();
+        [$key, $tags] = $this->cacheKeyAndTags($builder);
+
+        DB::unprepared('begin');
+        DB::table('cars')->where('id', 1)->update(['name' => 'after']);
+        $this->assertCacheHas($key, $tags, 'Until the commit other hosts read, and may cache, the committed row');
+        $this->assertSame('after', DB::table('cars')->where('id', 1)->get()[0]->name, 'A read inside the transaction sees its writes');
+        DB::unprepared('commit');
+
+        $this->assertCacheMissing($key, $tags);
+    }
+
+    public function testATransactionOpenedOnThePdoObjectIsInvalidatedByTheNextQueryAfterItEnds(): void
+    {
+        DB::table('cars')->insert(['id' => 1, 'name' => 'before', 'engine_id' => null, 'driver_id' => null]);
+        $name = fn (): string => DB::table('cars')->where('id', 1)->get()[0]->name;
+        $this->assertSame('before', $name());
+        [$key, $tags] = $this->cacheKeyAndTags(DB::table('cars')->where('id', 1));
+
+        DB::connection()->getPdo()->beginTransaction();
+        DB::table('cars')->where('id', 1)->update(['name' => 'after']);
+        $this->assertCacheHas($key, $tags);
+        DB::connection()->getPdo()->commit();
+
+        $this->assertSame('after', $name());
+    }
+
     public function testBuilderWritesInvalidateExactlyOnce(): void
     {
         DB::table('cars')->insert(['id' => 1, 'name' => 'before', 'engine_id' => null, 'driver_id' => null]);
