@@ -12,6 +12,7 @@ use Spiritix\LadaCache\Support\Sql\MsSqlDialect;
 use Spiritix\LadaCache\Support\Sql\MySqlDialect;
 use Spiritix\LadaCache\Support\Sql\Parser;
 use Spiritix\LadaCache\Support\Sql\ParserException;
+use Spiritix\LadaCache\Support\Sql\SqlMemo;
 use Spiritix\LadaCache\Support\Sql\Token;
 use Spiritix\LadaCache\Support\Sql\Tokenizer;
 use Spiritix\LadaCache\Support\Sql\TokenizerException;
@@ -46,7 +47,19 @@ final class RawStatementClassifier
         'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'REPLACE', 'MERGE', 'WITH', 'VALUES', 'TABLE', 'EXECUTE', 'CREATE', 'DECLARE',
     ];
 
+    /** @var SqlMemo<RawStatementEffect>|null */
+    private static ?SqlMemo $effects = null;
+
     public static function classify(string $sql, string $tablePrefix, Dialect $dialect): RawStatementEffect
+    {
+        return (self::$effects ??= new SqlMemo)->remember(
+            $dialect,
+            $tablePrefix."\0".$sql,
+            static fn (): RawStatementEffect => self::effectOf($sql, $tablePrefix, $dialect),
+        );
+    }
+
+    private static function effectOf(string $sql, string $tablePrefix, Dialect $dialect): RawStatementEffect
     {
         try {
             $tokens = array_values(array_filter(

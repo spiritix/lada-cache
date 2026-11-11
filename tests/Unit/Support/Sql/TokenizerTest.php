@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Tests\Unit\Support\Sql;
 
 use Closure;
+use Illuminate\Database\MySqlConnection;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -21,6 +22,7 @@ use Spiritix\LadaCache\Support\Sql\Token;
 use Spiritix\LadaCache\Support\Sql\Tokenizer;
 use Spiritix\LadaCache\Support\Sql\TokenizerException;
 use Spiritix\LadaCache\Support\Sql\TokenKind;
+use Spiritix\LadaCache\Support\SqlTableScanner;
 
 /**
  * Ported from sqlparser-rs src/tokenizer.rs and tests/sqlparser_{mysql,postgres,sqlite}.rs (Apache-2.0), commit 8a176d9.
@@ -1294,6 +1296,22 @@ final class TokenizerTest extends TestCase
     public function testDialectForLaravelDriver(string $driver, Dialect $expected): void
     {
         $this->assertInstanceOf($expected::class, Dialects::forDriver($driver));
+    }
+
+    public function testEveryQueryOfADriverSharesOneDialect(): void
+    {
+        $this->assertSame(Dialects::forDriver('mysql'), Dialects::forDriver('mariadb'));
+        $this->assertSame(Dialects::forDriver('pgsql'), Dialects::forDriver('pgsql'));
+        $this->assertSame(Dialects::forDriver('mysql'), Dialects::of(new MySqlConnection(static fn () => null, 'test', '', ['driver' => 'mysql'])));
+    }
+
+    public function testAMySqlConnectionIsReadInItsConfiguredModes(): void
+    {
+        $connection = new MySqlConnection(static fn () => null, 'test', '', ['driver' => 'mysql', 'modes' => ['ANSI_QUOTES', 'NO_BACKSLASH_ESCAPES']]);
+        $sql = 'select * from "pets" where name = \'ends in a backslash \\\' and exists (select 1 from "owners")';
+
+        $this->assertSame(['pets', 'owners'], SqlTableScanner::tables($sql, '', Dialects::of($connection)));
+        $this->assertSame(Dialects::forMySqlMode('ansi_quotes,no_backslash_escapes'), Dialects::of($connection));
     }
 
     public function testUnknownDriverHasNoDialect(): void

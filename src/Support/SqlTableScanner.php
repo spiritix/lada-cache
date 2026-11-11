@@ -10,6 +10,7 @@ use Spiritix\LadaCache\Support\Sql\InsertStatement;
 use Spiritix\LadaCache\Support\Sql\MergeStatement;
 use Spiritix\LadaCache\Support\Sql\Parser;
 use Spiritix\LadaCache\Support\Sql\ParserException;
+use Spiritix\LadaCache\Support\Sql\SqlMemo;
 use Spiritix\LadaCache\Support\Sql\Token;
 use Spiritix\LadaCache\Support\Sql\Tokenizer;
 use Spiritix\LadaCache\Support\Sql\TokenKind;
@@ -25,6 +26,9 @@ use Spiritix\LadaCache\Support\Sql\UpdateStatement;
 final class SqlTableScanner
 {
     private const array WRITE_KEYWORDS = ['INSERT', 'REPLACE', 'UPDATE', 'DELETE', 'MERGE', 'TRUNCATE'];
+
+    /** @var SqlMemo<array<string, int>>|null */
+    private static ?SqlMemo $referenceCounts = null;
 
     /**
      * Keywords before or after a write keyword that name a trigger event or a lock, as in
@@ -55,6 +59,18 @@ final class SqlTableScanner
      * @return array<string, int>
      */
     public static function tableReferenceCounts(string $sql, string $tablePrefix, Dialect $dialect): array
+    {
+        return (self::$referenceCounts ??= new SqlMemo)->remember(
+            $dialect,
+            $tablePrefix."\0".$sql,
+            static fn (): array => self::countTableReferences($sql, $tablePrefix, $dialect),
+        );
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private static function countTableReferences(string $sql, string $tablePrefix, Dialect $dialect): array
     {
         $counts = [];
 

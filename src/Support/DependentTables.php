@@ -12,7 +12,6 @@ use Spiritix\LadaCache\Support\Sql\Dialect;
 use Spiritix\LadaCache\Support\Sql\Dialects;
 use Spiritix\LadaCache\Support\Sql\InsertStatement;
 use Spiritix\LadaCache\Support\Sql\MergeStatement;
-use Spiritix\LadaCache\Support\Sql\MySqlDialect;
 use Spiritix\LadaCache\Support\Sql\ParserException;
 use Spiritix\LadaCache\Support\Sql\SQLiteDialect;
 use Spiritix\LadaCache\Support\Sql\Token;
@@ -365,7 +364,7 @@ final class DependentTables
             'events' => [self::event($event)],
             'columns' => null,
             'sql' => self::text($created, 'SQL Original Statement'),
-            'dialect' => MySqlDialect::forSqlMode(self::text($created, 'sql_mode')),
+            'dialect' => Dialects::forMySqlMode(self::text($created, 'sql_mode')),
         ];
     }
 

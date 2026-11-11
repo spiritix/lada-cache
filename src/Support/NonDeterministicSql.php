@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Support;
 
 use Spiritix\LadaCache\Support\Sql\Dialect;
+use Spiritix\LadaCache\Support\Sql\SqlMemo;
 use Spiritix\LadaCache\Support\Sql\Tokenizer;
 use Spiritix\LadaCache\Support\Sql\TokenKind;
 
@@ -23,6 +24,9 @@ final class NonDeterministicSql
         'SESSION_USER', 'SYSTEM_USER', 'CURRENT_USER', 'CURRENT_ROLE', 'DATABASE', 'SCHEMA',
     ];
 
+    /** @var SqlMemo<bool>|null */
+    private static ?SqlMemo $results = null;
+
     private const array BARE_KEYWORDS = [
         'CURRENT_TIMESTAMP', 'CURRENT_DATE', 'CURRENT_TIME', 'LOCALTIME', 'LOCALTIMESTAMP', 'CURRENT_USER', 'SESSION_USER',
     ];
@@ -32,6 +36,11 @@ final class NonDeterministicSql
      * and SQLite's `'now'` time value.
      */
     public static function isNonDeterministic(string $sql, Dialect $dialect): bool
+    {
+        return (self::$results ??= new SqlMemo)->remember($dialect, $sql, static fn (): bool => self::callsNonDeterministicFunction($sql, $dialect));
+    }
+
+    private static function callsNonDeterministicFunction(string $sql, Dialect $dialect): bool
     {
         $tokens = array_values(array_filter(
             (new Tokenizer($dialect, $sql))->tokenize(),
