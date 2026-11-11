@@ -677,6 +677,17 @@ final class DependentTablesTest extends TestCase
         $this->assertSame(1, $kids());
     }
 
+    public function testADeletePinnedToKeysKeepsJoinedChildReadsPinnedToOtherParents(): void
+    {
+        $petsOfBob = fn () => DB::table('pets')->join('materials', 'materials.id', '=', 'pets.id')->where('pets.owner_id', 2)->select('pets.*');
+        $petsOfBob()->get();
+        [$key, $tags] = $this->cacheKeyAndTags($petsOfBob());
+
+        DB::table('owners')->where('id', 1)->delete();
+
+        $this->assertCacheHas($key, $tags);
+    }
+
     public function testUuidKeysAreComparedWhateverTheirSpelling(): void
     {
         $this->requireDatabaseDriver('pgsql', 'mariadb');
