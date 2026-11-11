@@ -8,6 +8,7 @@ use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Redis\Events\CommandExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Spiritix\LadaCache\Generation;
 use Spiritix\LadaCache\Redis;
 use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\Invalidation;
@@ -509,6 +510,21 @@ final class DependentTablesTest extends TestCase
 
         $this->assertSame($generation, $this->generationId());
         $this->assertCacheHas($petsKey, $petsTags);
+    }
+
+    public function testReadsCachedWhileTheSchemaWasUnreadableAreRefreshedByRowPreciseCascades(): void
+    {
+        $cache = app('lada.cache');
+        $database = DB::connection()->getDatabaseName();
+        $generation = new Generation($this->generationId());
+        $cache->storeUnreadableDependents($generation, $database);
+        $petsOfAlice = fn (): int => DB::table('pets')->where('owner_id', 1)->count();
+        $this->assertSame(1, $petsOfAlice());
+        $cache->storeDependents($generation, $database, DependentTables::load(DB::connection()));
+
+        DB::table('owners')->where('id', 1)->delete();
+
+        $this->assertSame(0, $petsOfAlice());
     }
 
     private function generationId(): string

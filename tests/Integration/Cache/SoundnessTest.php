@@ -240,6 +240,30 @@ final class SoundnessTest extends TestCase
         $this->assertFalse($failed->hasPending());
     }
 
+    public function testAnUnreadableSchemaIsNotReadAgainOnEveryWrite(): void
+    {
+        $handler = new QueryHandler(app('lada.cache'), FailedInvalidations::processLocal());
+        $handler->cacheQuery(DB::table('cars'), fn (): array => []);
+        $catalogReads = 0;
+        DB::connection()->beforeExecuting(static function (string $query) use (&$catalogReads): void {
+            if (preg_match('/referential_constraints|pg_constraint|pragma_foreign_key_list/i', $query) === 1) {
+                $catalogReads++;
+
+                throw new RuntimeException('permission denied for the foreign key catalog');
+            }
+        });
+        Log::spy();
+        $handler->invalidateQuery(DB::table('owners')->where('id', 1), 'delete', Write::delete());
+        $generation = $this->generationId();
+
+        $handler->invalidateQuery(DB::table('owners')->where('id', 2), 'delete', Write::delete());
+
+        $this->assertSame(1, $catalogReads);
+        $this->assertNotSame($generation, $this->generationId());
+        Log::shouldHaveReceived('warning')->once();
+        Log::shouldNotHaveReceived('error');
+    }
+
     public function testReplayingDuringAnOutageLogsNoErrors(): void
     {
         $failed = FailedInvalidations::processLocal();

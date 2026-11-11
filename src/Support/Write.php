@@ -161,6 +161,13 @@ final readonly class Write
         return [self::everyWriteField($table), ...$triggerFields, ...$rowFields];
     }
 
+    /**
+     * What a write to any table changes. Every stored dependency map has the field, so a map
+     * without dependents exists; it lists `DependentTables::EVERY_TABLE` in the map kept while
+     * the schema cannot be read.
+     */
+    public const string ANY_TABLE_FIELD = '';
+
     public static function everyWriteField(string $table): string
     {
         return 'a:'.$table;

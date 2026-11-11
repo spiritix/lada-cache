@@ -43,6 +43,9 @@ final class Redis
 
     private ?string $keyBase = null;
 
+    /** @var array<string, string> script => its SHA1, hashed once per process rather than on every call */
+    private static array $shas = [];
+
     public function __construct(
         private ?Connection $connection = null,
         ?RedisAvailability $availability = null,
@@ -123,7 +126,7 @@ final class Redis
     private function runBySha(string $script, array $arguments): mixed
     {
         $connection = $this->getConnection();
-        $sha = sha1($script);
+        $sha = self::$shas[$script] ??= sha1($script);
 
         if ($connection instanceof PhpRedisConnection) {
             $client = self::phpRedisClient($connection);

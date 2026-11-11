@@ -319,16 +319,7 @@ final class QueryHandler
 
         $stored = [];
         foreach ($unknown as $database) {
-            try {
-                $dependents = DependentTables::load(DB::connection($invalidation->connectionOf($database)));
-            } catch (Throwable $exception) {
-                FailureReporter::report(CacheOperation::ReadDependents, $exception, ['database' => $database]);
-                $this->cache->retireAfterSchemaChange();
-
-                return;
-            }
-
-            if ($this->cache->storeDependents($generation, $database, $dependents, $cooldown)) {
+            if ($this->storeDependents($generation, $database, $invalidation->connectionOf($database), $cooldown)) {
                 $stored[] = $database;
             }
         }
@@ -336,6 +327,24 @@ final class QueryHandler
         if ($stored !== []) {
             $this->cache->invalidate($invalidation->onlyCascadesOf($stored), $cooldown);
         }
+    }
+
+    /**
+     * Reads what the database changes along with writes from its schema and stores it for the
+     * generation. A schema that cannot be read is stored as changing every table, so writes
+     * retire the cache without reading it again until that map expires.
+     */
+    private function storeDependents(Generation $generation, string $database, string $connection, RedisCooldown $cooldown): bool
+    {
+        try {
+            $dependents = DependentTables::load(DB::connection($connection));
+        } catch (Throwable $exception) {
+            FailureReporter::report(CacheOperation::ReadDependents, $exception, ['database' => $database]);
+
+            return $this->cache->storeUnreadableDependents($generation, $database, $cooldown);
+        }
+
+        return $this->cache->storeDependents($generation, $database, $dependents, $cooldown);
     }
 
     /**

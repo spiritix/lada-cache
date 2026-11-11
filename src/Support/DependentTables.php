@@ -55,6 +55,22 @@ final class DependentTables
     public const string EVERY_TABLE = '*';
 
     /**
+     * How long the map standing in for a schema that could not be read is kept, after which the
+     * next write reads the schema again.
+     */
+    public const int UNREADABLE_SECONDS = 60;
+
+    /**
+     * The map of a database whose schema could not be read: any write may change any table.
+     *
+     * @return array<string, list<string>>
+     */
+    public static function unreadable(): array
+    {
+        return [Write::ANY_TABLE_FIELD => [self::EVERY_TABLE]];
+    }
+
+    /**
      * @return array<string, list<string>> `Write` dependents field => tables changed along with it
      */
     public static function load(Connection $connection): array

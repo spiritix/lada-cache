@@ -32,7 +32,7 @@ enum CacheOperation: string
         return match ($this) {
             self::Invalidate, self::Retire => 'cached results may be stale until they expire',
             self::Analyze, self::Read, self::Store, self::Prune, self::Replay => 'continuing without the cache',
-            self::ReadDependents => 'retiring the whole cache instead',
+            self::ReadDependents => 'every write retires the whole cache until it is read again in '.DependentTables::UNREADABLE_SECONDS.' seconds',
             self::ReadTrigger => 'every write firing it retires the whole cache',
         };
     }

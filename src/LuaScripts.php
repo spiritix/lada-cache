@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use Spiritix\LadaCache\Support\DependentTables;
+use Spiritix\LadaCache\Support\Write;
 
 /**
  * Atomic Redis operations backing the cache.
@@ -19,7 +20,8 @@ use Spiritix\LadaCache\Support\DependentTables;
  * - `<base><generation>:v:<tag>`        current version token of a tag
  * - `<base><generation>:w:<tag>`        present while reads of the tag may come from a lagging replica
  * - `<base><generation>:d:<name>`       hash of `Write` dependents field => newline separated tables changed along with it,
- *                                       named by database and dependency configuration
+ *                                       named by database and dependency configuration; `Write::ANY_TABLE_FIELD` is always
+ *                                       present and lists `DependentTables::EVERY_TABLE` when the schema could not be read
  * - `<base>legacy:<tag>`                with legacy invalidation, a token listed in the 5.x tag set `<base><tag>`,
  *                                       so a 5.x host invalidating the tag deletes it
  *
@@ -52,6 +54,13 @@ final class LuaScripts
         LUA;
 
     /**
+     * Defines the names `DependentTables` and `Write` give the parts of a dependency map the
+     * scripts read: the table standing for every table, and the field every stored map has,
+     * which lists that table when the schema could not be read.
+     */
+    private const string DEPENDENTS_NAMES = "local everyTable = '".DependentTables::EVERY_TABLE."'\nlocal anyTableField = '".Write::ANY_TABLE_FIELD."'\n";
+
+    /**
      * Defines the names of the tags foreign key cascades into a table replace, given the table's
      * prefix (`Tagger::cascadeTagPrefix()` followed by the table name and a colon): `any` for
      * reads made while no dependency map was known, `via:<column>` for reads not pinned on a
@@ -81,7 +90,8 @@ final class LuaScripts
      * into it replace (see `CASCADE_TAGS`): for each column the dependency map lists in the table's
      * cascade columns field (`Write::cascadeColumnsField()`),
      * the value tags of the keys the read pins it to, or its `via` tag when it pins none; without a
-     * dependency map, the `any` tag. A table no row-precise cascade reaches takes none.
+     * readable dependency map, the `any` tag. A table no row-precise cascade reaches takes none.
+     * The tokens of all tags are read with one MGET, in the order the tags are named.
      *
      * Legacy tags are only passed with legacy invalidation on (see `Tagger::legacyDependencies()`);
      * each contributes the token of `<base>legacy:<tag>` to the fingerprint. That key is listed in the tag's 5.x tag set, which a 5.x host invalidating the
@@ -89,7 +99,7 @@ final class LuaScripts
      * version stored before the 5.x write become unreachable. A token whose key is missing or no
      * longer listed in the set, because the 5.x host deleted the set but not yet its keys, is replaced.
      */
-    public const string LOOKUP = self::CASCADE_TAGS.<<<'LUA'
+    public const string LOOKUP = self::DEPENDENTS_NAMES.self::CASCADE_TAGS.<<<'LUA'
         local base, fresh, ttl = ARGV[1], ARGV[3], tonumber(ARGV[4])
         local connectionPrefix = string.sub(base, 1, #base - #ARGV[5])
         local lastVersionTag = 6 + tonumber(ARGV[6])
@@ -107,15 +117,9 @@ final class LuaScripts
                 redis.call('SET', key, token)
             end
         end
-        local tokens = {}
+        local versionKeys = {}
         local function takeToken(tag)
-            local versionKey = scope .. 'v:' .. tag
-            local token = redis.call('GET', versionKey)
-            if not token then
-                token = fresh
-                setToken(versionKey, token)
-            end
-            tokens[#tokens + 1] = token
+            versionKeys[#versionKeys + 1] = scope .. 'v:' .. tag
         end
         for i = 7, lastVersionTag do
             takeToken(ARGV[i])
@@ -136,10 +140,11 @@ final class LuaScripts
                 pins[column] = {unpack(ARGV, index + 2, index + 1 + keyCount)}
                 index = index + 2 + keyCount
             end
-            if redis.call('EXISTS', dependentsKey) == 0 then
+            local map = redis.call('HMGET', dependentsKey, anyTableField, columnsField)
+            if not map[1] or map[1] == everyTable then
                 takeToken(cascadeAny(prefix))
             else
-                local columns = redis.call('HGET', dependentsKey, columnsField)
+                local columns = map[2]
                 if columns then
                     for column in string.gmatch(columns, '[^\n]+') do
                         local keys = pins[column]
@@ -152,6 +157,19 @@ final class LuaScripts
                         end
                     end
                 end
+            end
+        end
+        local tokens = {}
+        for first = 1, #versionKeys, 1000 do
+            local last = math.min(first + 999, #versionKeys)
+            local found = redis.call('MGET', unpack(versionKeys, first, last))
+            for i = first, last do
+                local token = found[i - first + 1]
+                if not token then
+                    token = fresh
+                    setToken(versionKeys[i], token)
+                end
+                tokens[i] = token
             end
         end
         for i = index, #ARGV do
@@ -211,13 +229,14 @@ final class LuaScripts
      * `<child>\t<column>`: for those only the cascade tags of the child naming the keys are
      * replaced (see `CASCADE_TAGS`). Without the keyed field, its fallback is used table-wide.
      * Replaces the tokens of the tags, and of every table-wide tag of the tables the database
-     * changes along with each group's tables. A group changing `DependentTables::EVERY_TABLE`
-     * changes tables no tag names, so the generation is retired instead; its dependency map,
-     * which only a schema change outdates, moves to the fresh generation. Returns {0} when
+     * changes along with each group's tables. A group changing `DependentTables::EVERY_TABLE`,
+     * through one of its fields or because the schema could not be read, changes tables no tag
+     * names, so the generation is retired instead; its dependency map, which only a schema
+     * change outdates, moves to the fresh generation. Returns {0} when
      * nothing was ever cached or is anymore, else
      * {generation, 1-based indexes of the groups whose dependents are not known yet...}.
      */
-    public const string INVALIDATE = self::SERVER_CHECK.self::CASCADE_TAGS."local everyTable = '".DependentTables::EVERY_TABLE."'\n".<<<'LUA'
+    public const string INVALIDATE = self::SERVER_CHECK.self::DEPENDENTS_NAMES.self::CASCADE_TAGS.<<<'LUA'
         local base, fresh, ttl, lag = ARGV[1], ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4])
         if retireIfServerChanged(base) then
             return {0}
@@ -259,17 +278,16 @@ final class LuaScripts
             local fieldCount = tonumber(ARGV[index])
             index = index + 1
             local dependentsKey = scope .. 'd:' .. dependentsName
-            local known = redis.call('EXISTS', dependentsKey) == 1
+            local listed = redis.call('HMGET', dependentsKey, anyTableField, unpack(ARGV, index, index + fieldCount - 1))
+            local known = listed[1] ~= false
             if not known then
                 result[#result + 1] = group
             end
             local changed = {}
-            if known and fieldCount > 0 then
-                for _, dependents in ipairs(redis.call('HMGET', dependentsKey, unpack(ARGV, index, index + fieldCount - 1))) do
-                    if dependents then
-                        for dependent in string.gmatch(dependents, '[^\n]+') do
-                            changed[dependent] = true
-                        end
+            for _, dependents in ipairs(listed) do
+                if dependents then
+                    for dependent in string.gmatch(dependents, '[^\n]+') do
+                        changed[dependent] = true
                     end
                 end
             end
@@ -318,14 +336,14 @@ final class LuaScripts
      * ARGV: base, generation, dependents name, ttl seconds, then pairs of `Write` dependents field and newline separated dependents
      * Returns 1 when stored and 0 when the generation was retired meanwhile.
      */
-    public const string STORE_DEPENDENTS = <<<'LUA'
+    public const string STORE_DEPENDENTS = self::DEPENDENTS_NAMES.<<<'LUA'
         local base, generation, ttl = ARGV[1], ARGV[2], tonumber(ARGV[4])
         if redis.call('GET', base .. 'generation') ~= generation then
             return 0
         end
         local dependentsKey = base .. generation .. ':d:' .. ARGV[3]
         redis.call('DEL', dependentsKey)
-        redis.call('HSET', dependentsKey, '', '')
+        redis.call('HSET', dependentsKey, anyTableField, '')
         for i = 5, #ARGV, 2 do
             redis.call('HSET', dependentsKey, ARGV[i], ARGV[i + 1])
         end

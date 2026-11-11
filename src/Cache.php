@@ -35,6 +35,9 @@ final class Cache
 
     private readonly EntrySizeLimit $entrySizeLimit;
 
+    /** @var array{configured: mixed, name: string}|null the `dependent_tables` last seen and the map name it gives, hashed once per configuration rather than per query */
+    private ?array $dependentsConfiguration = null;
+
     public function __construct(
         private readonly Redis $redis,
         private readonly Encoder $encoder,
@@ -63,7 +66,7 @@ final class Cache
         ];
 
         foreach ($cascadeReads as $read) {
-            array_push($arguments, self::dependentsName($read->database), $read->tagPrefix, Write::cascadeColumnsField($read->table), count($read->pins));
+            array_push($arguments, $this->dependentsName($read->database), $read->tagPrefix, Write::cascadeColumnsField($read->table), count($read->pins));
 
             foreach ($read->pins as $column => $keys) {
                 array_push($arguments, $column, count($keys), ...$keys);
@@ -139,7 +142,7 @@ final class Cache
             $prefixes = Tagger::tableWideTagPrefixes($database);
             $fields = $cascadeSources[$database] ?? [];
             $keyed = $keyedSources[$database] ?? [];
-            array_push($arguments, self::dependentsName($database), count($prefixes), ...$prefixes);
+            array_push($arguments, $this->dependentsName($database), count($prefixes), ...$prefixes);
             array_push($arguments, count($fields), ...$fields);
             array_push($arguments, Tagger::cascadeTagPrefix($database), count($keyed));
 
@@ -177,7 +180,27 @@ final class Cache
      */
     public function storeDependents(Generation $generation, string $database, array $dependents, RedisCooldown $cooldown = RedisCooldown::Respect): bool
     {
-        $arguments = [$generation->id, self::dependentsName($database), $this->expiration->nextTtl()];
+        return $this->writeDependents($generation, $database, $dependents, $this->expiration->nextTtl(), $cooldown);
+    }
+
+    /**
+     * Stores, for a database whose schema could not be read, a map under which every write
+     * retires the cache. It expires after `DependentTables::UNREADABLE_SECONDS`, so the schema is
+     * read again then rather than on every write in between.
+     *
+     * @return bool Whether it was stored, false when the generation was retired meanwhile
+     */
+    public function storeUnreadableDependents(Generation $generation, string $database, RedisCooldown $cooldown = RedisCooldown::Respect): bool
+    {
+        return $this->writeDependents($generation, $database, DependentTables::unreadable(), DependentTables::UNREADABLE_SECONDS, $cooldown);
+    }
+
+    /**
+     * @param  array<string, list<string>>  $dependents
+     */
+    private function writeDependents(Generation $generation, string $database, array $dependents, int $ttl, RedisCooldown $cooldown): bool
+    {
+        $arguments = [$generation->id, $this->dependentsName($database), $ttl];
 
         foreach ($dependents as $table => $tables) {
             array_push($arguments, $table, implode("\n", $tables));
@@ -195,9 +218,18 @@ final class Cache
      * Hosts with different `dependent_tables` or field layouts, such as old and new pods during a
      * deploy, keep separate dependency maps instead of one host's map applying to all.
      */
-    private static function dependentsName(string $database): string
+    private function dependentsName(string $database): string
     {
-        return $database.':'.substr(sha1((string) json_encode([DependentTables::LAYOUT, DependentTables::configured()])), 0, 12);
+        $configured = config('lada-cache.dependent_tables', []);
+
+        if ($this->dependentsConfiguration === null || $this->dependentsConfiguration['configured'] !== $configured) {
+            $this->dependentsConfiguration = [
+                'configured' => $configured,
+                'name' => substr(sha1((string) json_encode([DependentTables::LAYOUT, DependentTables::configured()])), 0, 12),
+            ];
+        }
+
+        return $database.':'.$this->dependentsConfiguration['name'];
     }
 
     /**
