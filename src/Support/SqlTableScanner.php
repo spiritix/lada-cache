@@ -34,6 +34,12 @@ final class SqlTableScanner
     private const array EVENT_NEIGHBOURS = ['ON', 'OF', 'OR', 'FOR', 'BEFORE', 'AFTER', 'INSTEAD'];
 
     /**
+     * The events a trigger lists as `INSERT OR UPDATE`, unlike the conflict clause of SQLite's
+     * `INSERT OR REPLACE INTO pets` and `UPDATE OR IGNORE pets`, which is part of a statement.
+     */
+    private const array EVENT_KEYWORDS = ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE'];
+
+    /**
      * @return list<string>
      */
     public static function tables(string $sql, string $tablePrefix, Dialect $dialect): array
@@ -98,7 +104,9 @@ final class SqlTableScanner
     /**
      * The position of the semicolon ending the statement that starts at the position, or of its
      * last token, so the clauses of a statement (`WHEN MATCHED THEN DELETE`) are not read as
-     * statements of their own.
+     * statements of their own. A statement inside parentheses, such as the data-modifying CTE
+     * of `WITH gone AS (DELETE FROM pets RETURNING id) INSERT INTO pet_events ...`, ends before
+     * the parenthesis closing them, so the statement after it is read too.
      *
      * @param  list<Token>  $tokens
      */
@@ -110,7 +118,11 @@ final class SqlTableScanner
             $token = $tokens[$position];
             $depth += $token->is(TokenKind::LParen) ? 1 : ($token->is(TokenKind::RParen) ? -1 : 0);
 
-            if ($depth <= 0 && $token->is(TokenKind::SemiColon)) {
+            if ($depth < 0) {
+                return $position - 1;
+            }
+
+            if ($depth === 0 && $token->is(TokenKind::SemiColon)) {
                 return $position;
             }
         }
@@ -127,7 +139,8 @@ final class SqlTableScanner
         $next = $tokens[$position + 1] ?? null;
 
         return ($previous !== null && ($previous->is(TokenKind::Comma) || $previous->isKeyword(...self::EVENT_NEIGHBOURS)))
-            || ($next !== null && ($next->is(TokenKind::Comma) || $next->isKeyword('ON', 'OF', 'OR', 'AS')))
+            || ($next !== null && ($next->is(TokenKind::Comma) || $next->isKeyword('ON', 'OF', 'AS')))
+            || ($next?->isKeyword('OR') === true && ($tokens[$position + 2] ?? null)?->isKeyword(...self::EVENT_KEYWORDS) === true)
             || ($tokens[$position]->isKeyword('INSERT', 'REPLACE') && $next?->is(TokenKind::LParen) === true);
     }
 

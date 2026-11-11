@@ -84,6 +84,10 @@ final class SqlTableScannerTest extends TestCase
         yield 'literals ignored' => ["insert into log values ('update owners set x')", ['log'], 'mysql'];
         yield 'select for update is not a write' => ['select * from pets for update of pets', [], 'pgsql'];
         yield 'multi-table update' => ['begin update owners o join pets p on p.owner_id = o.id set p.name = o.name where o.id = new.id; end', ['pets'], 'mysql'];
+        yield 'mysql trigger as created' => ["CREATE DEFINER=`root`@`%` TRIGGER `pets_au` AFTER UPDATE ON `pets` FOR EACH ROW begin insert into log values (concat('it''s ', 'a \\'quoted\\' name')); delete from pet_toys; end", ['log', 'pet_toys'], 'mysql'];
+        yield 'sqlite conflict clauses' => ['CREATE TRIGGER t AFTER INSERT ON pets BEGIN insert or replace into pet_events (pet_id) values (new.id); update or ignore owners set name = 1; END', ['pet_events', 'owners'], 'sqlite'];
+        yield 'postgres events' => ['CREATE TRIGGER t AFTER INSERT OR UPDATE OR DELETE ON pets FOR EACH ROW EXECUTE FUNCTION record()', [], 'pgsql'];
+        yield 'write after a data-modifying cte' => ["begin with gone as (delete from pet_events returning pet_id) insert into pet_toys (pet_id, name) select pet_id, 'x' from gone; delete from owners; return new; end", ['pet_events', 'pet_toys', 'owners'], 'pgsql'];
         yield 'sql server trigger' => ['CREATE TRIGGER t ON pets AFTER INSERT, UPDATE AS BEGIN UPDATE owners SET name = 1 FROM inserted WHERE owners.id = inserted.owner_id END', ['owners'], 'sqlsrv'];
     }
 
