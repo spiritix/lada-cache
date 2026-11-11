@@ -5,13 +5,31 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Database;
 
 use Closure;
+use PDO;
 use Spiritix\LadaCache\Services;
 use Spiritix\LadaCache\Support\RawStatementClassifier;
 use Spiritix\LadaCache\Support\Sql\Dialects;
+use Spiritix\LadaCache\Support\TransactionBoundary;
+use WeakReference;
 
 trait InvalidatesRawStatements
 {
     private int $builderStatementDepth = 0;
+
+    /** @var WeakReference<PDO>|null the PDO object a raw statement began a transaction on, until one ends it */
+    private ?WeakReference $rawTransaction = null;
+
+    /**
+     * Drivers that do not report a transaction begun with a raw statement, as SQLite's does not
+     * before PHP 8.4, leave this the only sign of it. It holds for the PDO object the statement
+     * ran on, so a reconnect ends it.
+     */
+    public function inRawTransaction(): bool
+    {
+        $pdo = $this->rawTransaction?->get();
+
+        return $pdo !== null && $pdo === $this->getRawPdo();
+    }
 
     /**
      * @template TResult
@@ -59,6 +77,12 @@ trait InvalidatesRawStatements
     private function invalidateForRawStatement(string $query, ?int $affectedRows): void
     {
         $effect = RawStatementClassifier::classify($query, $this->getTablePrefix(), Dialects::of($this));
+        $pdo = $this->getRawPdo();
+        $this->rawTransaction = match ($effect->transaction) {
+            TransactionBoundary::Begins => $pdo instanceof PDO ? WeakReference::create($pdo) : null,
+            TransactionBoundary::Ends => null,
+            null => $this->rawTransaction,
+        };
 
         if ($affectedRows !== null) {
             $effect = $effect->affecting($affectedRows);

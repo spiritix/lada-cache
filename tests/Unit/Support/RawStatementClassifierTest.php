@@ -9,6 +9,7 @@ use PHPUnit\Framework\TestCase;
 use Spiritix\LadaCache\Support\RawStatementClassifier;
 use Spiritix\LadaCache\Support\RawStatementEffect;
 use Spiritix\LadaCache\Support\Sql\Dialects;
+use Spiritix\LadaCache\Support\TransactionBoundary;
 use Spiritix\LadaCache\Support\Write;
 
 final class RawStatementClassifierTest extends TestCase
@@ -102,6 +103,35 @@ final class RawStatementClassifierTest extends TestCase
     public function testSideEffectFreeStatementsInvalidateNothing(string $sql, string $driver): void
     {
         $this->assertTrue(RawStatementClassifier::classify($sql, '', Dialects::forDriver($driver))->isNone());
+    }
+
+    /**
+     * @return array<string, array{string, string, TransactionBoundary|null}>
+     */
+    public static function transactionStatements(): array
+    {
+        return [
+            'begin' => ['begin', 'sqlite', TransactionBoundary::Begins],
+            'begin immediate' => ['BEGIN IMMEDIATE', 'sqlite', TransactionBoundary::Begins],
+            'start transaction' => ['start transaction read write', 'mysql', TransactionBoundary::Begins],
+            'sql server transaction' => ['BEGIN TRAN', 'sqlsrv', TransactionBoundary::Begins],
+            'sql server block' => ['BEGIN SELECT 1 END', 'sqlsrv', null],
+            'commit' => ['commit', 'mysql', TransactionBoundary::Ends],
+            'end' => ['END TRANSACTION', 'pgsql', TransactionBoundary::Ends],
+            'rollback' => ['rollback', 'pgsql', TransactionBoundary::Ends],
+            'rollback to a savepoint' => ['rollback to savepoint before_import', 'mysql', null],
+            'savepoint' => ['savepoint before_import', 'mysql', null],
+            'a read' => ['select 1', 'mysql', null],
+        ];
+    }
+
+    #[DataProvider('transactionStatements')]
+    public function testStatementsBeginningOrEndingATransactionAreTold(string $sql, string $driver, ?TransactionBoundary $boundary): void
+    {
+        $effect = RawStatementClassifier::classify($sql, '', Dialects::forDriver($driver));
+
+        $this->assertSame($boundary, $effect->transaction);
+        $this->assertTrue($effect->isNone());
     }
 
     public function testReadsInvalidateNothingAndProceduresChangeEverything(): void

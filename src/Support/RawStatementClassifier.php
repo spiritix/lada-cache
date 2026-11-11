@@ -121,6 +121,27 @@ final class RawStatementClassifier
     }
 
     /**
+     * Whether the statement begins a transaction (`BEGIN`, `START TRANSACTION`) or ends one
+     * (`COMMIT`, `ROLLBACK`, `END`, `ABORT`). `ROLLBACK TO` a savepoint stays inside it, and a
+     * T-SQL `BEGIN` only begins one as `BEGIN TRAN[SACTION]`; otherwise it opens a block.
+     *
+     * @param  list<Token>  $statement
+     */
+    private static function transactionBoundary(array $statement, Dialect $dialect): ?TransactionBoundary
+    {
+        $first = $statement[0];
+        $second = $statement[1] ?? null;
+
+        return match (true) {
+            $first->isKeyword('START') && $second?->isKeyword('TRANSACTION') === true => TransactionBoundary::Begins,
+            $first->isKeyword('BEGIN') && ($second?->isKeyword('TRAN', 'TRANSACTION') === true || ! $dialect instanceof MsSqlDialect) => TransactionBoundary::Begins,
+            $first->isKeyword('ROLLBACK') && $second?->isKeyword('TO') !== true => TransactionBoundary::Ends,
+            $first->isKeyword('COMMIT', 'END', 'ABORT') => TransactionBoundary::Ends,
+            default => null,
+        };
+    }
+
+    /**
      * @param  list<Token>  $tokens
      */
     private static function classifyStatement(array $tokens, string $tablePrefix, Dialect $dialect): RawStatementEffect
@@ -139,6 +160,12 @@ final class RawStatementClassifier
 
         if ($first->isKeyword('EXPLAIN')) {
             return self::classifyExplain(array_slice($statement, 1), $tablePrefix, $dialect);
+        }
+
+        $boundary = self::transactionBoundary($statement, $dialect);
+
+        if ($boundary !== null) {
+            return RawStatementEffect::transaction($boundary);
         }
 
         if ($first->isKeyword(...self::SIDE_EFFECT_FREE_KEYWORDS) || self::isTemporaryTableStatement($statement)) {

@@ -13,7 +13,16 @@ final readonly class RawStatementEffect
         public array $tables,
         public Write $write,
         public bool $changesEverything,
+        public ?TransactionBoundary $transaction = null,
     ) {}
+
+    /**
+     * A statement that begins or ends a transaction, which changes no table itself.
+     */
+    public static function transaction(TransactionBoundary $boundary): self
+    {
+        return new self([], Write::insert(), false, $boundary);
+    }
 
     public static function none(): self
     {

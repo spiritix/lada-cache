@@ -15,4 +15,10 @@ interface RunsBuilderStatements
      * @return TResult
      */
     public function runBuilderStatement(Closure $statement): mixed;
+
+    /**
+     * Whether a raw `BEGIN` or `START TRANSACTION` passed through the connection without a
+     * statement ending it since.
+     */
+    public function inRawTransaction(): bool;
 }

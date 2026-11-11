@@ -198,6 +198,21 @@ final class RawStatementInvalidationTest extends TestCase
         $this->assertCacheMissing($key, $tags);
     }
 
+    public function testTheConnectionNotesARawTransactionItselfForDriversThatDoNotReportIt(): void
+    {
+        $connection = DB::connection();
+        $this->assertFalse($connection->inRawTransaction());
+
+        DB::unprepared('begin');
+        $this->assertTrue($connection->inRawTransaction());
+        DB::unprepared('savepoint halfway');
+        DB::unprepared('rollback to savepoint halfway');
+        $this->assertTrue($connection->inRawTransaction());
+        DB::unprepared('rollback');
+
+        $this->assertFalse($connection->inRawTransaction());
+    }
+
     public function testATransactionOpenedOnThePdoObjectIsInvalidatedByTheNextQueryAfterItEnds(): void
     {
         DB::table('cars')->insert(['id' => 1, 'name' => 'before', 'engine_id' => null, 'driver_id' => null]);
