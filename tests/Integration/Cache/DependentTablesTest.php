@@ -641,6 +641,42 @@ final class DependentTablesTest extends TestCase
         $this->assertSame($this->countInDatabase("select count(*) from license_seats where license_code = '5'"), $seatsOf('5'));
     }
 
+    public function testARawWriteSpellingTheTableInAnotherCaseRefreshesItsCachedReads(): void
+    {
+        $this->requireDatabaseDriver('sqlite', 'pgsql');
+        $name = fn (): string => DB::table('owners')->where('id', 1)->value('name');
+        $pets = fn (): int => DB::table('pets')->count();
+        $this->assertSame('alice', $name());
+        $this->assertSame(2, $pets());
+
+        DB::update('update OWNERS set name = ? where id = ?', ['renamed', 1]);
+        $this->assertSame('renamed', $name());
+
+        DB::delete('delete from OWNERS where id = ?', [1]);
+        $this->assertSame(1, $pets(), 'The cascade of a table spelled in another case is followed');
+    }
+
+    public function testTablesTheSchemaSpellsInMixedCaseAreFollowedInAnyCase(): void
+    {
+        $this->requireDatabaseDriver('sqlite');
+        Schema::create('MixedParents', static function (Blueprint $table): void {
+            $table->id();
+        });
+        Schema::create('MixedKids', static function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('parent_id')->constrained('MixedParents')->cascadeOnDelete();
+        });
+        DB::table('MixedParents')->insert([['id' => 1], ['id' => 2]]);
+        DB::table('MixedKids')->insert([['parent_id' => 1], ['parent_id' => 2]]);
+        $this->loadDependencyMap();
+        $kids = fn (): int => DB::table('mixedkids')->count();
+        $this->assertSame(2, $kids());
+
+        DB::table('MIXEDPARENTS')->where('id', 1)->delete();
+
+        $this->assertSame(1, $kids());
+    }
+
     /**
      * PostgreSQL rejects a value of another type instead of casting it, and MySQL does so for
      * writes in strict mode.

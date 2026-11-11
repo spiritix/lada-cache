@@ -84,8 +84,8 @@ final class DependentTables
         $viewBases = [];
 
         foreach (self::viewDependencies($connection) as [$table, $view]) {
-            $table = TableName::withoutPrefix($table, $prefix);
-            $view = TableName::withoutPrefix($view, $prefix);
+            $table = TableName::tagged($table, $prefix);
+            $view = TableName::tagged($view, $prefix);
             $everyWrite[$table][$view] = true;
             $viewBases[$view][$table] = true;
         }
@@ -94,8 +94,8 @@ final class DependentTables
         $parents = [];
 
         foreach (self::inheritance($connection) as [$parent, $child, $parentIsPartitioned]) {
-            $parent = TableName::withoutPrefix($parent, $prefix);
-            $child = TableName::withoutPrefix($child, $prefix);
+            $parent = TableName::tagged($parent, $prefix);
+            $child = TableName::tagged($child, $prefix);
             $parents[$child][] = $parent;
             $triggers[$parent] = [...$triggers[$parent] ?? [], ...self::writesReachingChild($child, $parentIsPartitioned)];
         }
@@ -167,7 +167,7 @@ final class DependentTables
                     throw self::invalidConfiguration();
                 }
 
-                $direct[$table][$dependent] = true;
+                $direct[TableName::tagged($table)][TableName::tagged($dependent)] = true;
             }
         }
 
@@ -183,8 +183,8 @@ final class DependentTables
 
         foreach ($connection->select(self::foreignKeyQuery($connection), [], false) as $row) {
             $row = (array) $row;
-            $child = TableName::withoutPrefix(self::text($row, 'child_table'), $prefix);
-            $parent = TableName::withoutPrefix(self::text($row, 'parent_table'), $prefix);
+            $child = TableName::tagged(self::text($row, 'child_table'), $prefix);
+            $parent = TableName::tagged(self::text($row, 'parent_table'), $prefix);
             $childColumn = self::text($row, 'child_column');
 
             if ($row['parent_column'] === null) {
@@ -347,7 +347,7 @@ final class DependentTables
         $triggers = [];
 
         foreach (self::triggerDefinitions($connection) as $definition) {
-            $triggers[TableName::withoutPrefix($definition['table'], $prefix)][] = [
+            $triggers[TableName::tagged($definition['table'], $prefix)][] = [
                 'events' => $definition['events'],
                 'columns' => $definition['columns'],
                 'changes' => self::changesOfTrigger($definition, $prefix),
@@ -388,7 +388,7 @@ final class DependentTables
         $changes = [];
 
         foreach (WriteTargets::of($statement) as $name) {
-            $table = TableName::withoutPrefix($name[array_key_last($name)], $prefix);
+            $table = TableName::tagged($name[array_key_last($name)], $prefix);
             $columns = $statement instanceof InsertStatement || $statement instanceof UpdateStatement ? WriteTargets::assignedColumns($statement) ?? [] : [];
             $updates = array_map(static fn (string $column): array => ['update', $table, Write::columnName($column)], $columns);
 

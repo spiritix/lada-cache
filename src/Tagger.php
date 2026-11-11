@@ -8,6 +8,7 @@ use Spiritix\LadaCache\Support\AssignedRows;
 use Spiritix\LadaCache\Support\CascadeRead;
 use Spiritix\LadaCache\Support\ColumnKeys;
 use Spiritix\LadaCache\Support\RowKeys;
+use Spiritix\LadaCache\Support\TableName;
 
 /**
  * Generates cache tags for queries based on database, tables, and targeted rows.
@@ -111,7 +112,7 @@ final readonly class Tagger
     {
         $segments = explode('.', $table);
 
-        $name = (string) array_pop($segments);
+        $name = TableName::tagged((string) array_pop($segments));
 
         if ($segments === [] || ! $this->reflector->qualifiersNameDatabases()) {
             return [$this->reflector->getDatabase(), $name];

@@ -168,12 +168,12 @@ final readonly class Write
 
     public static function everyWriteField(string $table): string
     {
-        return 'a:'.$table;
+        return 'a:'.TableName::tagged($table);
     }
 
     public static function deleteField(string $table): string
     {
-        return 'd:'.$table;
+        return 'd:'.TableName::tagged($table);
     }
 
     /**
@@ -183,7 +183,7 @@ final readonly class Write
      */
     public static function keyedDeleteField(string $table, string $column): string
     {
-        return 'dk:'.$table.':'.self::columnName($column);
+        return 'dk:'.TableName::tagged($table).':'.self::columnName($column);
     }
 
     /**
@@ -192,22 +192,22 @@ final readonly class Write
      */
     public static function cascadeColumnsField(string $table): string
     {
-        return 'k:'.$table;
+        return 'k:'.TableName::tagged($table);
     }
 
     public static function truncateField(string $table): string
     {
-        return 't:'.$table;
+        return 't:'.TableName::tagged($table);
     }
 
     public static function anyUpdateField(string $table): string
     {
-        return 'u:'.$table;
+        return 'u:'.TableName::tagged($table);
     }
 
     public static function columnUpdateField(string $table, string $column): string
     {
-        return 'u:'.$table.':'.self::columnName($column);
+        return 'u:'.TableName::tagged($table).':'.self::columnName($column);
     }
 
     /**
@@ -216,7 +216,7 @@ final readonly class Write
      */
     public static function triggerField(TriggerEvent $event, string $table): string
     {
-        return 'g'.$event->value.':'.$table;
+        return 'g'.$event->value.':'.TableName::tagged($table);
     }
 
     /**
@@ -224,7 +224,7 @@ final readonly class Write
      */
     public static function columnTriggerField(string $table, string $column): string
     {
-        return 'gc:'.$table.':'.self::columnName($column);
+        return 'gc:'.TableName::tagged($table).':'.self::columnName($column);
     }
 
     /**
@@ -232,7 +232,7 @@ final readonly class Write
      */
     public static function anyColumnTriggerField(string $table): string
     {
-        return 'gc:'.$table;
+        return 'gc:'.TableName::tagged($table);
     }
 
     /**
