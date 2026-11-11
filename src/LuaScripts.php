@@ -116,11 +116,15 @@ final class LuaScripts
         LUA;
 
     /**
-     * ARGV: base, entry hash, fresh token, ttl seconds, Lada prefix, tag count, tags...,
+     * ARGV: base, entry hash, fresh token, ttl seconds, Lada prefix, 1 to check the server else 0, tag count, tags...,
      *       cascade read count, then per table read: dependents name, cascade tag prefix, cascade
      *       columns field, pinned column count, then per column: column, `ColumnKeys::arguments()`,
      *       then legacy tags...
      * Returns {generation, fingerprint} on a miss and {generation, fingerprint, payload} on a hit.
+     *
+     * Asked to check the server, it first retires the generation of another server run (see
+     * `SERVER_CHECK`). Reading the run id costs more than the rest of a hit, so `Cache` asks for
+     * it only every few seconds per process rather than on every lookup.
      *
      * A table read also takes the tokens of the cascade tags that row-precise foreign key cascades
      * into it replace (see `CASCADE_TAGS`): for each column the dependency map lists in the table's
@@ -136,11 +140,14 @@ final class LuaScripts
      * version stored before the 5.x write become unreachable. A token whose key is missing or no
      * longer listed in the set, because the 5.x host deleted the set but not yet its keys, is replaced.
      */
-    public const string LOOKUP = self::DEPENDENTS_NAMES.self::CASCADE_TAGS.<<<'LUA'
+    public const string LOOKUP = self::SERVER_CHECK.self::DEPENDENTS_NAMES.self::CASCADE_TAGS.<<<'LUA'
         local base, fresh, ttl = ARGV[1], ARGV[3], tonumber(ARGV[4])
         local connectionPrefix = string.sub(base, 1, #base - #ARGV[5])
-        local lastVersionTag = 6 + tonumber(ARGV[6])
+        local lastVersionTag = 7 + tonumber(ARGV[7])
         local generationKey = base .. 'generation'
+        if ARGV[6] == '1' then
+            retireIfServerChanged(base)
+        end
         local generation = redis.call('GET', generationKey)
         if not generation then
             redis.call('SET', generationKey, fresh)
@@ -158,7 +165,7 @@ final class LuaScripts
         local function takeToken(tag)
             versionKeys[#versionKeys + 1] = scope .. 'v:' .. tag
         end
-        for i = 7, lastVersionTag do
+        for i = 8, lastVersionTag do
             takeToken(ARGV[i])
         end
         local index = lastVersionTag + 1

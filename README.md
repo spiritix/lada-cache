@@ -255,7 +255,7 @@ php artisan lada-cache:enable
 - Raw SQL executed directly via the connection (e.g., `DB::select()`, `DB::statement()`) is not cached by design.
 - Row-level tagging relies on standard single-column primary keys. Composite or unconventional primary keys fall back to table-level invalidation.
 - Redis Cluster is not supported, because each cache operation is one Lua script touching keys of several tags. Use a standalone Redis, optionally with replicas and Sentinel.
-- A restarted Redis or a promoted replica may have lost the newest invalidations. Lada Cache records the Redis server's run id and retires the cache the first time a store or invalidation reaches a different server; cached reads served before that first store or write anywhere may still be stale.
+- A restarted Redis or a promoted replica may have lost the newest invalidations. Lada Cache records the Redis server's run id and retires the cache the first time a store or invalidation reaches a different server, and the first time a lookup does that checks: every process checks on its first lookup and every 5 seconds after, since reading the run id costs more than the rest of a hit. Cached reads served within those seconds, before any store or write anywhere, may still be stale.
 - Give Redis an eviction policy such as `allkeys-lru` or `volatile-lru`. Evicted entries and version tokens only cause misses, but under `noeviction` a full Redis rejects invalidations, and `volatile-ttl` evicts the short-lived replica lag markers first.
 - Writes that bypass Laravel's connection (other applications, database consoles, `DB::connection()->getPdo()`) are not seen; run `php artisan lada-cache:invalidate <tables>` (or `lada-cache:flush`) after such changes.
 

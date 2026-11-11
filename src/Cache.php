@@ -27,6 +27,8 @@ use UnexpectedValueException;
  */
 final class Cache
 {
+    public const int SERVER_CHECK_SECONDS = 5;
+
     private const int PRUNE_BATCH_SIZE = 1000;
 
     private const array SCHEMA_CHANGE_RETRY_DELAYS_MICROSECONDS = [100_000, 300_000, 900_000];
@@ -37,6 +39,9 @@ final class Cache
 
     /** @var array{configured: mixed, name: string}|null the `dependent_tables` last seen and the map name it gives, hashed once per configuration rather than per query */
     private ?array $dependentsConfiguration = null;
+
+    /** @var int|null when a lookup of this process last checked the server, in `hrtime()` nanoseconds */
+    private ?int $serverCheckedAt = null;
 
     public function __construct(
         private readonly Redis $redis,
@@ -60,6 +65,7 @@ final class Cache
             self::freshToken(),
             $this->expiration->nextTtl(),
             $this->redis->ladaPrefix(),
+            (int) $this->serverCheckIsDue(),
             count($versionTags),
             ...$versionTags,
             count($cascadeReads),
@@ -91,6 +97,24 @@ final class Cache
         }
 
         return new CacheMiss(new Generation(RedisReply::string($reply[0], 'lookup generation')), $key, RedisReply::string($reply[1], 'lookup fingerprint'));
+    }
+
+    /**
+     * Stores and invalidations always check which server they reach; a lookup does every
+     * `SERVER_CHECK_SECONDS` per process, so a restored or promoted Redis is noticed within that
+     * time even when nothing is written.
+     */
+    private function serverCheckIsDue(): bool
+    {
+        $now = hrtime(true);
+
+        if ($this->serverCheckedAt !== null && $now - $this->serverCheckedAt < self::SERVER_CHECK_SECONDS * 1_000_000_000) {
+            return false;
+        }
+
+        $this->serverCheckedAt = $now;
+
+        return true;
     }
 
     /**

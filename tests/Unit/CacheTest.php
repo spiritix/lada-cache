@@ -172,6 +172,23 @@ class CacheTest extends TestCase
         $this->assertInstanceOf(CacheMiss::class, $this->cache->lookup('k', ['t'], []));
     }
 
+    public function testALookupByAnotherProcessAfterARedisRestartOrFailoverRetiresTheGeneration(): void
+    {
+        $this->cache->store($this->miss('k', ['t']), ['before']);
+        $this->redis->set('p:server', 'run-id-of-the-previous-server');
+        $otherProcess = new Cache($this->redis, new Encoder, new ExpirationPolicy(0));
+
+        $this->assertInstanceOf(CacheMiss::class, $otherProcess->lookup('k', ['t'], []));
+    }
+
+    public function testAProcessChecksTheServerOnLookupsOnlyEveryFewSeconds(): void
+    {
+        $this->cache->store($this->miss('k', ['t']), ['before']);
+        $this->redis->set('p:server', 'run-id-of-the-previous-server');
+
+        $this->assertInstanceOf(CacheHit::class, $this->cache->lookup('k', ['t'], []), 'The lookup that stored the entry checked the server moments ago');
+    }
+
     public function testARejectedScriptIsNamed(): void
     {
         $this->assertSame('INVALIDATE', LuaScripts::nameOf(LuaScripts::INVALIDATE));
