@@ -3,6 +3,7 @@
 use Spiritix\LadaCache\CacheScope;
 use Spiritix\LadaCache\EntrySizeLimit;
 use Spiritix\LadaCache\ExpirationPolicy;
+use Spiritix\LadaCache\Metrics;
 use Spiritix\LadaCache\Redis;
 use Spiritix\LadaCache\Support\ReplicaReads;
 
@@ -211,6 +212,24 @@ return [
     |
     */
     'exclude_tables' => [],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Metrics
+    |--------------------------------------------------------------------------
+    |
+    | Counts hits, misses, stores and invalidations per table, retires,
+    | bypasses and failures, inside the Redis calls Lada Cache already
+    | makes. `php artisan lada-cache:stats` reports them. Counters are kept
+    | per time bucket of `metrics_bucket_seconds` and expire after
+    | `metrics_retention_seconds`.
+    |
+    */
+    'metrics' => env('LADA_CACHE_METRICS', false),
+
+    'metrics_bucket_seconds' => env('LADA_CACHE_METRICS_BUCKET', Metrics::DEFAULT_BUCKET_SECONDS),
+
+    'metrics_retention_seconds' => env('LADA_CACHE_METRICS_RETENTION', Metrics::DEFAULT_RETENTION_SECONDS),
 
     /*
     |--------------------------------------------------------------------------

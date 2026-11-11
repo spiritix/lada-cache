@@ -18,6 +18,8 @@ final class Services
 
     public const string COLLECTOR = 'lada.collector';
 
+    public const string METRICS = 'lada.metrics';
+
     public static function redis(): Redis
     {
         return self::make(self::REDIS, Redis::class);
@@ -31,6 +33,11 @@ final class Services
     public static function handler(): QueryHandler
     {
         return self::make(self::HANDLER, QueryHandler::class);
+    }
+
+    public static function metrics(): Metrics
+    {
+        return self::make(self::METRICS, Metrics::class);
     }
 
     public static function collector(): ?CacheCollector

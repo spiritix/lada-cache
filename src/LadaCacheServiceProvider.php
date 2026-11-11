@@ -17,6 +17,8 @@ use Illuminate\Database\Events\SchemaLoaded;
 use Illuminate\Database\Events\TransactionCommitted;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Database\Migrations\Migrator;
+use Illuminate\Queue\Events\JobFailed;
+use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
@@ -26,6 +28,7 @@ use Spiritix\LadaCache\Console\DisableCommand;
 use Spiritix\LadaCache\Console\EnableCommand;
 use Spiritix\LadaCache\Console\FlushCommand;
 use Spiritix\LadaCache\Console\InvalidateCommand;
+use Spiritix\LadaCache\Console\StatsCommand;
 use Spiritix\LadaCache\Database\MariaDbConnection as LadaMariaDbConnection;
 use Spiritix\LadaCache\Database\MySqlConnection as LadaMySqlConnection;
 use Spiritix\LadaCache\Database\PostgresConnection as LadaPostgresConnection;
@@ -41,6 +44,7 @@ use Spiritix\LadaCache\Support\FailureReporter;
 use Spiritix\LadaCache\Support\FrameworkTables;
 use Spiritix\LadaCache\Support\RedisCooldown;
 use Spiritix\LadaCache\Support\ReplicaReads;
+use Spiritix\LadaCache\Support\RetireReason;
 use Throwable;
 
 /**
@@ -54,7 +58,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
 {
     public const CONFIG_FILE = 'lada-cache.php';
 
-    private const array SINGLETONS = [Services::REDIS, Services::CACHE, Services::HANDLER];
+    private const array SINGLETONS = [Services::REDIS, Services::METRICS, Services::CACHE, Services::HANDLER];
 
     private const array LADA_CONNECTIONS = [
         'mysql' => LadaMySqlConnection::class,
@@ -116,7 +120,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
         });
 
         $events->listen(MigrationEnded::class, function (MigrationEnded $event): void {
-            Services::handler()->schemaChanged($this->app->make(Migrator::class)->resolveConnection($event->migration->getConnection()));
+            Services::handler()->schemaChanged($this->app->make(Migrator::class)->resolveConnection($event->migration->getConnection()), RetireReason::Migration);
         });
         $events->listen([SchemaLoaded::class, DatabaseRefreshed::class], static function (SchemaLoaded|DatabaseRefreshed $event): void {
             Services::handler()->schemaChanged(
@@ -135,7 +139,10 @@ final class LadaCacheServiceProvider extends ServiceProvider
             if ($this->app->resolved(Services::HANDLER)) {
                 Services::handler()->replayFailedInvalidations(RedisCooldown::Ignore);
             }
+
+            $this->writeCountedMetrics();
         });
+        $events->listen([JobProcessed::class, JobFailed::class], fn () => $this->writeCountedMetrics());
     }
 
     /**
@@ -157,6 +164,22 @@ final class LadaCacheServiceProvider extends ServiceProvider
         $this->registerCommands();
     }
 
+    /**
+     * Writes the counters only PHP sees, once per request or job rather than as they happen.
+     */
+    private function writeCountedMetrics(): void
+    {
+        if (! $this->app->resolved(Services::METRICS)) {
+            return;
+        }
+
+        try {
+            Services::metrics()->flush(Services::redis());
+        } catch (Throwable $exception) {
+            FailureReporter::report(CacheOperation::Count, $exception);
+        }
+    }
+
     private function hasValidConfiguration(): bool
     {
         try {
@@ -169,6 +192,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
             ExpirationPolicy::fromConfig();
             EntrySizeLimit::fromConfig();
             ReplicaReads::configuredLagSeconds();
+            Metrics::fromConfig();
             DependentTables::configured();
 
             return true;
@@ -210,10 +234,12 @@ final class LadaCacheServiceProvider extends ServiceProvider
     private function registerSingletons(): void
     {
         $this->app->singleton(Services::REDIS, static fn (): Redis => new Redis);
-        $this->app->singleton(Services::CACHE, static fn (): Cache => new Cache(Services::redis(), new Encoder));
+        $this->app->singleton(Services::METRICS, static fn (): Metrics => Metrics::fromConfig());
+        $this->app->singleton(Services::CACHE, static fn (): Cache => new Cache(Services::redis(), new Encoder, metrics: Services::metrics()));
         $this->app->singleton(Services::HANDLER, static fn (): QueryHandler => new QueryHandler(
             Services::cache(),
             FailedInvalidations::detect(Services::redis()->processStateKey('failed'), ExpirationPolicy::fromConfig()->seconds),
+            Services::metrics(),
         ));
     }
 
@@ -276,12 +302,14 @@ final class LadaCacheServiceProvider extends ServiceProvider
         $this->app->singleton('command.lada-cache.enable', static fn () => new EnableCommand);
         $this->app->singleton('command.lada-cache.disable', static fn () => new DisableCommand);
         $this->app->singleton('command.lada-cache.invalidate', static fn () => new InvalidateCommand);
+        $this->app->singleton('command.lada-cache.stats', static fn () => new StatsCommand);
 
         $this->commands([
             'command.lada-cache.flush',
             'command.lada-cache.enable',
             'command.lada-cache.disable',
             'command.lada-cache.invalidate',
+            'command.lada-cache.stats',
         ]);
     }
 

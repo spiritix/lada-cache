@@ -14,6 +14,7 @@ final readonly class CacheMiss
         public Generation $generation,
         public string $key,
         public string $fingerprint,
+        public string $table = '',
     ) {
         if (preg_match(self::FINGERPRINT_PATTERN, $fingerprint) !== 1) {
             throw new InvalidArgumentException(sprintf('Invalid Lada Cache fingerprint "%s", expected 40 lowercase hex characters', $fingerprint));

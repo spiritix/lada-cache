@@ -8,6 +8,8 @@ use ReflectionClass;
 use Spiritix\LadaCache\Support\ColumnKeys;
 use Spiritix\LadaCache\Support\ColumnType;
 use Spiritix\LadaCache\Support\DependentTables;
+use Spiritix\LadaCache\Support\Metric;
+use Spiritix\LadaCache\Support\RetireReason;
 use Spiritix\LadaCache\Support\Write;
 
 /**
@@ -25,6 +27,7 @@ use Spiritix\LadaCache\Support\Write;
  * - `<base><generation>:d:<name>`       hash of `Write` dependents field => newline separated tables changed along with it,
  *                                       named by database and dependency configuration; `Write::ANY_TABLE_FIELD` is always
  *                                       present and lists `DependentTables::EVERY_TABLE` when the schema could not be read
+ * - `<base>stats:<bucket start>`        with metrics, a hash of counters for one time bucket (see `Metrics`)
  * - `<base>legacy:<tag>`                with legacy invalidation, a token listed in the 5.x tag set `<base><tag>`,
  *                                       so a 5.x host invalidating the tag deletes it
  *
@@ -38,10 +41,69 @@ final class LuaScripts
      */
     public static function nameOf(string $script): string
     {
-        $name = array_search($script, (new ReflectionClass(self::class))->getConstants(), true);
+        $counting = array_search($script, self::COUNTING, true);
+        $name = array_search($counting === false ? $script : $counting, (new ReflectionClass(self::class))->getConstants(), true);
 
         return is_string($name) ? $name : 'unknown';
     }
+
+    /**
+     * The scripts that count, by the script they are with metrics off. Both forms share their
+     * body; they differ in what count() does and in the arguments they take.
+     */
+    public const array COUNTING = [
+        self::LOOKUP => self::METRICS.self::LOOKUP_BODY,
+        self::STORE => self::METRICS.self::STORE_BODY,
+        self::INVALIDATE => self::METRICS.self::INVALIDATE_BODY,
+        self::RETIRE => self::METRICS.self::RETIRE_BODY,
+    ];
+
+    /**
+     * Defines the names of the metrics the scripts count and of the labels they count under.
+     */
+    private const string METRIC_NAMES = "local statsPrefix, noTable, severalTables = '".Metrics::BUCKET_PREFIX."', '".Metric::NO_TABLE."', '".Metric::SEVERAL_TABLES."'\n"
+        ."local metricHit, metricMiss, metricStore = '".Metric::Hit->value."', '".Metric::Miss->value."', '".Metric::Store->value."'\n"
+        ."local metricInvalidation, metricCascade, metricRetire = '".Metric::Invalidation->value."', '".Metric::Cascade->value."', '".Metric::Retire->value."'\n"
+        ."local retiredByServerChange, retiredForUnknownTables = '".RetireReason::ServerChange->value."', '".RetireReason::UnknownTables->value."'\n"
+        ."local everyWritePrefix = '".Write::EVERY_WRITE_PREFIX."'\n";
+
+    /**
+     * What a script starts with when metrics are off: count() does nothing, and the script
+     * takes exactly the arguments it took before metrics existed. `lastArgument` is the index of
+     * its last argument.
+     */
+    private const string NO_METRICS = self::METRIC_NAMES.<<<'LUA'
+        local statsLabel = ''
+        local lastArgument = #ARGV
+        local function count()
+        end
+
+        LUA;
+
+    /**
+     * What a script starts with when metrics are on. Defines count(metric, label, by) and
+     * countField(field, by), which add to a counter of the current metrics bucket (see
+     * `Metrics`). The script's last three arguments are `Metrics::scriptArguments()`, and
+     * `lastArgument` is the index of the last one before them. A bucket gets its expiration
+     * when a counter is first written to it.
+     */
+    private const string METRICS = self::METRIC_NAMES.<<<'LUA'
+        local statsBucket, statsLabel, statsRetention = ARGV[#ARGV - 2], ARGV[#ARGV - 1], ARGV[#ARGV]
+        local lastArgument = #ARGV - 3
+        local function countField(field, by)
+            if by == 0 then
+                return
+            end
+            local key = ARGV[1] .. statsPrefix .. statsBucket
+            if redis.call('HINCRBY', key, field, by) == by then
+                redis.call('EXPIRE', key, statsRetention)
+            end
+        end
+        local function count(metric, label, by)
+            countField(metric .. ':' .. (label == '' and noTable or label), by)
+        end
+
+        LUA;
 
     /**
      * Defines retireIfServerChanged(base). A restarted Redis or a promoted replica may have lost
@@ -61,6 +123,7 @@ final class LuaScripts
                 return false
             end
             redis.call('SET', base .. 'generation', string.sub(redis.sha1hex(runId .. known), 1, 32))
+            count(metricRetire, retiredByServerChange, 1)
             return true
         end
 
@@ -140,7 +203,9 @@ final class LuaScripts
      * version stored before the 5.x write become unreachable. A token whose key is missing or no
      * longer listed in the set, because the 5.x host deleted the set but not yet its keys, is replaced.
      */
-    public const string LOOKUP = self::SERVER_CHECK.self::DEPENDENTS_NAMES.self::CASCADE_TAGS.<<<'LUA'
+    public const string LOOKUP = self::NO_METRICS.self::LOOKUP_BODY;
+
+    private const string LOOKUP_BODY = self::SERVER_CHECK.self::DEPENDENTS_NAMES.self::CASCADE_TAGS.<<<'LUA'
         local base, fresh, ttl = ARGV[1], ARGV[3], tonumber(ARGV[4])
         local connectionPrefix = string.sub(base, 1, #base - #ARGV[5])
         local lastVersionTag = 7 + tonumber(ARGV[7])
@@ -215,7 +280,7 @@ final class LuaScripts
                 tokens[i] = token
             end
         end
-        for i = index, #ARGV do
+        for i = index, lastArgument do
             local legacyKey = base .. 'legacy:' .. ARGV[i]
             local legacySet = base .. ARGV[i]
             local member = string.sub(legacyKey, #connectionPrefix + 1)
@@ -230,8 +295,10 @@ final class LuaScripts
         local fingerprint = redis.sha1hex(table.concat(tokens, ':'))
         local entry = redis.call('GET', scope .. 'e:' .. ARGV[2])
         if entry and string.sub(entry, 1, 40) == fingerprint then
+            count(metricHit, statsLabel, 1)
             return {generation, fingerprint, string.sub(entry, 41)}
         end
+        count(metricMiss, statsLabel, 1)
         return {generation, fingerprint}
         LUA;
 
@@ -240,7 +307,9 @@ final class LuaScripts
      * Returns 1 when stored, 0 when the generation was retired meanwhile and -1 when one of the
      * tags was written too recently for a replica read to be trusted.
      */
-    public const string STORE = self::SERVER_CHECK.<<<'LUA'
+    public const string STORE = self::NO_METRICS.self::STORE_BODY;
+
+    private const string STORE_BODY = self::SERVER_CHECK.<<<'LUA'
         local base, generation, ttl = ARGV[1], ARGV[2], tonumber(ARGV[5])
         if retireIfServerChanged(base) then
             return 0
@@ -249,7 +318,7 @@ final class LuaScripts
             return 0
         end
         local scope = base .. generation .. ':'
-        for i = 7, #ARGV do
+        for i = 7, lastArgument do
             if redis.call('EXISTS', scope .. 'w:' .. ARGV[i]) == 1 then
                 return -1
             end
@@ -261,6 +330,7 @@ final class LuaScripts
         else
             redis.call('SET', entryKey, value)
         end
+        count(metricStore, statsLabel, 1)
         return 1
         LUA;
 
@@ -278,6 +348,10 @@ final class LuaScripts
      * names, so the generation is retired instead; its dependency map, which only a schema
      * change outdates, moves to the fresh generation.
      *
+     * Counts an invalidation for every table written, told by its `Write::EVERY_WRITE_PREFIX`
+     * field, unless the call only follows up the cascades of one already counted (it replaces no
+     * tags), and the tables the cascades reached.
+     *
      * With legacy invalidation, every table-level tag replaced also has its 5.x tag set and the
      * entries it lists deleted, so hosts still running 5.x during a rolling deploy stop serving
      * what this version invalidated, cascades included; a row-precise cascade deletes the 5.x
@@ -288,7 +362,9 @@ final class LuaScripts
      * nothing was ever cached or is anymore, else
      * {generation, 1-based indexes of the groups whose dependents are not known yet...}.
      */
-    public const string INVALIDATE = self::SERVER_CHECK.self::DEPENDENTS_NAMES.self::CASCADE_TAGS.<<<'LUA'
+    public const string INVALIDATE = self::NO_METRICS.self::INVALIDATE_BODY;
+
+    private const string INVALIDATE_BODY = self::SERVER_CHECK.self::DEPENDENTS_NAMES.self::CASCADE_TAGS.<<<'LUA'
         local base, fresh, ttl, lag = ARGV[1], ARGV[2], tonumber(ARGV[3]), tonumber(ARGV[4])
         local legacy = ARGV[5] == '1'
         local connectionPrefix = string.sub(base, 1, #base - #ARGV[6])
@@ -365,6 +441,13 @@ final class LuaScripts
                     end
                 end
             end
+            local written = {}
+            for f = index, index + fieldCount - 1 do
+                if string.sub(ARGV[f], 1, #everyWritePrefix) == everyWritePrefix then
+                    written[#written + 1] = string.sub(ARGV[f], #everyWritePrefix + 1)
+                end
+            end
+            local cascaded = 0
             index = index + fieldCount
             local cascadePrefix = ARGV[index]
             local keyedCount = tonumber(ARGV[index + 1])
@@ -382,6 +465,7 @@ final class LuaScripts
                             if child and not keys then
                                 changed[child] = true
                             elseif child then
+                                cascaded = cascaded + 1
                                 for p = 1, prefixCount do
                                     purgeLegacy(prefixes[p] .. child)
                                 end
@@ -401,14 +485,22 @@ final class LuaScripts
             if changed[everyTable] then
                 redis.call('SET', base .. 'generation', fresh)
                 redis.call('RENAME', dependentsKey, base .. fresh .. ':d:' .. dependentsName)
+                count(metricRetire, retiredForUnknownTables, 1)
                 return {0}
             end
             for dependent in pairs(changed) do
+                cascaded = cascaded + 1
                 for p = 1, prefixCount do
                     replace(prefixes[p] .. dependent)
                     purgeLegacy(prefixes[p] .. dependent)
                 end
             end
+            if tagCount > 0 then
+                for _, tableWritten in ipairs(written) do
+                    count(metricInvalidation, tableWritten, 1)
+                end
+            end
+            count(metricCascade, #written == 1 and written[1] or severalTables, cascaded)
         end
         return result
         LUA;
@@ -435,19 +527,33 @@ final class LuaScripts
         LUA;
 
     /**
-     * ARGV: base, fresh generation id
+     * ARGV: base, fresh generation id; counted under the `RetireReason` passed as the label
      */
-    public const string RETIRE = <<<'LUA'
+    public const string RETIRE = self::NO_METRICS.self::RETIRE_BODY;
+
+    private const string RETIRE_BODY = <<<'LUA'
         redis.call('SET', ARGV[1] .. 'generation', ARGV[2])
+        count(metricRetire, statsLabel, 1)
+        return 1
+        LUA;
+
+    /**
+     * ARGV: base, then pairs of a counter field and what to add to it
+     */
+    public const string COUNT = self::METRICS.<<<'LUA'
+        for i = 2, lastArgument, 2 do
+            countField(ARGV[i], tonumber(ARGV[i + 1]))
+        end
         return 1
         LUA;
 
     /**
      * ARGV: base, cursor, batch size
-     * Deletes one SCAN batch of keys that belong to no current generation, keeping the server id.
+     * Deletes one SCAN batch of keys that belong to no current generation, keeping the server id
+     * and the metrics buckets.
      * Returns {next cursor, deleted count}.
      */
-    public const string PRUNE_BATCH = <<<'LUA'
+    public const string PRUNE_BATCH = "local statsPrefix = '".Metrics::BUCKET_PREFIX."'\n".<<<'LUA'
         local base = ARGV[1]
         local pattern = string.gsub(base, '([%*%?%[%]\\])', '\\%1') .. '*'
         local generationKey = base .. 'generation'
@@ -457,7 +563,8 @@ final class LuaScripts
         local stale = {}
         for _, key in ipairs(scan[2]) do
             local current = currentPrefix ~= nil and string.sub(key, 1, #currentPrefix) == currentPrefix
-            if key ~= generationKey and key ~= base .. 'server' and not current then
+            local stats = string.sub(key, 1, #base + #statsPrefix) == base .. statsPrefix
+            if key ~= generationKey and key ~= base .. 'server' and not current and not stats then
                 stale[#stale + 1] = key
             end
         end

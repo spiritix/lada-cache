@@ -15,12 +15,13 @@ enum CacheOperation: string
     case Replay = 'replaying pending invalidations';
     case ReadDependents = 'reading the tables the database changes along with a write';
     case ReadTrigger = 'reading which tables a trigger writes';
+    case Count = 'writing the metrics';
 
     public function compromisesFreshness(): bool
     {
         return match ($this) {
             self::Invalidate, self::Retire => true,
-            self::Analyze, self::Read, self::Store, self::Prune, self::Replay, self::ReadDependents, self::ReadTrigger => false,
+            self::Analyze, self::Read, self::Store, self::Prune, self::Replay, self::ReadDependents, self::ReadTrigger, self::Count => false,
         };
     }
 
@@ -32,6 +33,7 @@ enum CacheOperation: string
         return match ($this) {
             self::Invalidate, self::Retire => 'cached results may be stale until they expire',
             self::Analyze, self::Read, self::Store, self::Prune, self::Replay => 'continuing without the cache',
+            self::Count => 'what was counted since the last write is lost',
             self::ReadDependents => 'every write retires the whole cache until it is read again in '.DependentTables::UNREADABLE_SECONDS.' seconds',
             self::ReadTrigger => 'every write firing it retires the whole cache',
         };

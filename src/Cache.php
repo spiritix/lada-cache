@@ -7,8 +7,10 @@ namespace Spiritix\LadaCache;
 use Spiritix\LadaCache\Support\CascadeRead;
 use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\Invalidation;
+use Spiritix\LadaCache\Support\Metric;
 use Spiritix\LadaCache\Support\RedisCooldown;
 use Spiritix\LadaCache\Support\RedisReply;
+use Spiritix\LadaCache\Support\RetireReason;
 use Spiritix\LadaCache\Support\Write;
 use Throwable;
 use UnexpectedValueException;
@@ -37,6 +39,8 @@ final class Cache
 
     private readonly EntrySizeLimit $entrySizeLimit;
 
+    private readonly Metrics $metrics;
+
     /** @var array{configured: mixed, name: string}|null the `dependent_tables` last seen and the map name it gives, hashed once per configuration rather than per query */
     private ?array $dependentsConfiguration = null;
 
@@ -48,16 +52,19 @@ final class Cache
         private readonly Encoder $encoder,
         ?ExpirationPolicy $expiration = null,
         ?EntrySizeLimit $entrySizeLimit = null,
+        ?Metrics $metrics = null,
     ) {
         $this->expiration = $expiration ?? ExpirationPolicy::fromConfig();
         $this->entrySizeLimit = $entrySizeLimit ?? EntrySizeLimit::fromConfig();
+        $this->metrics = $metrics ?? Metrics::fromConfig();
     }
 
     /**
      * @param  array<string>  $tags
      * @param  list<CascadeRead>  $cascadeReads  the tables of the read as foreign key cascades into them see it
+     * @param  string  $table  the table the metrics count the read under
      */
-    public function lookup(string $key, array $tags, array $cascadeReads): CacheHit|CacheMiss
+    public function lookup(string $key, array $tags, array $cascadeReads, string $table = ''): CacheHit|CacheMiss
     {
         $versionTags = self::canonicalTags($tags);
         $arguments = [
@@ -79,9 +86,10 @@ final class Cache
             }
         }
 
-        $reply = $this->redis->evaluate(LuaScripts::LOOKUP, [
+        $reply = $this->redis->evaluate($this->metrics->script(LuaScripts::LOOKUP), [
             ...$arguments,
             ...($this->legacyInvalidation() ? self::canonicalTags(Tagger::legacyDependencies($versionTags)) : []),
+            ...$this->metrics->scriptArguments($table),
         ]);
 
         if (! is_array($reply) || ! isset($reply[0], $reply[1])) {
@@ -96,7 +104,7 @@ final class Cache
             }
         }
 
-        return new CacheMiss(new Generation(RedisReply::string($reply[0], 'lookup generation')), $key, RedisReply::string($reply[1], 'lookup fingerprint'));
+        return new CacheMiss(new Generation(RedisReply::string($reply[0], 'lookup generation')), $key, RedisReply::string($reply[1], 'lookup fingerprint'), $table);
     }
 
     /**
@@ -126,16 +134,19 @@ final class Cache
         $payload = $this->encoder->encode($rows);
 
         if (! $this->entrySizeLimit->allows($payload)) {
+            $this->metrics->count(Metric::SkippedForSize, $miss->table);
+
             return;
         }
 
-        $this->redis->evaluate(LuaScripts::STORE, [
+        $this->redis->evaluate($this->metrics->script(LuaScripts::STORE), [
             $miss->generation->id,
             $miss->key,
             $miss->fingerprint,
             $this->expiration->nextTtl(),
             $payload,
             ...self::canonicalTags($tagsReadFromReplica),
+            ...$this->metrics->scriptArguments($miss->table),
         ]);
     }
 
@@ -177,7 +188,7 @@ final class Cache
             }
         }
 
-        $reply = $this->redis->evaluate(LuaScripts::INVALIDATE, $arguments, $cooldown);
+        $reply = $this->redis->evaluate($this->metrics->script(LuaScripts::INVALIDATE), [...$arguments, ...$this->metrics->scriptArguments()], $cooldown);
 
         if (! is_array($reply) || ! isset($reply[0])) {
             throw new UnexpectedValueException('Malformed Lada Cache invalidation reply');
@@ -261,25 +272,33 @@ final class Cache
      */
     public function flush(): int
     {
-        $this->retireCurrentGeneration();
+        $this->retireCurrentGeneration(RetireReason::Flush);
 
         return $this->pruneRetiredGenerations();
     }
 
-    public function retireCurrentGeneration(): void
+    public function retireCurrentGeneration(RetireReason $reason = RetireReason::Flush): void
     {
-        $this->redis->evaluate(LuaScripts::RETIRE, [self::freshToken()]);
+        $this->redis->evaluate($this->metrics->script(LuaScripts::RETIRE), $this->retireArguments($reason));
+    }
+
+    /**
+     * @return list<int|string>
+     */
+    private function retireArguments(RetireReason $reason): array
+    {
+        return [self::freshToken(), ...$this->metrics->scriptArguments($reason->value)];
     }
 
     /**
      * Retires the generation even while Redis is in a cooldown, retrying with backoff, because
      * a missed retire after a schema change lets hosts serve results of the previous schema.
      */
-    public function retireAfterSchemaChange(): void
+    public function retireAfterSchemaChange(RetireReason $reason = RetireReason::Schema): void
     {
         foreach (self::SCHEMA_CHANGE_RETRY_DELAYS_MICROSECONDS as $delay) {
             try {
-                $this->redis->evaluate(LuaScripts::RETIRE, [self::freshToken()], RedisCooldown::Ignore);
+                $this->redis->evaluate($this->metrics->script(LuaScripts::RETIRE), $this->retireArguments($reason), RedisCooldown::Ignore);
 
                 return;
             } catch (Throwable) {
@@ -287,7 +306,7 @@ final class Cache
             }
         }
 
-        $this->redis->evaluate(LuaScripts::RETIRE, [self::freshToken()], RedisCooldown::Ignore);
+        $this->redis->evaluate($this->metrics->script(LuaScripts::RETIRE), $this->retireArguments($reason), RedisCooldown::Ignore);
     }
 
     public function pruneRetiredGenerations(): int

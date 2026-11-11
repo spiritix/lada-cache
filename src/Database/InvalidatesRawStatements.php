@@ -69,6 +69,6 @@ trait InvalidatesRawStatements
         }
 
         $handler = Services::handler();
-        $handler->invalidateRawStatement($this, $effect);
+        $handler->invalidateRawStatement($this, $effect, $query);
     }
 }

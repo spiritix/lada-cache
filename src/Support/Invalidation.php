@@ -31,7 +31,7 @@ final readonly class Invalidation
         private ?array $coverage,
         private array $cascadeSources,
         private array $connections,
-        public bool $retiresEverything,
+        public ?RetireReason $retires,
         public int $replicaLagSeconds,
         private bool $collapsed = false,
         private array $keyedSources = [],
@@ -39,12 +39,15 @@ final readonly class Invalidation
 
     public static function none(): self
     {
-        return new self([], [], [], [], false, 0);
+        return new self([], [], [], [], null, 0);
     }
 
-    public static function everything(): self
+    /**
+     * Retires the whole cache, for the reason the metrics count it under.
+     */
+    public static function everything(RetireReason $reason = RetireReason::Fallback): self
     {
-        return new self([], [], [], [], true, 0);
+        return new self([], [], [], [], $reason, 0);
     }
 
     /**
@@ -52,7 +55,7 @@ final readonly class Invalidation
      */
     public static function of(array $tags, int $replicaLagSeconds = 0): self
     {
-        return new self(array_fill_keys($tags, true), $tags === [] ? [] : null, [], [], false, $replicaLagSeconds);
+        return new self(array_fill_keys($tags, true), $tags === [] ? [] : null, [], [], null, $replicaLagSeconds);
     }
 
     /**
@@ -61,7 +64,7 @@ final readonly class Invalidation
      */
     public static function ofWrite(array $tags, array $tableWideTags, int $replicaLagSeconds): self
     {
-        return (new self(array_fill_keys($tags, true), array_fill_keys($tableWideTags, true), [], [], false, $replicaLagSeconds))->bounded();
+        return (new self(array_fill_keys($tags, true), array_fill_keys($tableWideTags, true), [], [], null, $replicaLagSeconds))->bounded();
     }
 
     /**
@@ -85,7 +88,7 @@ final readonly class Invalidation
             }
         }
 
-        return $this->merge(new self([], [], [$database => $fields], [$database => $connection], false, 0, false, $keyed === [] ? [] : [$database => $keyed]));
+        return $this->merge(new self([], [], [$database => $fields], [$database => $connection], null, 0, false, $keyed === [] ? [] : [$database => $keyed]));
     }
 
     public function merge(self $other): self
@@ -117,7 +120,7 @@ final readonly class Invalidation
             $this->coverage === null || $other->coverage === null ? null : $this->coverage + $other->coverage,
             $cascadeSources,
             $this->connections + $other->connections,
-            $this->retiresEverything || $other->retiresEverything,
+            $this->retires ?? $other->retires,
             max($this->replicaLagSeconds, $other->replicaLagSeconds),
             $this->collapsed || $other->collapsed,
             array_filter($keyedSources),
@@ -126,7 +129,7 @@ final readonly class Invalidation
 
     public function isEmpty(): bool
     {
-        return ! $this->retiresEverything && $this->tags === [] && $this->cascadeSources === [] && $this->keyedSources === [];
+        return $this->retires === null && $this->tags === [] && $this->cascadeSources === [] && $this->keyedSources === [];
     }
 
     public function size(): int
@@ -190,7 +193,7 @@ final readonly class Invalidation
             [],
             array_intersect_key($this->cascadeSources, $selected),
             array_intersect_key($this->connections, $selected),
-            false,
+            null,
             $this->replicaLagSeconds,
             false,
             array_intersect_key($this->keyedSources, $selected),
@@ -212,6 +215,6 @@ final readonly class Invalidation
             return self::everything();
         }
 
-        return new self($this->coverage, $this->coverage, $this->cascadeSources, $this->connections, $this->retiresEverything, $this->replicaLagSeconds, true, $this->keyedSources);
+        return new self($this->coverage, $this->coverage, $this->cascadeSources, $this->connections, $this->retires, $this->replicaLagSeconds, true, $this->keyedSources);
     }
 }

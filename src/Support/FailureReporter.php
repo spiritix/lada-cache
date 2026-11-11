@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Support;
 
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Log;
 use Spiritix\LadaCache\CacheUnavailableException;
+use Spiritix\LadaCache\Services;
 use Throwable;
 
 final class FailureReporter
@@ -17,6 +19,10 @@ final class FailureReporter
     {
         if ($exception instanceof CacheUnavailableException && ! $operation->compromisesFreshness()) {
             return;
+        }
+
+        if (App::bound(Services::METRICS)) {
+            Services::metrics()->count(Metric::Failure, strtolower($operation->name));
         }
 
         $message = "[LadaCache] Failed {$operation->value}, {$operation->consequenceOfFailure()}: {$exception->getMessage()}";

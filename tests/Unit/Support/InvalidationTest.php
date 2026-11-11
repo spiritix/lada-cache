@@ -17,7 +17,7 @@ final class InvalidationTest extends TestCase
             $merged = $merged->merge(Invalidation::ofWrite(["cars:row:{$id}", 'cars:unspecific'], ['cars:specific', 'cars:unspecific'], 0));
         }
 
-        $this->assertFalse($merged->retiresEverything);
+        $this->assertNull($merged->retires);
         $this->assertSame(['cars:specific', 'cars:unspecific'], $merged->tags());
     }
 
@@ -40,7 +40,7 @@ final class InvalidationTest extends TestCase
             $merged = $merged->merge(Invalidation::ofWrite(["cars:row:{$id}"], ['cars:wide'], 0));
         }
 
-        $this->assertTrue($merged->retiresEverything);
+        $this->assertNotNull($merged->retires);
     }
 
     public function testFewTagsStayRowSpecific(): void

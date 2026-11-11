@@ -27,7 +27,7 @@ final class PendingInvalidationsTest extends TestCase
         $taken = $pending->take($purged);
         $this->assertSame(['a', 'b'], $taken->tags());
         $this->assertSame(['db' => ['a:cars', 'd:cars', 'gd:cars']], $taken->cascadeSources());
-        $this->assertTrue($taken->retiresEverything);
+        $this->assertNotNull($taken->retires);
         $this->assertTrue($pending->take($purged)->isEmpty());
     }
 }

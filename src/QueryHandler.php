@@ -12,6 +12,7 @@ use LogicException;
 use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Debug\CacheCollector;
 use Spiritix\LadaCache\Support\AssignedRows;
+use Spiritix\LadaCache\Support\BypassReason;
 use Spiritix\LadaCache\Support\CacheOperation;
 use Spiritix\LadaCache\Support\CascadeRead;
 use Spiritix\LadaCache\Support\ColumnKeys;
@@ -19,10 +20,14 @@ use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\FailedInvalidations;
 use Spiritix\LadaCache\Support\FailureReporter;
 use Spiritix\LadaCache\Support\Invalidation;
+use Spiritix\LadaCache\Support\Metric;
 use Spiritix\LadaCache\Support\PendingInvalidations;
 use Spiritix\LadaCache\Support\RawStatementEffect;
 use Spiritix\LadaCache\Support\RedisCooldown;
 use Spiritix\LadaCache\Support\ReplicaReads;
+use Spiritix\LadaCache\Support\RetireReason;
+use Spiritix\LadaCache\Support\StatementShape;
+use Spiritix\LadaCache\Support\TableName;
 use Spiritix\LadaCache\Support\Transactions;
 use Spiritix\LadaCache\Support\Write;
 use Throwable;
@@ -51,12 +56,16 @@ final class QueryHandler
 
     private readonly FailedInvalidations $failed;
 
+    private readonly Metrics $metrics;
+
     public function __construct(
         private readonly Cache $cache,
         ?FailedInvalidations $failed = null,
+        ?Metrics $metrics = null,
     ) {
         $this->pending = new PendingInvalidations;
         $this->failed = $failed ?? FailedInvalidations::processLocal();
+        $this->metrics = $metrics ?? new Metrics(false);
     }
 
     /**
@@ -95,10 +104,11 @@ final class QueryHandler
         $collector?->endMeasuring($deferred ? "Invalidation queued ({$statementType})" : "Invalidation ({$statementType})", [], $tags, $reflector->getSql(), $reflector->getParameters());
     }
 
-    public function invalidateRawStatement(Connection $connection, RawStatementEffect $effect): void
+    public function invalidateRawStatement(Connection $connection, RawStatementEffect $effect, string $sql): void
     {
         if ($effect->changesEverything) {
-            $this->schemaChanged($connection);
+            $this->metrics->count(Metric::StatementChangingEverything, StatementShape::of($sql));
+            $this->schemaChanged($connection, RetireReason::Statement);
 
             return;
         }
@@ -130,12 +140,12 @@ final class QueryHandler
      * transactional schema change only becomes visible at commit, while other databases apply
      * schema changes immediately and cannot roll them back.
      */
-    public function schemaChanged(ConnectionInterface $connection): void
+    public function schemaChanged(ConnectionInterface $connection, RetireReason $reason = RetireReason::Schema): void
     {
-        $this->invalidateNow(Invalidation::everything());
+        $this->invalidateNow(Invalidation::everything($reason));
 
         if (self::inTransaction($connection)) {
-            $this->pending->add($connection, Invalidation::everything());
+            $this->pending->add($connection, Invalidation::everything($reason));
         }
     }
 
@@ -154,22 +164,34 @@ final class QueryHandler
         try {
             $reflector = new Reflector($builder);
             $sql = $reflector->getSql();
-            $cacheable = (new Manager($reflector))->shouldCache();
+            $bypass = (new Manager($reflector))->bypassReason();
+            $cacheable = $bypass === null;
             $tagger = new Tagger($reflector);
             $key = $cacheable ? (new Hasher($reflector))->getHash() : '';
             $tags = $cacheable ? $tagger->getTags() : [];
             $cascadeReads = $cacheable ? $tagger->cascadeReads() : [];
         } catch (Throwable $exception) {
             FailureReporter::report(CacheOperation::Analyze, $exception);
+            $sql = $builder->toSql();
+            $this->metrics->count(Metric::UnparsedRead, StatementShape::of($sql));
 
-            return $runQuery($builder->toSql());
-        }
-
-        if (! $cacheable || ! $this->replayFailedInvalidations()) {
             return $runQuery($sql);
         }
 
-        $lookup = $this->lookup($key, $tags, $cascadeReads);
+        $bypass ??= $this->replayFailedInvalidations() ? null : BypassReason::PendingInvalidations;
+
+        if ($bypass !== null) {
+            $this->metrics->count(Metric::Bypass, $bypass->value);
+
+            return $runQuery($sql);
+        }
+
+        $table = $this->metrics->isEnabled() ? TableName::tagged(TableName::unqualified($reflector->getTables()[0] ?? '')) : '';
+        $lookup = $this->lookup($key, $tags, $cascadeReads, $table);
+
+        if ($lookup === null) {
+            $this->metrics->count(Metric::Bypass, BypassReason::Unavailable->value);
+        }
 
         if ($lookup instanceof CacheHit) {
             $collector?->endMeasuring('Hit', [$key], $tags, $sql, $reflector->getParameters());
@@ -217,8 +239,10 @@ final class QueryHandler
             return;
         }
 
-        if ($this->pending->take($connection)->retiresEverything) {
-            $this->invalidateNow(Invalidation::everything());
+        $retires = $this->pending->take($connection)->retires;
+
+        if ($retires !== null) {
+            $this->invalidateNow(Invalidation::everything($retires));
         }
     }
 
@@ -226,10 +250,10 @@ final class QueryHandler
      * @param  array<string>  $tags
      * @param  list<CascadeRead>  $cascadeReads
      */
-    private function lookup(string $key, array $tags, array $cascadeReads): CacheHit|CacheMiss|null
+    private function lookup(string $key, array $tags, array $cascadeReads, string $table): CacheHit|CacheMiss|null
     {
         try {
-            return $this->cache->lookup($key, $tags, $cascadeReads);
+            return $this->cache->lookup($key, $tags, $cascadeReads, $table);
         } catch (Throwable $exception) {
             FailureReporter::report(CacheOperation::Read, $exception, ['key' => $key]);
 
@@ -280,7 +304,7 @@ final class QueryHandler
         } catch (Throwable $exception) {
             $this->failed->record($invalidation);
             FailureReporter::report(
-                $invalidation->retiresEverything ? CacheOperation::Retire : CacheOperation::Invalidate,
+                $invalidation->retires !== null ? CacheOperation::Retire : CacheOperation::Invalidate,
                 $exception,
                 ['tags' => $invalidation->tags()],
             );
@@ -318,8 +342,8 @@ final class QueryHandler
 
     private function apply(Invalidation $invalidation, RedisCooldown $cooldown): void
     {
-        if ($invalidation->retiresEverything) {
-            $this->cache->retireAfterSchemaChange();
+        if ($invalidation->retires !== null) {
+            $this->cache->retireAfterSchemaChange($invalidation->retires);
 
             return;
         }

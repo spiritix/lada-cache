@@ -240,12 +240,27 @@ php artisan lada-cache:flush
 # Invalidate the cached reads of specific tables, after changes made outside Laravel
 php artisan lada-cache:invalidate users orders [--connection=mysql]
 
+# Report what the metrics counted (see Metrics)
+php artisan lada-cache:stats [--hours=24] [--table=users] [--json]
+
 # Temporarily disable cache
 php artisan lada-cache:disable
 
 # Re-enable cache
 php artisan lada-cache:enable
 ```
+
+## Metrics
+
+Set `LADA_CACHE_METRICS=true` to count what the cache does in production. `php artisan lada-cache:stats` then reports, per table, hits, misses, the hit rate, stores, stores per hit (above 1 means entries are invalidated before they are read, so caching that table costs more than it saves), results too large to store, the invalidations the table's writes caused and how many tables their cascades reached on average. In total it reports retires by reason, reads that bypassed the cache by reason, failures by operation, reads that ran uncached because their SQL could not be analysed and statements that retired the whole cache, both grouped by statement shape. `--json` prints the same for scraping into a monitoring system.
+
+Counting is built to cost as little as possible:
+
+- With metrics off, nothing changes: the Redis scripts take the arguments they always took and count nothing.
+- Hits, misses, stores, invalidations and retires are counted by the Redis script that performs them, as one `HINCRBY` inside the call Lada Cache makes anyway. No read or write takes an extra round trip.
+- What only PHP sees (bypasses, failures, statement shapes) is counted in memory and written in one call when a request or job ends, and at most every 10 seconds by a long-lived worker such as Octane or FrankenPHP. A worker that stops loses the counts of its last seconds.
+
+Counters are kept in one Redis hash per time bucket (`LADA_CACHE_METRICS_BUCKET`, 3600 seconds by default) that expires after `LADA_CACHE_METRICS_RETENTION` (8 days by default). They live outside the cache generation, so flushes and migrations keep them. A read or write is counted under its first table.
 
 ## Known Issues and Limitations
 

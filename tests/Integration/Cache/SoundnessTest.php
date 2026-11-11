@@ -170,7 +170,7 @@ final class SoundnessTest extends TestCase
             $replayed = $invalidation;
         });
 
-        $this->assertTrue($replayed->retiresEverything);
+        $this->assertNotNull($replayed->retires);
         $this->assertSame([], $replayed->tags());
     }
 
@@ -187,7 +187,7 @@ final class SoundnessTest extends TestCase
         FailedInvalidations::detect('lada-cache:test-bounded:', 60)->replay(function (Invalidation $invalidation) use (&$replayed): void {
             $replayed = $invalidation;
         });
-        $this->assertTrue($replayed->retiresEverything);
+        $this->assertNotNull($replayed->retires);
     }
 
     public function testUnreadableSharedInvalidationsRetireTheCache(): void
@@ -202,7 +202,7 @@ final class SoundnessTest extends TestCase
             $replayed = $invalidation;
         });
 
-        $this->assertTrue($replayed->retiresEverything);
+        $this->assertNotNull($replayed->retires);
     }
 
     public function testFailingReplayKeepsInvalidationsPendingAndBypassesTheCache(): void

@@ -110,7 +110,7 @@ final class FailedInvalidations
         apcu_add($this->counterKey(), 0);
         $pending = (int) apcu_inc($this->counterKey());
 
-        $kept = $invalidation->retiresEverything || $pending > self::MAX_PENDING
+        $kept = $invalidation->retires !== null || $pending > self::MAX_PENDING
             ? apcu_store($this->everythingKey(), true, $this->ttlSeconds)
             : apcu_store($this->itemPrefix().bin2hex(random_bytes(8)), serialize($invalidation), $this->ttlSeconds)
                 || apcu_store($this->everythingKey(), true, $this->ttlSeconds);
@@ -122,7 +122,7 @@ final class FailedInvalidations
 
     private static function bounded(Invalidation $invalidation): Invalidation
     {
-        return $invalidation->retiresEverything || $invalidation->size() > self::MAX_PENDING ? Invalidation::everything() : $invalidation;
+        return $invalidation->retires !== null || $invalidation->size() > self::MAX_PENDING ? Invalidation::everything($invalidation->retires ?? RetireReason::Fallback) : $invalidation;
     }
 
     private function sharedCount(): int

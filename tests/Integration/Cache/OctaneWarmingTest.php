@@ -17,6 +17,6 @@ final class OctaneWarmingTest extends TestCase
 
     public function testLadaServicesOutliveRequestsUnderOctane(): void
     {
-        $this->assertSame(['view', 'lada.redis', 'lada.cache', 'lada.handler'], config('octane.warm'));
+        $this->assertSame(['view', 'lada.redis', 'lada.metrics', 'lada.cache', 'lada.handler'], config('octane.warm'));
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use Illuminate\Support\Facades\Config;
+use Spiritix\LadaCache\Support\BypassReason;
 use Spiritix\LadaCache\Support\ConfigValue;
 use Spiritix\LadaCache\Support\NonDeterministicSql;
 
@@ -38,19 +39,23 @@ final readonly class Manager
 
     public function shouldCache(): bool
     {
-        if ($this->reflector->inTransaction() || $this->reflector->isPretending()) {
-            return false;
-        }
+        return $this->bypassReason() === null;
+    }
 
-        if ($this->scope === CacheScope::Models && ! $this->reflector->isModelQuery()) {
-            return false;
-        }
-
-        if (! $this->cacheActive || ! $this->tablesCacheable()) {
-            return false;
-        }
-
-        return ! NonDeterministicSql::isNonDeterministic($this->reflector->getSql(), $this->reflector->getDialect());
+    /**
+     * Why the read must not go through the cache, null when it may.
+     */
+    public function bypassReason(): ?BypassReason
+    {
+        return match (true) {
+            $this->reflector->inTransaction() => BypassReason::Transaction,
+            $this->reflector->isPretending() => BypassReason::Pretending,
+            $this->scope === CacheScope::Models && ! $this->reflector->isModelQuery() => BypassReason::Scope,
+            ! $this->cacheActive => BypassReason::Inactive,
+            ! $this->tablesCacheable() => BypassReason::ExcludedTable,
+            NonDeterministicSql::isNonDeterministic($this->reflector->getSql(), $this->reflector->getDialect()) => BypassReason::NonDeterministic,
+            default => null,
+        };
     }
 
     /**

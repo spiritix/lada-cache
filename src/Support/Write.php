@@ -166,9 +166,15 @@ final readonly class Write
      */
     public const string ANY_TABLE_FIELD = '';
 
+    /**
+     * What precedes the table in the field every write to it looks up, by which the
+     * invalidation script tells which tables an invalidation was written to.
+     */
+    public const string EVERY_WRITE_PREFIX = 'a:';
+
     public static function everyWriteField(string $table): string
     {
-        return 'a:'.TableName::tagged($table);
+        return self::EVERY_WRITE_PREFIX.TableName::tagged($table);
     }
 
     public static function deleteField(string $table): string
