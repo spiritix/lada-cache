@@ -32,6 +32,18 @@ jobs:
           --health-interval 2s
           --health-timeout 5s
           --health-retries 60
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: test
+          MARIADB_ROOT_PASSWORD: secret
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 60
       postgres:
         image: postgres:17-alpine
         env:
@@ -64,6 +76,10 @@ jobs:
             suite: Unit
           - php: '8.3'
             database: sqlite
+            redis-client: phpredis
+            suite: Integration
+          - php: '8.4'
+            database: mariadb
             redis-client: phpredis
             suite: Integration
 

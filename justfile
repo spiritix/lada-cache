@@ -5,6 +5,7 @@ phpunit := "vendor/bin/phpunit --no-coverage --do-not-cache-result"
 # Host ports of the database services. They are not the container ports, so that a database
 # already running on the machine does not clash with them; see docker-compose.yml.
 mysql_port := "13306"
+mariadb_port := "13307"
 pgsql_port := "15432"
 redis_port := "16379"
 
@@ -14,7 +15,7 @@ run_db := "DB_HOST=127.0.0.1 REDIS_HOST=127.0.0.1 REDIS_PORT=" + redis_port
 # Print the exports a shell needs to run PHPUnit by hand.
 env:
     @echo 'export DB_HOST=127.0.0.1 REDIS_PORT={{redis_port}}'
-    @echo 'export DB_PORT={{mysql_port}} DB_CONNECTION=mysql   # or DB_PORT={{pgsql_port}} DB_CONNECTION=pgsql'
+    @echo 'export DB_PORT={{mysql_port}} DB_CONNECTION=mysql   # or DB_PORT={{mariadb_port}} DB_CONNECTION=mariadb, DB_PORT={{pgsql_port}} DB_CONNECTION=pgsql'
 
 # Run the whole suite on SQLite with phpredis, the default target.
 default: test
@@ -23,7 +24,7 @@ default: test
 deps:
     {{composer}} install --no-interaction --prefer-dist --no-progress
 
-# Start Redis, MySQL and PostgreSQL and wait until they accept connections.
+# Start Redis, MySQL, MariaDB and PostgreSQL and wait until they accept connections.
 services:
     docker compose up -d --wait
 
@@ -39,6 +40,10 @@ test *args: deps services
 test-mysql *args: deps services
     just _suite mysql '' {{args}}
 
+# Run the suite on MariaDB.
+test-mariadb *args: deps services
+    just _suite mariadb '' {{args}}
+
 # Run the suite on PostgreSQL.
 test-pgsql *args: deps services
     just _suite pgsql '' {{args}}
@@ -48,7 +53,7 @@ test-matrix *args: deps services
     #!/usr/bin/env bash
     set -euo pipefail
     for client in phpredis predis; do
-        for driver in sqlite mysql pgsql; do
+        for driver in sqlite mysql mariadb pgsql; do
             echo "== $driver / $client"
             REDIS_CLIENT="$client" just _suite "$driver" '' {{args}}
         done
@@ -108,6 +113,7 @@ _suite driver testsuite *args:
     set -euo pipefail
     case "{{driver}}" in
         mysql) port={{mysql_port}} ;;
+        mariadb) port={{mariadb_port}} ;;
         pgsql) port={{pgsql_port}} ;;
         *) port= # SQLite ignores it
     esac

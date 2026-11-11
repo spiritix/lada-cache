@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Support;
 
 use Illuminate\Database\Connection;
+use Illuminate\Database\MySqlConnection;
 use InvalidArgumentException;
 use RuntimeException;
 use Spiritix\LadaCache\Support\Sql\DeleteStatement;
@@ -214,15 +215,25 @@ final class DependentTables
     }
 
     /**
+     * SQLite and MariaDB, which has no `information_schema.view_table_usage`, list no tables of a
+     * view, so they are read from its definition.
+     *
      * @return list<array{string, string}> pairs of base table and the view reading it
      */
     private static function viewDependencies(Connection $connection): array
     {
-        if ($connection->getDriverName() === 'sqlite') {
+        $definitions = match (true) {
+            $connection->getDriverName() === 'sqlite' => "select name as view_name, sql as definition from sqlite_master where type = 'view'",
+            $connection instanceof MySqlConnection && $connection->isMaria() => 'select table_name as view_name, view_definition as definition from information_schema.views where table_schema = database()',
+            default => null,
+        };
+
+        if ($definitions !== null) {
+            $dialect = Dialects::of($connection);
             $pairs = [];
-            foreach (self::rows($connection, "select name, sql from sqlite_master where type = 'view'") as $view) {
-                foreach (SqlTableScanner::tables(self::text($view, 'sql'), '', Dialects::forDriver('sqlite')) as $table) {
-                    $pairs[] = [TableName::unqualified($table), self::text($view, 'name')];
+            foreach (self::rows($connection, $definitions) as $view) {
+                foreach (SqlTableScanner::tables(self::text($view, 'definition'), '', $dialect) as $table) {
+                    $pairs[] = [TableName::unqualified($table), self::text($view, 'view_name')];
                 }
             }
 

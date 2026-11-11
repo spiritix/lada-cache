@@ -438,7 +438,7 @@ final class DependentTablesTest extends TestCase
 
     public function testMySqlTriggersWithEscapedQuotesAreReadAsCreated(): void
     {
-        $this->requireDatabaseDriver('mysql');
+        $this->requireDatabaseDriver('mysql', 'mariadb');
         DB::unprepared("create trigger drivers_record_rename after update on drivers for each row insert into materials (name) values (concat('it''s ', 'a \\'quoted\\' name'))");
         $this->loadDependencyMap();
         DB::table('drivers')->insert(['id' => 1, 'name' => 'alice']);
@@ -459,7 +459,7 @@ final class DependentTablesTest extends TestCase
 
     public function testMySqlTriggersAreReadInTheSqlModeTheyWereCreatedIn(): void
     {
-        $this->requireDatabaseDriver('mysql');
+        $this->requireDatabaseDriver('mysql', 'mariadb');
         $sqlMode = DB::scalar('select @@session.sql_mode');
         DB::statement("set session sql_mode = 'ANSI_QUOTES,NO_BACKSLASH_ESCAPES'");
         DB::unprepared('create trigger drivers_record_rename after update on "drivers" for each row insert into "materials" (name) values (\'ends in a backslash \\\')');

@@ -96,6 +96,21 @@ class TestCase extends BaseTestCase
                 'strict' => true,
                 'engine' => null,
             ]);
+        } elseif ($driver === 'mariadb') {
+            $app['config']->set('database.default', 'mariadb_testing');
+            $app['config']->set('database.connections.mariadb_testing', [
+                'driver' => 'mariadb',
+                'host' => env('DB_HOST', 'mariadb'),
+                'port' => env('DB_PORT', '3307'),
+                'database' => env('DB_DATABASE', 'test'),
+                'username' => env('DB_USERNAME', 'root'),
+                'password' => env('DB_PASSWORD', 'secret'),
+                'charset' => 'utf8mb4',
+                'collation' => 'utf8mb4_unicode_ci',
+                'prefix' => '',
+                'strict' => true,
+                'engine' => null,
+            ]);
         } elseif ($driver === 'pgsql') {
             $app['config']->set('database.default', 'pgsql_testing');
             $app['config']->set('database.connections.pgsql_testing', [
