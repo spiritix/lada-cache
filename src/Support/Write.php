@@ -20,7 +20,7 @@ final readonly class Write
     /**
      * @param  list<string>  $columns  the assigned columns of a `WriteKind::ColumnUpdate`, empty otherwise
      * @param  bool  $changesRows  false when the database reported no affected rows, which fire no foreign key
-     * @param  array{table: string, column: string, keys: non-empty-list<string>}|null  $deletedKeys  the primary key values a delete is pinned to
+     * @param  array{table: string, column: string, keys: ColumnKeys}|null  $deletedKeys  the primary key values a delete is pinned to
      */
     private function __construct(
         private WriteKind $kind,
@@ -91,10 +91,8 @@ final readonly class Write
      * Narrows a delete to the rows of the table with these primary key values, so foreign keys
      * referencing that key change only the child rows referencing them. Other writes, and
      * deletes affecting no rows, are returned unchanged.
-     *
-     * @param  non-empty-list<string>  $keys  see `RowKeys::columnValues()`
      */
-    public function deletingKeys(string $table, string $column, array $keys): self
+    public function deletingKeys(string $table, string $column, ColumnKeys $keys): self
     {
         if ($this->kind !== WriteKind::Delete || ! $this->changesRows) {
             return $this;
@@ -107,7 +105,7 @@ final readonly class Write
      * The row-precise fields of the table, each with the field used instead when the dependency
      * map has none and the keys it is narrowed to.
      *
-     * @return list<array{field: string, fallback: string, keys: non-empty-list<string>}>
+     * @return list<array{field: string, fallback: string, keys: ColumnKeys}>
      */
     public function keyedDependentsFields(string $table): array
     {
@@ -180,7 +178,8 @@ final readonly class Write
 
     /**
      * A delete of rows by the referenced column's values: row-precise foreign key edges as
-     * `<child>\t<column>` lines, and everything else the delete changes as table lines.
+     * `<child>\t<column>\t<ColumnType>` lines, and everything else the delete changes as table
+     * lines.
      */
     public static function keyedDeleteField(string $table, string $column): string
     {
@@ -188,7 +187,8 @@ final readonly class Write
     }
 
     /**
-     * The columns of a table that row-precise foreign key cascades come through.
+     * The columns of a table that row-precise foreign key cascades come through, as
+     * `<column>\t<ColumnType>` lines.
      */
     public static function cascadeColumnsField(string $table): string
     {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache;
 
+use Spiritix\LadaCache\Support\ColumnType;
 use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\Write;
 
@@ -56,9 +57,27 @@ final class LuaScripts
     /**
      * Defines the names `DependentTables` and `Write` give the parts of a dependency map the
      * scripts read: the table standing for every table, and the field every stored map has,
-     * which lists that table when the schema could not be read.
+     * which lists that table when the schema could not be read. Also defines
+     * readColumnKeys(index), which reads `ColumnKeys::arguments()` starting at the index and
+     * returns, per `ColumnType` the values are keyed for, the first and last index of its keys,
+     * and the index after them.
      */
-    private const string DEPENDENTS_NAMES = "local everyTable = '".DependentTables::EVERY_TABLE."'\nlocal anyTableField = '".Write::ANY_TABLE_FIELD."'\n";
+    private const string DEPENDENTS_NAMES = "local everyTable = '".DependentTables::EVERY_TABLE."'\nlocal anyTableField = '".Write::ANY_TABLE_FIELD."'\n"
+        ."local columnTypes = {'".ColumnType::Integer->value."', '".ColumnType::Text->value."'}\n".<<<'LUA'
+        local function readColumnKeys(index)
+            local keys = {}
+            for _, columnType in ipairs(columnTypes) do
+                local count = tonumber(ARGV[index])
+                index = index + 1
+                if count >= 0 then
+                    keys[columnType] = {index, index + count - 1}
+                    index = index + count
+                end
+            end
+            return keys, index
+        end
+
+        LUA;
 
     /**
      * Defines the names of the tags foreign key cascades into a table replace, given the table's
@@ -82,14 +101,15 @@ final class LuaScripts
     /**
      * ARGV: base, entry hash, fresh token, ttl seconds, Lada prefix, tag count, tags...,
      *       cascade read count, then per table read: dependents name, cascade tag prefix, cascade
-     *       columns field, pinned column count, then per column: column, key count, keys...,
+     *       columns field, pinned column count, then per column: column, `ColumnKeys::arguments()`,
      *       then legacy tags...
      * Returns {generation, fingerprint} on a miss and {generation, fingerprint, payload} on a hit.
      *
      * A table read also takes the tokens of the cascade tags that row-precise foreign key cascades
      * into it replace (see `CASCADE_TAGS`): for each column the dependency map lists in the table's
      * cascade columns field (`Write::cascadeColumnsField()`),
-     * the value tags of the keys the read pins it to, or its `via` tag when it pins none; without a
+     * the value tags of the keys the read pins it to, keyed for the column's type, or its `via` tag
+     * when it pins none or values that type cannot key; without a
      * readable dependency map, the `any` tag. A table no row-precise cascade reaches takes none.
      * The tokens of all tags are read with one MGET, in the order the tags are named.
      *
@@ -136,9 +156,7 @@ final class LuaScripts
             local pins = {}
             for _ = 1, pinCount do
                 local column = ARGV[index]
-                local keyCount = tonumber(ARGV[index + 1])
-                pins[column] = {unpack(ARGV, index + 2, index + 1 + keyCount)}
-                index = index + 2 + keyCount
+                pins[column], index = readColumnKeys(index + 1)
             end
             local map = redis.call('HMGET', dependentsKey, anyTableField, columnsField)
             if not map[1] or map[1] == everyTable then
@@ -146,11 +164,12 @@ final class LuaScripts
             else
                 local columns = map[2]
                 if columns then
-                    for column in string.gmatch(columns, '[^\n]+') do
-                        local keys = pins[column]
+                    for line in string.gmatch(columns, '[^\n]+') do
+                        local column, columnType = string.match(line, '^(.-)\t(.+)$')
+                        local keys = pins[column] and pins[column][columnType]
                         if keys then
-                            for _, key in ipairs(keys) do
-                                takeToken(cascadeValue(prefix, column, key))
+                            for k = keys[1], keys[2] do
+                                takeToken(cascadeValue(prefix, column, ARGV[k]))
                             end
                         else
                             takeToken(cascadeVia(prefix, column))
@@ -224,10 +243,11 @@ final class LuaScripts
     /**
      * ARGV: base, fresh token, ttl seconds, replica lag seconds, 1 with legacy invalidation else 0, Lada prefix, tag count, tags...,
      *       group count, then per group: dependents name, prefix count, prefixes..., field count, dependents fields (see `Write`)...,
-     *       cascade tag prefix, keyed field count, then per keyed field: field, fallback field, key count, keys...
+     *       cascade tag prefix, keyed field count, then per keyed field: field, fallback field, `ColumnKeys::arguments()`
      * A keyed field lists, besides tables changed table-wide, row-precise foreign key edges as
-     * `<child>\t<column>`: for those only the cascade tags of the child naming the keys are
-     * replaced (see `CASCADE_TAGS`). Without the keyed field, its fallback is used table-wide.
+     * `<child>\t<column>\t<ColumnType>`: for those only the cascade tags of the child naming the
+     * keys are replaced (see `CASCADE_TAGS`), or the child table-wide when the values cannot be
+     * keyed for the column's type. Without the keyed field, its fallback is used table-wide.
      * Replaces the tokens of the tags, and of every table-wide tag of the tables the database
      * changes along with each group's tables. A group changing `DependentTables::EVERY_TABLE`,
      * through one of its fields or because the schema could not be read, changes tables no tag
@@ -326,22 +346,25 @@ final class LuaScripts
             local keyedCount = tonumber(ARGV[index + 1])
             index = index + 2
             for _ = 1, keyedCount do
-                local field, fallback, keyCount = ARGV[index], ARGV[index + 1], tonumber(ARGV[index + 2])
-                local keysStart = index + 3
-                index = keysStart + keyCount
+                local field, fallback = ARGV[index], ARGV[index + 1]
+                local keysByType
+                keysByType, index = readColumnKeys(index + 2)
                 if known then
                     local dependents = redis.call('HGET', dependentsKey, field) or redis.call('HGET', dependentsKey, fallback)
                     if dependents then
                         for line in string.gmatch(dependents, '[^\n]+') do
-                            local child, column = string.match(line, '^(.-)\t(.+)$')
-                            if child then
+                            local child, column, columnType = string.match(line, '^(.-)\t(.-)\t(.+)$')
+                            local keys = keysByType[columnType]
+                            if child and not keys then
+                                changed[child] = true
+                            elseif child then
                                 for p = 1, prefixCount do
                                     purgeLegacy(prefixes[p] .. child)
                                 end
                                 local prefix = cascadePrefix .. child .. ':'
                                 replace(cascadeAny(prefix))
                                 replace(cascadeVia(prefix, column))
-                                for k = keysStart, keysStart + keyCount - 1 do
+                                for k = keys[1], keys[2] do
                                     replace(cascadeValue(prefix, column, ARGV[k]))
                                 end
                             else

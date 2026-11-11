@@ -38,7 +38,7 @@ use UnexpectedValueException;
  * inheriting from it, its partitions included: a write to it is the same write to them, and a
  * change to one of them is read through it (`read`) without being a write to it.
  *
- * @phpstan-type ForeignKey array{child: string, parentColumns: list<string>, childColumns: list<string>, onDelete: ReferentialAction, onUpdate: ReferentialAction}
+ * @phpstan-type ForeignKey array{child: string, parentColumns: list<string>, childColumns: list<string>, keyType: ColumnType|null, onDelete: ReferentialAction, onUpdate: ReferentialAction}
  * @phpstan-type Change array{0: 'any'|'insert'|'delete'|'truncate'|'read', 1: string}|array{0: 'update', 1: string, 2: string}
  * @phpstan-type Trigger array{events: list<TriggerEvent>, columns: list<string>|null, changes: list<Change>}
  * @phpstan-type Graph array{everyWrite: array<string, array<string, true>>, foreignKeys: array<string, list<ForeignKey>>, triggers: array<string, list<Trigger>>, parents: array<string, list<string>>}
@@ -50,7 +50,7 @@ final class DependentTables
      * Part of the name of the dependency map in Redis, so hosts reading another field layout
      * keep their own map.
      */
-    public const int LAYOUT = 6;
+    public const int LAYOUT = 7;
 
     /**
      * Listed among the tables a write changes when they cannot be told, which no table tag
@@ -191,12 +191,14 @@ final class DependentTables
                 throw new RuntimeException("Lada Cache cannot tell which column of {$parent} the foreign key of {$child} on {$childColumn} references");
             }
 
+            $childType = ColumnType::of(self::optionalText($row, 'child_type'));
             $id = $child."\0".self::text($row, 'constraint_id');
             $constraints[$id] ??= [
                 'parent' => $parent,
                 'child' => $child,
                 'parentColumns' => [],
                 'childColumns' => [],
+                'keyType' => $childType === ColumnType::of(self::optionalText($row, 'parent_type')) ? $childType : null,
                 'onDelete' => ReferentialAction::parse(self::text($row, 'delete_rule')),
                 'onUpdate' => ReferentialAction::parse(self::text($row, 'update_rule')),
             ];
@@ -236,31 +238,50 @@ final class DependentTables
     }
 
     /**
-     * One row per referencing column, with an id shared by the columns of one constraint.
+     * @param  array<mixed>  $row
+     */
+    private static function optionalText(array $row, string $column): string
+    {
+        return ($row[$column] ?? null) === null ? '' : self::text($row, $column);
+    }
+
+    /**
+     * One row per referencing column, with an id shared by the columns of one constraint and the
+     * declared types of both columns.
      */
     private static function foreignKeyQuery(Connection $connection): string
     {
         return match ($connection->getDriverName()) {
             'mysql', 'mariadb' => 'select r.constraint_name as constraint_id, k.table_name as child_table, k.referenced_table_name as parent_table,'
-                .' k.column_name as child_column, k.referenced_column_name as parent_column, r.delete_rule as delete_rule, r.update_rule as update_rule'
+                .' k.column_name as child_column, k.referenced_column_name as parent_column, r.delete_rule as delete_rule, r.update_rule as update_rule,'
+                .' child_column.data_type as child_type, parent_column.data_type as parent_type'
                 .' from information_schema.referential_constraints r join information_schema.key_column_usage k'
                 .' on k.constraint_schema = r.constraint_schema and k.constraint_name = r.constraint_name and k.table_name = r.table_name'
+                .' left join information_schema.columns child_column'
+                .' on child_column.table_schema = k.table_schema and child_column.table_name = k.table_name and child_column.column_name = k.column_name'
+                .' left join information_schema.columns parent_column on parent_column.table_schema = k.referenced_table_schema'
+                .' and parent_column.table_name = k.referenced_table_name and parent_column.column_name = k.referenced_column_name'
                 .' where r.constraint_schema = database() order by k.ordinal_position',
             'pgsql' => 'select c.oid as constraint_id, child.relname as child_table, parent.relname as parent_table,'
-                .' child_column.attname as child_column, parent_column.attname as parent_column, c.confdeltype as delete_rule, c.confupdtype as update_rule'
+                .' child_column.attname as child_column, parent_column.attname as parent_column, c.confdeltype as delete_rule, c.confupdtype as update_rule,'
+                .' child_type.typname as child_type, parent_type.typname as parent_type'
                 .' from pg_constraint c join pg_class child on child.oid = c.conrelid join pg_class parent on parent.oid = c.confrelid'
                 .' join pg_namespace n on n.oid = child.relnamespace'
                 .' cross join lateral unnest(c.conkey, c.confkey) with ordinality as k(child_attnum, parent_attnum, position)'
                 .' join pg_attribute child_column on child_column.attrelid = c.conrelid and child_column.attnum = k.child_attnum'
                 .' join pg_attribute parent_column on parent_column.attrelid = c.confrelid and parent_column.attnum = k.parent_attnum'
+                .' join pg_type child_type on child_type.oid = child_column.atttypid join pg_type parent_type on parent_type.oid = parent_column.atttypid'
                 ." where c.contype = 'f' and n.nspname = any(current_schemas(false)) order by k.position",
             'sqlite' => 'select p.id as constraint_id, m.name as child_table, p."table" as parent_table, p."from" as child_column,'
                 .' coalesce(p."to", (select t.name from pragma_table_info(p."table") t where t.pk = p.seq + 1)) as parent_column,'
-                .' p.on_delete as delete_rule, p.on_update as update_rule'
+                .' p.on_delete as delete_rule, p.on_update as update_rule,'
+                .' (select t.type from pragma_table_info(m.name) t where t.name = p."from") as child_type,'
+                .' (select t.type from pragma_table_info(p."table") t where t.name = p."to" or (p."to" is null and t.pk = p.seq + 1)) as parent_type'
                 ." from sqlite_master m join pragma_foreign_key_list(m.name) p where m.type = 'table' order by p.seq",
             'sqlsrv' => 'select fk.object_id as constraint_id, object_name(fk.parent_object_id) as child_table, object_name(fk.referenced_object_id) as parent_table,'
                 .' child_column.name as child_column, parent_column.name as parent_column,'
-                .' fk.delete_referential_action_desc as delete_rule, fk.update_referential_action_desc as update_rule'
+                .' fk.delete_referential_action_desc as delete_rule, fk.update_referential_action_desc as update_rule,'
+                .' type_name(child_column.system_type_id) as child_type, type_name(parent_column.system_type_id) as parent_type'
                 .' from sys.foreign_keys fk join sys.foreign_key_columns fkc on fkc.constraint_object_id = fk.object_id'
                 .' join sys.columns child_column on child_column.object_id = fkc.parent_object_id and child_column.column_id = fkc.parent_column_id'
                 .' join sys.columns parent_column on parent_column.object_id = fkc.referenced_object_id and parent_column.column_id = fkc.referenced_column_id'
@@ -598,11 +619,11 @@ final class DependentTables
 
                 foreach ($precise as $foreignKey) {
                     array_push($beyond, ...self::expand(self::preciseChildChange($foreignKey), $graph));
-                    $cascadeColumns[$foreignKey['child']][$foreignKey['childColumns'][0]] = true;
+                    $cascadeColumns[$foreignKey['child']][$foreignKey['childColumns'][0]."\t".$foreignKey['keyType']?->value] = true;
                 }
 
                 $lines = [
-                    ...array_map(static fn (array $foreignKey): string => $foreignKey['child']."\t".$foreignKey['childColumns'][0], $precise),
+                    ...array_map(static fn (array $foreignKey): string => $foreignKey['child']."\t".$foreignKey['childColumns'][0]."\t".$foreignKey['keyType']?->value, $precise),
                     ...self::reachableFrom($beyond, $graph),
                 ];
                 sort($lines, SORT_STRING);
@@ -623,8 +644,9 @@ final class DependentTables
 
     /**
      * The foreign keys referencing each single column of the table whose deletes change only the
-     * child rows referencing the deleted values: single-column keys that cascade or set NULL. A
-     * SET DEFAULT key moves its rows to the default value, which reads may pin, so it is not.
+     * child rows referencing the deleted values: single-column keys that cascade or set NULL,
+     * between columns of one `ColumnType`, which says how their values are keyed. A SET DEFAULT
+     * key moves its rows to the default value, which reads may pin, so it is not.
      *
      * @param  list<ForeignKey>  $foreignKeys
      * @return array<string, non-empty-list<ForeignKey>>
@@ -634,7 +656,7 @@ final class DependentTables
         $edges = [];
 
         foreach ($foreignKeys as $foreignKey) {
-            if (count($foreignKey['parentColumns']) === 1 && count($foreignKey['childColumns']) === 1
+            if (count($foreignKey['parentColumns']) === 1 && count($foreignKey['childColumns']) === 1 && $foreignKey['keyType'] !== null
                 && in_array($foreignKey['onDelete'], [ReferentialAction::Cascades, ReferentialAction::SetsNull], true)) {
                 $edges[$foreignKey['parentColumns'][0]][] = $foreignKey;
             }

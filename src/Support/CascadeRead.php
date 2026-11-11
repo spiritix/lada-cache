@@ -13,7 +13,7 @@ final readonly class CascadeRead
 {
     /**
      * @param  string  $tagPrefix  the prefix of the table's cascade tags, see `Tagger::cascadeTagPrefix()`
-     * @param  array<string, list<string>>  $pins  lowercase column => keys of the values it is pinned to, see `RowKeys::columnValues()`
+     * @param  array<string, ColumnKeys>  $pins  lowercase column => keys of the values it is pinned to
      */
     public function __construct(
         public string $database,

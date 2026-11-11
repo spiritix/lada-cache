@@ -69,7 +69,7 @@ final class Cache
             array_push($arguments, $this->dependentsName($read->database), $read->tagPrefix, Write::cascadeColumnsField($read->table), count($read->pins));
 
             foreach ($read->pins as $column => $keys) {
-                array_push($arguments, $column, count($keys), ...$keys);
+                array_push($arguments, $column, ...$keys->arguments());
             }
         }
 
@@ -149,7 +149,7 @@ final class Cache
             array_push($arguments, Tagger::cascadeTagPrefix($database), count($keyed));
 
             foreach ($keyed as $source) {
-                array_push($arguments, $source['field'], $source['fallback'], count($source['keys']), ...$source['keys']);
+                array_push($arguments, $source['field'], $source['fallback'], ...$source['keys']->arguments());
             }
         }
 

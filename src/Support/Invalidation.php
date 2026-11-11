@@ -24,7 +24,7 @@ final readonly class Invalidation
      * @param  array<string, true>|null  $coverage  table-wide tags invalidating everything $tags does; null when unknown
      * @param  array<string, array<string, true>>  $cascadeSources  database => `Write::dependentsFields()` of each written table
      * @param  array<string, string>  $connections  database => name of a connection to it
-     * @param  array<string, array<string, array{fallback: string, keys: array<int|string, true>}>>  $keyedSources  database => `Write::keyedDependentsFields()` by field
+     * @param  array<string, array<string, array{fallback: string, keys: ColumnKeys}>>  $keyedSources  database => `Write::keyedDependentsFields()` by field
      */
     private function __construct(
         private array $tags,
@@ -81,7 +81,7 @@ final readonly class Invalidation
             $fields += array_fill_keys($write->dependentsFields($table), true);
 
             foreach ($write->keyedDependentsFields($table) as $source) {
-                $keyed[$source['field']] = ['fallback' => $source['fallback'], 'keys' => array_fill_keys($source['keys'], true)];
+                $keyed[$source['field']] = ['fallback' => $source['fallback'], 'keys' => $source['keys']];
             }
         }
 
@@ -98,9 +98,10 @@ final readonly class Invalidation
         $keyedSources = $this->keyedSources;
         foreach ($other->keyedSources as $database => $sources) {
             foreach ($sources as $field => $source) {
-                $keys = ($keyedSources[$database][$field]['keys'] ?? []) + $source['keys'];
+                $known = $keyedSources[$database][$field]['keys'] ?? null;
+                $keys = $known === null ? $source['keys'] : $known->merge($source['keys']);
 
-                if (count($keys) > RowKeys::MAX_PER_TABLE) {
+                if ($keys->isEmpty()) {
                     unset($keyedSources[$database][$field]);
                     $cascadeSources[$database][$source['fallback']] = true;
 
@@ -161,7 +162,7 @@ final readonly class Invalidation
     }
 
     /**
-     * @return array<string, list<array{field: string, fallback: string, keys: list<string>}>> database => keyed fields, sorted
+     * @return array<string, list<array{field: string, fallback: string, keys: ColumnKeys}>> database => keyed fields, sorted
      */
     public function keyedSources(): array
     {
@@ -169,9 +170,7 @@ final readonly class Invalidation
         foreach ($this->keyedSources as $database => $fields) {
             ksort($fields, SORT_STRING);
             foreach ($fields as $field => $source) {
-                $keys = array_map('strval', array_keys($source['keys']));
-                sort($keys, SORT_STRING);
-                $sources[(string) $database][] = ['field' => (string) $field, 'fallback' => $source['fallback'], 'keys' => $keys];
+                $sources[(string) $database][] = ['field' => (string) $field, 'fallback' => $source['fallback'], 'keys' => $source['keys']];
             }
         }
         ksort($sources, SORT_STRING);

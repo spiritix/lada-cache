@@ -6,6 +6,7 @@ namespace Spiritix\LadaCache;
 
 use Spiritix\LadaCache\Support\AssignedRows;
 use Spiritix\LadaCache\Support\CascadeRead;
+use Spiritix\LadaCache\Support\ColumnKeys;
 use Spiritix\LadaCache\Support\RowKeys;
 
 /**
@@ -77,8 +78,8 @@ final readonly class Tagger
             $columns = [];
 
             foreach ($pins[$table] ?? [] as $column => $values) {
-                $keys = RowKeys::columnValues($values);
-                if ($keys !== null) {
+                $keys = ColumnKeys::of($values);
+                if (! $keys->isEmpty()) {
                     $columns[$column] = $keys;
                 }
             }
@@ -109,6 +110,7 @@ final readonly class Tagger
     private function locate(string $table): array
     {
         $segments = explode('.', $table);
+
         $name = (string) array_pop($segments);
 
         if ($segments === [] || ! $this->reflector->qualifiersNameDatabases()) {

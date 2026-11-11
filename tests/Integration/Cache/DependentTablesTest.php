@@ -5,15 +5,18 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Tests\Integration\Cache;
 
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Redis\Events\CommandExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Spiritix\LadaCache\Generation;
 use Spiritix\LadaCache\Redis;
 use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\Invalidation;
 use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
 use Spiritix\LadaCache\Tests\Concerns\RecordsRedisCommands;
+use Spiritix\LadaCache\Tests\Database\Models\License;
 use Spiritix\LadaCache\Tests\TestCase;
 
 final class DependentTablesTest extends TestCase
@@ -51,10 +54,10 @@ final class DependentTablesTest extends TestCase
         $this->assertContains('owners', $dependents['a:owner_names']);
         $this->assertArrayNotHasKey('d:owner_audits', $dependents);
         $this->assertArrayNotHasKey('u:owners:name', $dependents);
-        $this->assertSame(["owner_notes\towner_id", 'owner_pet_counts', 'pet_toys', "pets\towner_id"], $dependents['dk:owners:id']);
-        $this->assertSame(['owner_id'], $dependents['k:pets']);
-        $this->assertSame(['owner_id'], $dependents['k:owner_notes']);
-        $this->assertSame(['pet_id'], $dependents['k:pet_toys']);
+        $this->assertSame(["owner_notes\towner_id\tn", 'owner_pet_counts', 'pet_toys', "pets\towner_id\tn"], $dependents['dk:owners:id']);
+        $this->assertSame(["owner_id\tn"], $dependents['k:pets']);
+        $this->assertSame(["owner_id\tn"], $dependents['k:owner_notes']);
+        $this->assertSame(["pet_id\tn"], $dependents['k:pet_toys']);
         $this->assertArrayNotHasKey('k:owner_audits', $dependents);
     }
 
@@ -585,6 +588,87 @@ final class DependentTablesTest extends TestCase
 
         DB::table('places')->where('id', 1)->delete();
         $this->assertSame(0, DB::table('capitals')->count());
+    }
+
+    public function testADeleteKeyedByAStringAnIntegerColumnCastsRefreshesCachedChildReads(): void
+    {
+        $this->allowValuesTheDatabaseCasts();
+        $petsOfAlice = fn (): int => DB::table('pets')->where('owner_id', 1)->count();
+        $this->assertSame(1, $petsOfAlice());
+
+        DB::table('owners')->where('id', '1abc')->delete();
+
+        $this->assertSame($this->countInDatabase('select count(*) from pets where owner_id = 1'), $petsOfAlice());
+    }
+
+    public function testAReadPinnedToAStringAnIntegerColumnCastsIsRefreshedByCascades(): void
+    {
+        $this->allowValuesTheDatabaseCasts();
+        $pets = fn (): int => DB::table('pets')->where('owner_id', '1abc')->count();
+        $pets();
+
+        DB::table('owners')->where('id', 1)->delete();
+
+        $this->assertSame($this->countInDatabase("select count(*) from pets where owner_id = '1abc'"), $pets());
+    }
+
+    public function testTextKeysAreNotComparedAsNumbers(): void
+    {
+        $this->createLicenseSeats();
+        $this->assertSame(["license_code\ts"], DependentTables::load(DB::connection())['k:license_seats']);
+        $seatsOf = fn (string $code): int => DB::table('license_seats')->where('license_code', $code)->count();
+        $this->assertSame([1, 1, 1], [$seatsOf('05'), $seatsOf('5'), $seatsOf('abc')]);
+        [$fiveKey, $fiveTags] = $this->cacheKeyAndTags(DB::table('license_seats')->where('license_code', '5'));
+        DB::table('license_seats')->where('license_code', '5')->get();
+
+        License::query()->where('code', '05')->delete();
+
+        $this->assertSame(0, $seatsOf('05'));
+        $this->assertCacheHas($fiveKey, $fiveTags, 'A text key 05 is another row than 5');
+        $this->assertSame([1, 1], [$seatsOf('5'), $seatsOf('abc')]);
+    }
+
+    public function testADeleteOfATextKeyByANumberRefreshesCachedChildReads(): void
+    {
+        $this->allowValuesTheDatabaseCasts();
+        $this->createLicenseSeats();
+        $seatsOf = fn (string $code): int => DB::table('license_seats')->where('license_code', $code)->count();
+        $this->assertSame([1, 1], [$seatsOf('05'), $seatsOf('5')]);
+
+        License::query()->where('code', 5)->delete();
+
+        $this->assertSame($this->countInDatabase("select count(*) from license_seats where license_code = '05'"), $seatsOf('05'));
+        $this->assertSame($this->countInDatabase("select count(*) from license_seats where license_code = '5'"), $seatsOf('5'));
+    }
+
+    /**
+     * PostgreSQL rejects a value of another type instead of casting it, and MySQL does so for
+     * writes in strict mode.
+     */
+    private function allowValuesTheDatabaseCasts(): void
+    {
+        $this->requireDatabaseDriver('mysql', 'mariadb', 'sqlite');
+
+        if (self::databaseDriver() !== 'sqlite') {
+            DB::statement("set session sql_mode = ''");
+        }
+    }
+
+    private function countInDatabase(string $sql): int
+    {
+        return (int) DB::connection()->getPdo()->query($sql)->fetchColumn();
+    }
+
+    private function createLicenseSeats(): void
+    {
+        Schema::create('license_seats', static function (Blueprint $table): void {
+            $table->id();
+            $table->string('license_code');
+            $table->foreign('license_code')->references('code')->on('licenses')->cascadeOnDelete();
+        });
+        DB::table('licenses')->insert([['code' => '05', 'holder' => 'a'], ['code' => '5', 'holder' => 'b'], ['code' => 'abc', 'holder' => 'c']]);
+        DB::table('license_seats')->insert([['license_code' => '05'], ['license_code' => '5'], ['license_code' => 'abc']]);
+        $this->loadDependencyMap();
     }
 
     private function createPartitionedReadings(): void

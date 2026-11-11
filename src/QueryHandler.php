@@ -14,6 +14,7 @@ use Spiritix\LadaCache\Debug\CacheCollector;
 use Spiritix\LadaCache\Support\AssignedRows;
 use Spiritix\LadaCache\Support\CacheOperation;
 use Spiritix\LadaCache\Support\CascadeRead;
+use Spiritix\LadaCache\Support\ColumnKeys;
 use Spiritix\LadaCache\Support\DependentTables;
 use Spiritix\LadaCache\Support\FailedInvalidations;
 use Spiritix\LadaCache\Support\FailureReporter;
@@ -22,7 +23,6 @@ use Spiritix\LadaCache\Support\PendingInvalidations;
 use Spiritix\LadaCache\Support\RawStatementEffect;
 use Spiritix\LadaCache\Support\RedisCooldown;
 use Spiritix\LadaCache\Support\ReplicaReads;
-use Spiritix\LadaCache\Support\RowKeys;
 use Spiritix\LadaCache\Support\Write;
 use Throwable;
 
@@ -361,9 +361,9 @@ final class QueryHandler
 
         $table = $tables[0];
         $rows = $reflector->getRows()[$table] ?? null;
-        $keys = $rows === null ? null : RowKeys::columnValues($rows);
+        $keys = ColumnKeys::of($rows ?? []);
 
-        return $keys === null ? $write : $write->deletingKeys($table, $builder->primaryKeyOf($table), $keys);
+        return $keys->isEmpty() ? $write : $write->deletingKeys($table, $builder->primaryKeyOf($table), $keys);
     }
 
     private static function inTransaction(ConnectionInterface $connection): bool
