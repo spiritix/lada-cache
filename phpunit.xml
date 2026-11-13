@@ -6,7 +6,7 @@
          stopOnFailure="false"
          failOnWarning="true"
          failOnRisky="true"
-         failOnDeprecation="false"
+         failOnDeprecation="true"
          executionOrder="depends,defects"
          displayDetailsOnTestsThatTriggerDeprecations="true"
          displayDetailsOnTestsThatTriggerWarnings="true"
@@ -24,12 +24,6 @@
             <directory suffix=".php">src</directory>
         </include>
     </source>
-
-    <coverage>
-        <report>
-            <clover outputFile="coverage.xml"/>
-        </report>
-    </coverage>
 
     <php>
         <env name="APP_ENV" value="testing"/>
