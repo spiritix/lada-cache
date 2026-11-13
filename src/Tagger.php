@@ -49,7 +49,9 @@ final readonly class Tagger
         }
 
         if (! $this->considerRows) {
-            return $this->prefix($tables, $databaseTag);
+            // Without row tracking every query is table-wide, using the same tags as with it,
+            // so hosts with either setting sharing one Redis still invalidate each other.
+            return $this->prefix($this->getTableTags($tables, []), $databaseTag);
         }
 
         /** @var array<string, array<int, scalar>> $rows */
