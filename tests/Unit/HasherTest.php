@@ -4,13 +4,48 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Unit;
 
+use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
+use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Hasher;
 use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class HasherTest extends TestCase
 {
+    public function testConnectionsToTheSameServerShareHashes(): void
+    {
+        $this->assertSame($this->hashOnServer([]), $this->hashOnServer([]));
+    }
+
+    public function testEquallyNamedDatabasesOnDifferentServersDoNotShareHashes(): void
+    {
+        $default = $this->hashOnServer([]);
+
+        $this->assertNotSame($default, $this->hashOnServer(['host' => 'other-server.internal']));
+        $this->assertNotSame($default, $this->hashOnServer(['port' => 3307]));
+        $this->assertNotSame($default, $this->hashOnServer(['unix_socket' => '/run/other.sock']));
+    }
+
+    /**
+     * Hashes the same query on a lazily connected copy of the default connection.
+     *
+     * @param  array<string, mixed>  $config
+     */
+    private function hashOnServer(array $config): string
+    {
+        $base = DB::connection();
+        $connection = new Connection(
+            static fn () => $base->getPdo(),
+            $base->getDatabaseName(),
+            $base->getTablePrefix(),
+            [...$base->getConfig(), ...$config],
+        );
+        $builder = new QueryBuilder($connection, app('lada.handler'), $base->getQueryGrammar(), $base->getPostProcessor());
+
+        return (new Hasher(new Reflector($builder->from('cars')->where('id', 1))))->getHash();
+    }
+
     public function testHashIsDeterministicForSameQuery(): void
     {
         $builder = DB::table('cars')->where('id', 1);

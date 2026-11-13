@@ -54,8 +54,7 @@ class ConfigurationBehaviourTest extends TestCase
         // Without rows considered
         config(['lada-cache.consider_rows' => false]);
         $tagsWithoutRows = (new Tagger($reflector))->getTags();
-        $databaseTag = 'tags:database:' . $dbName; // e.g., 'tags:database::memory:'
-        $this->assertContains($databaseTag . 'cars', $tagsWithoutRows);
+        $this->assertSame(["tags:database:{$dbName}:table_unspecific:cars"], $tagsWithoutRows);
     }
 
     public function testPrefixAppliedToKeys(): void

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache;
 
+use Illuminate\Database\Connection;
 use RuntimeException;
 use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Support\RowExtractor;
@@ -48,6 +49,38 @@ final readonly class Reflector
         return $this->queryBuilder->getConnection()->getDatabaseName();
     }
 
+    /**
+     * Identifies the database server and database the query runs against, so that
+     * equally named databases on different servers never share cache entries.
+     */
+    public function getDatabaseServer(): string
+    {
+        $connection = $this->queryBuilder->getConnection();
+
+        if (! $connection instanceof Connection) {
+            return $connection->getDatabaseName();
+        }
+
+        return (string) json_encode([
+            $connection->getDriverName(),
+            $connection->getConfig('host'),
+            $connection->getConfig('port'),
+            $connection->getConfig('unix_socket'),
+            $connection->getDatabaseName(),
+        ]);
+    }
+
+    /**
+     * Whether a table qualifier such as `reports.sales` names a database rather than a schema.
+     */
+    public function qualifiersNameDatabases(): bool
+    {
+        $connection = $this->queryBuilder->getConnection();
+
+        return $connection instanceof Connection
+            && in_array($connection->getDriverName(), ['mysql', 'mariadb'], true);
+    }
+
     public function getTables(): array
     {
         return TableExtractor::extractTables($this->queryBuilder);
@@ -55,7 +88,42 @@ final readonly class Reflector
 
     public function getRows(): array
     {
+        // An update assigning a primary key moves rows to keys its where clause does not name.
+        if ($this->sqlOperation === self::QUERY_TYPE_UPDATE && $this->assignsPrimaryKey()) {
+            return [];
+        }
+
         return RowExtractor::extractRows($this->queryBuilder);
+    }
+
+    private function assignsPrimaryKey(): bool
+    {
+        $keys = array_unique([
+            QueryBuilder::DEFAULT_PRIMARY_KEY_NAME,
+            $this->queryBuilder->getModel()?->getKeyName() ?? QueryBuilder::DEFAULT_PRIMARY_KEY_NAME,
+        ]);
+
+        foreach (array_keys($this->values) as $column) {
+            $column = (string) $column;
+            foreach ($keys as $key) {
+                if ($column === $key || str_ends_with($column, '.'.$key)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether the primary key of the given table holds strings rather than integers.
+     * Only a model's own table is known to; every other table is assumed to use integer keys.
+     */
+    public function usesStringKeys(string $table): bool
+    {
+        $model = $this->queryBuilder->getModel();
+
+        return $model !== null && $model->getTable() === $table && $model->getKeyType() !== 'int';
     }
 
     public function getType(): string
