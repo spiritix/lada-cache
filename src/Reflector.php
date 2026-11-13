@@ -98,7 +98,10 @@ final readonly class Reflector
 
     private function assignsPrimaryKey(): bool
     {
-        $keys = array_unique([QueryBuilder::DEFAULT_PRIMARY_KEY_NAME, $this->queryBuilder->getPrimaryKeyName()]);
+        $keys = array_unique([
+            QueryBuilder::DEFAULT_PRIMARY_KEY_NAME,
+            $this->queryBuilder->getModel()?->getKeyName() ?? QueryBuilder::DEFAULT_PRIMARY_KEY_NAME,
+        ]);
 
         foreach (array_keys($this->values) as $column) {
             $column = (string) $column;

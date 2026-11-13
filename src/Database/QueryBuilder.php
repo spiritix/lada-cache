@@ -77,9 +77,16 @@ class QueryBuilder extends Builder
         return $this->model;
     }
 
-    public function getPrimaryKeyName(): string
+    /**
+     * The primary key column of a table the query names. Only the model's own table has a
+     * known key; every other table is assumed to use the conventional one, as any builder
+     * without a model does, so reads and writes of a table agree on its row tags.
+     */
+    public function primaryKeyOf(string $table): string
     {
-        return $this->model?->getKeyName() ?? self::DEFAULT_PRIMARY_KEY_NAME;
+        return $this->model !== null && $this->model->getTable() === $table
+            ? $this->model->getKeyName()
+            : self::DEFAULT_PRIMARY_KEY_NAME;
     }
 
     /** {@inheritDoc} */
@@ -237,7 +244,7 @@ class QueryBuilder extends Builder
     public function delete($id = null)
     {
         $count = parent::delete($id);
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_DELETE, [$this->getPrimaryKeyName() => $id]);
+        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_DELETE);
 
         return $count;
     }

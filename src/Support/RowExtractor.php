@@ -7,6 +7,7 @@ namespace Spiritix\LadaCache\Support;
 use Illuminate\Database\Query\Builder as BaseBuilder;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Query\JoinClause;
+use Spiritix\LadaCache\Database\QueryBuilder;
 
 /**
  * Utility to extract targeted primary-key rows per table from a Query Builder.
@@ -24,9 +25,6 @@ final class RowExtractor
         $rows = [];
 
         $aliasMap = self::resolveAliasMap($builder);
-        $pk = method_exists($builder, 'getPrimaryKeyName')
-            ? $builder->getPrimaryKeyName()
-            : 'id';
 
         foreach ($builder->wheres ?? [] as $where) {
             if (! isset($where['column'])) {
@@ -50,7 +48,7 @@ final class RowExtractor
             if ($table !== null && isset($aliasMap[$table])) {
                 $table = $aliasMap[$table];
             }
-            if ($table === null || $column !== $pk) {
+            if ($table === null || $column !== self::primaryKeyOf($builder, $table)) {
                 continue;
             }
 
@@ -72,20 +70,28 @@ final class RowExtractor
         return $rows;
     }
 
+    private static function primaryKeyOf(BaseBuilder $builder, string $table): string
+    {
+        return $builder instanceof QueryBuilder
+            ? $builder->primaryKeyOf($table)
+            : QueryBuilder::DEFAULT_PRIMARY_KEY_NAME;
+    }
+
     /**
+     * Splits `[schema.]table.column`, keeping any qualifier so rows are attributed to
+     * the same table name the TableExtractor reports.
+     *
      * @return array{0: ?string, 1: string}
      */
     private static function splitTableAndColumn(string $identifier): array
     {
-        if (! str_contains($identifier, '.')) {
+        $position = strrpos($identifier, '.');
+
+        if ($position === false) {
             return [null, $identifier];
         }
 
-        $parts = explode('.', $identifier);
-        $column = array_pop($parts);
-        $table = end($parts) ?: null;
-
-        return [$table, $column];
+        return [substr($identifier, 0, $position), substr($identifier, $position + 1)];
     }
 
     /**
