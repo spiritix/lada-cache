@@ -228,7 +228,8 @@ class QueryBuilder extends Builder
     {
         $result = parent::updateOrInsert($attributes, $values);
         // May perform insert or update; invalidate conservatively as UPDATE.
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_UPDATE, $values ?: $attributes);
+        // Callback values are resolved inside the parent, so fall back to the attributes.
+        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_UPDATE, is_array($values) && $values !== [] ? $values : $attributes);
 
         return $result;
     }
