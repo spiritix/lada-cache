@@ -169,7 +169,8 @@ php artisan lada-cache:invalidate users orders [--connection=mysql]
 # Temporarily disable cache
 php artisan lada-cache:disable
 
-# Re-enable cache
+# Re-enable cache; flushes results cached before it was disabled, since writes made
+# while disabled did not invalidate them
 php artisan lada-cache:enable
 ```
 

@@ -6,6 +6,9 @@
 - Added `lada-cache:invalidate <tables...>` to invalidate the cached entries of specific tables after changes made outside Laravel
 - `lada-cache:flush` reports how many keys it deleted and fails when Redis is unreachable instead of reporting success
 
+### Fixed
+- `lada-cache:enable` flushes results cached before Lada Cache was disabled, since writes made while disabled did not invalidate them
+
 ## [6.1.1] - 2026-05-22
 ### Fixed
 - Fixed cache key collision for deferred query mutations (see https://github.com/spiritix/lada-cache/pull/150)
