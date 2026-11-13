@@ -5,6 +5,7 @@
 - Added `withoutCache()` for per-query bypass of read caching and write invalidation (see https://github.com/spiritix/lada-cache/pull/151)
 ### Fixed
 - Cached results are decoded only to arrays of `stdClass` rows; a tampered Redis entry can no longer instantiate arbitrary classes
+- Queries calling time-, randomness- or session-dependent SQL functions such as `NOW()`, `CURRENT_TIMESTAMP` or `RAND()` are no longer cached and served stale
 
 ## [6.1.1] - 2026-05-22
 ### Fixed
