@@ -117,4 +117,11 @@ final readonly class Reflector
 
         return method_exists($connection, 'transactionLevel') && $connection->transactionLevel() > 0;
     }
+
+    public function isPretending(): bool
+    {
+        $connection = $this->queryBuilder->getConnection();
+
+        return method_exists($connection, 'pretending') && $connection->pretending();
+    }
 }

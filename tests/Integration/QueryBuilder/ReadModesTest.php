@@ -28,4 +28,15 @@ class ReadModesTest extends TestCase
 
         $this->assertEquals([(object) ['id' => 1, 'name' => 'first']], $rows->all());
     }
+
+    public function testReadsInsidePretendAreNotCached(): void
+    {
+        DB::table('cars')->insert(['id' => 1, 'name' => 'first', 'engine_id' => null, 'driver_id' => null]);
+
+        DB::pretend(function (): void {
+            $this->assertNull(DB::table('cars')->where('id', 1)->value('name'));
+        });
+
+        $this->assertSame('first', DB::table('cars')->where('id', 1)->value('name'));
+    }
 }
