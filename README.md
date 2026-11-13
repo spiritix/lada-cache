@@ -162,6 +162,10 @@ This is useful for freshness-critical reads, diagnostics, or ad-hoc cache bustin
 # Flush all cached entries
 php artisan lada-cache:flush
 
+# Invalidate the cached entries of specific tables after changes made outside Laravel
+# (imports, manual fixes), without flushing everything
+php artisan lada-cache:invalidate users orders [--connection=mysql]
+
 # Temporarily disable cache
 php artisan lada-cache:disable
 
@@ -175,6 +179,7 @@ php artisan lada-cache:enable
 - Third-party packages with custom query builders may bypass caching.
 - Complex SQL constructs such as `UNION`/`INTERSECT`/advanced expressions may not be fully reflected for row-level tagging; invalidation falls back to table-level tags.
 - Raw SQL executed directly via the connection (e.g., `DB::select()`, `DB::statement()`) is not cached by design.
+- Writes that bypass Lada's query builder (raw statements, other applications, database consoles) do not invalidate the cache; run `php artisan lada-cache:invalidate <tables>` (or `lada-cache:flush`) after such changes.
 - Row-level tagging relies on standard single-column primary keys. Composite or unconventional primary keys fall back to table-level invalidation.
 
 ## Contributing

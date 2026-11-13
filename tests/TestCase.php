@@ -4,9 +4,12 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Tests;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Redis\Connections\PredisConnection;
 use Orchestra\Testbench\TestCase as BaseTestCase;
 use Illuminate\Support\Facades\Redis;
+use Predis\Client;
 use Spiritix\LadaCache\LadaCacheServiceProvider;
+use Spiritix\LadaCache\Redis as LadaRedis;
 
 class TestCase extends BaseTestCase
 {
@@ -30,6 +33,19 @@ class TestCase extends BaseTestCase
         // Ensure a clean cache for every test: flush configured Redis connection
         $connection = (string) config('lada-cache.redis_connection', 'cache');
         Redis::connection($connection)->flushdb();
+    }
+
+    /**
+     * Point Lada's services at a Redis server that refuses connections.
+     */
+    protected function useUnreachableRedis(): void
+    {
+        $connection = new PredisConnection(new Client(['host' => '127.0.0.1', 'port' => 1, 'timeout' => 0.2]));
+        $this->app->instance('lada.redis', new LadaRedis($connection));
+
+        foreach (['lada.cache', 'lada.invalidator', 'lada.handler'] as $binding) {
+            $this->app->forgetInstance($binding);
+        }
     }
 
     protected function getPackageProviders($app): array

@@ -14,6 +14,7 @@ use Illuminate\Support\ServiceProvider;
 use Spiritix\LadaCache\Console\DisableCommand;
 use Spiritix\LadaCache\Console\EnableCommand;
 use Spiritix\LadaCache\Console\FlushCommand;
+use Spiritix\LadaCache\Console\InvalidateCommand;
 use Spiritix\LadaCache\Database\MySqlConnection as LadaMySqlConnection;
 use Spiritix\LadaCache\Database\MariaDbConnection as LadaMariaDbConnection;
 use Spiritix\LadaCache\Database\PostgresConnection as LadaPostgresConnection;
@@ -221,11 +222,13 @@ final class LadaCacheServiceProvider extends ServiceProvider
         $this->app->singleton('command.lada-cache.flush', static fn () => new FlushCommand);
         $this->app->singleton('command.lada-cache.enable', static fn () => new EnableCommand);
         $this->app->singleton('command.lada-cache.disable', static fn () => new DisableCommand);
+        $this->app->singleton('command.lada-cache.invalidate', static fn () => new InvalidateCommand);
 
         $this->commands([
             'command.lada-cache.flush',
             'command.lada-cache.enable',
             'command.lada-cache.disable',
+            'command.lada-cache.invalidate',
         ]);
     }
 
