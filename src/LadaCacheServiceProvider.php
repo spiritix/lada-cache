@@ -7,8 +7,6 @@ namespace Spiritix\LadaCache;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Events\MigrationsEnded;
-use Illuminate\Database\Events\TransactionCommitted;
-use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 use Spiritix\LadaCache\Console\DisableCommand;
@@ -61,18 +59,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
             $this->registerDebugbarCollector();
         }
 
-        // Register transaction event listeners to coordinate transaction-aware invalidations.
         $events = $this->app['events'];
-        $events->listen(TransactionCommitted::class, function (TransactionCommitted $event): void {
-            /** @var QueryHandler $handler */
-            $handler = $this->app->make('lada.handler');
-            $handler->flushQueuedInvalidationsForConnection($event->connection);
-        });
-        $events->listen(TransactionRolledBack::class, function (TransactionRolledBack $event): void {
-            /** @var QueryHandler $handler */
-            $handler = $this->app->make('lada.handler');
-            $handler->clearQueuedInvalidationsForConnection($event->connection);
-        });
 
         // Auto-flush cache after migrations complete to prevent stale schema-related cache.
         $events->listen(MigrationsEnded::class, function (): void {
