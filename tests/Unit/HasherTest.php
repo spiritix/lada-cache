@@ -11,6 +11,29 @@ use Spiritix\LadaCache\Tests\TestCase;
 
 class HasherTest extends TestCase
 {
+    public function testConnectionsToTheSameDatabaseShareEntries(): void
+    {
+        $default = (string) config('database.default');
+        config(['database.connections.same_server' => config("database.connections.{$default}")]);
+
+        $here = (new Hasher(new Reflector(DB::table('cars')->where('id', 1))))->getHash();
+        $there = (new Hasher(new Reflector(DB::connection('same_server')->table('cars')->where('id', 1))))->getHash();
+
+        $this->assertSame($here, $there);
+    }
+
+    public function testEquallyNamedDatabasesOnDifferentServersNeverShareEntries(): void
+    {
+        $default = (string) config('database.default');
+        config(['database.connections.other_server' => [...config("database.connections.{$default}"), 'host' => 'other-server.internal']]);
+
+        $here = (new Hasher(new Reflector(DB::table('cars')->where('id', 1))))->getHash();
+        $there = (new Hasher(new Reflector(DB::connection('other_server')->table('cars')->where('id', 1))))->getHash();
+
+        $this->assertSame(DB::connection()->getDatabaseName(), DB::connection('other_server')->getDatabaseName());
+        $this->assertNotSame($here, $there);
+    }
+
     public function testHashIsDeterministicForSameQuery(): void
     {
         $builder = DB::table('cars')->where('id', 1);
@@ -45,4 +68,3 @@ class HasherTest extends TestCase
         $this->assertNotSame($h1, $h2);
     }
 }
-

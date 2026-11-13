@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Tests\Unit\Support;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Tests\TestCase;
 use Spiritix\LadaCache\Support\TableExtractor;
+use Spiritix\LadaCache\Tests\TestCase;
 
 class TableExtractorTest extends TestCase
 {
@@ -32,6 +32,17 @@ class TableExtractorTest extends TestCase
 
         $this->assertContains('materials', $tables);
         $this->assertContains('cars', $tables);
+    }
+
+    public function testExtractTablesFromFromSubWithAliasThatIsNotATable(): void
+    {
+        $sub = DB::table('cars')->join('drivers', 'drivers.id', '=', 'cars.driver_id')->select('cars.id');
+        $b = DB::query()->fromSub(DB::query()->fromSub($sub, 'inner_cars'), 'outer_cars');
+
+        $tables = TableExtractor::extractTables($b);
+
+        $this->assertContains('cars', $tables);
+        $this->assertContains('drivers', $tables);
     }
 
     public function testExtractTablesFromExistsSubquery(): void

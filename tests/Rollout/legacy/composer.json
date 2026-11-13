@@ -1,0 +1,9 @@
+{
+    "name": "spiritix/lada-cache-rollout-legacy",
+    "description": "The last release before this version, installed beside it so the Rollout suite can run hosts of both at once during a rolling deploy",
+    "require": {
+        "orchestra/testbench": "^11.0",
+        "predis/predis": "^2.2",
+        "spiritix/lada-cache": "6.1.1"
+    }
+}

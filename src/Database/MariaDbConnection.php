@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Database;
 
 use Illuminate\Database\MySqlConnection as BaseMySqlConnection;
-use Spiritix\LadaCache\QueryHandler as LadaQueryHandler;
+use Spiritix\LadaCache\Services;
 
 /**
  * Lada Cache-aware MariaDB connection.
@@ -13,8 +13,10 @@ use Spiritix\LadaCache\QueryHandler as LadaQueryHandler;
  * MariaDB is compatible with Laravel's MySQL driver, so we extend
  * Illuminate's MySqlConnection while providing Lada's query builder.
  */
-final class MariaDbConnection extends BaseMySqlConnection
+final class MariaDbConnection extends BaseMySqlConnection implements RunsBuilderStatements
 {
+    use InvalidatesRawStatements;
+
     /** {@inheritDoc} */
     public function query()
     {
@@ -22,8 +24,7 @@ final class MariaDbConnection extends BaseMySqlConnection
             return parent::query();
         }
 
-        /** @var LadaQueryHandler $handler */
-        $handler = app('lada.handler');
+        $handler = Services::handler();
 
         return new QueryBuilder(
             $this,

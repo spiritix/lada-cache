@@ -5,10 +5,31 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use Closure;
+use Illuminate\Database\Connection;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\DB;
+use LogicException;
 use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Debug\CacheCollector;
+use Spiritix\LadaCache\Support\AssignedRows;
+use Spiritix\LadaCache\Support\BypassReason;
+use Spiritix\LadaCache\Support\CacheOperation;
+use Spiritix\LadaCache\Support\CascadeRead;
+use Spiritix\LadaCache\Support\ColumnKeys;
+use Spiritix\LadaCache\Support\DependentTables;
+use Spiritix\LadaCache\Support\FailedInvalidations;
+use Spiritix\LadaCache\Support\FailureReporter;
+use Spiritix\LadaCache\Support\Invalidation;
+use Spiritix\LadaCache\Support\Metric;
+use Spiritix\LadaCache\Support\PendingInvalidations;
+use Spiritix\LadaCache\Support\RawStatementEffect;
+use Spiritix\LadaCache\Support\RedisCooldown;
+use Spiritix\LadaCache\Support\ReplicaReads;
+use Spiritix\LadaCache\Support\RetireReason;
+use Spiritix\LadaCache\Support\StatementShape;
+use Spiritix\LadaCache\Support\TableName;
+use Spiritix\LadaCache\Support\Transactions;
+use Spiritix\LadaCache\Support\Write;
 use Throwable;
 
 /**
@@ -17,218 +38,383 @@ use Throwable;
  * Responsibilities:
  * - Decide whether a query should be cached using `Manager`.
  * - Compute cache keys with `Hasher` and tags with `Tagger`.
- * - Store/fetch cached results via `Cache` and invalidate via `Invalidator`.
+ * - Look up, store and invalidate results via `Cache`.
+ * - Defer invalidations of writes inside a transaction until the outermost commit.
+ * - Extend invalidations to tables the database changes through foreign key actions.
+ * - Keep invalidations Redis rejected and replay them before the cache is used again.
  * - Integrate with the debug collector when available.
+ *
+ * Reads inside a transaction bypass the cache (see `Manager`), because a transaction may see
+ * its own uncommitted writes or an older snapshot.
+ *
+ * Every cache failure is reported and degrades to plain database access: a query runs
+ * exactly once and its own exceptions propagate unchanged.
  */
 final class QueryHandler
 {
-    private ?QueryBuilder $builder = null;
+    private readonly PendingInvalidations $pending;
 
-    private ?CacheCollector $collector = null;
+    private readonly FailedInvalidations $failed;
 
-    /** @var string[] */
-    private array $subQueryTags = [];
-
-    /** @var array<string, array<int, string>> */
-    private array $queuedInvalidations = [];
+    private readonly Metrics $metrics;
 
     public function __construct(
         private readonly Cache $cache,
-        private readonly Invalidator $invalidator,
-    ) {}
-
-    public function setBuilder(QueryBuilder $builder): self
-    {
-        $this->builder = $builder;
-
-        return $this;
-    }
-
-    public function collectSubQueryTags(): void
-    {
-        if ($this->builder === null) {
-            return;
-        }
-
-        try {
-            $reflector = new Reflector($this->builder);
-            $manager = new Manager($reflector);
-
-            if (! $manager->shouldCache()) {
-                return;
-            }
-
-            $tagger = new Tagger($reflector);
-            $this->subQueryTags = array_values(array_unique([
-                ...$this->subQueryTags,
-                ...$tagger->getTags(),
-            ]));
-        } catch (Throwable) {
-            // On any reflection/type error, skip collecting subquery tags.
-            return;
-        }
+        ?FailedInvalidations $failed = null,
+        ?Metrics $metrics = null,
+    ) {
+        $this->pending = new PendingInvalidations;
+        $this->failed = $failed ?? FailedInvalidations::processLocal();
+        $this->metrics = $metrics ?? new Metrics(false);
     }
 
     /**
      * @param  string  $statementType  One of Reflector::QUERY_TYPE_*
-     * @param  array<string, mixed>  $values  Values used by the grammar to compile the SQL (e.g., update sets)
+     * @param  Write  $write  What the statement did to the rows, deciding what the database changed along with them
+     * @param  array<int|string, mixed>  $values  Values used by the grammar to compile the SQL (e.g., update sets)
      */
-    public function invalidateQuery(string $statementType, array $values = []): void
+    public function invalidateQuery(QueryBuilder $builder, string $statementType, Write $write, array $values = [], AssignedRows $assignedRows = new AssignedRows): void
     {
-        $this->startCollector();
+        $collector = $this->startCollector();
+        $connection = $builder->getConnection();
 
-        if ($this->builder === null) {
+        try {
+            $reflector = new Reflector($builder, $statementType, $values);
+
+            if (! (new Manager($reflector))->shouldInvalidate()) {
+                return;
+            }
+
+            $tagger = new Tagger($reflector, $assignedRows);
+            $tags = $tagger->getTags();
+            $invalidation = Invalidation::ofWrite($tags, $tagger->tableWideTags(), ReplicaReads::lagSeconds($connection))->withChangesOf(
+                $reflector->getDatabase(),
+                $connection->getName() ?? throw new LogicException('Lada Cache invalidates writes on named connections only'),
+                self::narrowedToDeletedKeys($write, $builder, $reflector),
+                $reflector->getTables(),
+            );
+        } catch (Throwable $exception) {
+            FailureReporter::report(CacheOperation::Invalidate, $exception, ['statement' => $statementType]);
+            $this->invalidate($connection, Invalidation::everything());
+
             return;
         }
 
-        try {
-            $reflector = new Reflector($this->builder, $statementType, $values);
-            $manager = new Manager($reflector);
+        $deferred = $this->invalidate($connection, $invalidation);
+        $collector?->endMeasuring($deferred ? "Invalidation queued ({$statementType})" : "Invalidation ({$statementType})", [], $tags, $reflector->getSql(), $reflector->getParameters());
+    }
 
-            if (! $manager->shouldInvalidate()) {
+    public function invalidateRawStatement(Connection $connection, RawStatementEffect $effect, string $sql): void
+    {
+        if ($effect->changesEverything) {
+            $this->metrics->count(Metric::StatementChangingEverything, StatementShape::of($sql));
+            $this->schemaChanged($connection, RetireReason::Statement);
+
+            return;
+        }
+
+        $this->invalidateTables($connection, $effect->tables, $effect->write);
+    }
+
+    /**
+     * Invalidates every cached read of the tables, and of the tables the database changes along
+     * with them, as the write to each table would.
+     *
+     * @param  list<string>  $tables
+     */
+    public function invalidateTables(Connection $connection, array $tables, Write $write): void
+    {
+        foreach ($tables as $table) {
+            $builder = $connection->query()->from($table);
+
+            if (! $builder instanceof QueryBuilder) {
                 return;
             }
 
-            $tagger = new Tagger($reflector);
-            $tags = $tagger->getTags();
-
-            // If in a transaction, queue invalidation until commit; otherwise, execute immediately.
-            $connection = $this->builder->getConnection();
-            if (method_exists($connection, 'transactionLevel') && $connection->transactionLevel() > 0) {
-                $this->queueInvalidationForConnection($connection, $tags);
-
-                if (method_exists($connection, 'afterCommit')) {
-                    $connection->afterCommit(function () use ($connection): void {
-                        $this->flushQueuedInvalidationsForConnection($connection);
-                    });
-                }
-
-                // We can't know hashes before flushing; record action only.
-                $this->stopCollector($reflector, $tags, [], "Invalidation queued ({$statementType})");
-
-                return;
-            }
-
-            $hashes = $this->invalidator->invalidate($tags);
-            $this->stopCollector($reflector, $tags, $hashes, "Invalidation ({$statementType})");
-        } catch (Throwable) {
-            // On any reflection/type/tagging error during invalidation, skip invalidation silently.
-            try {
-                $reflector = new Reflector($this->builder, $statementType, $values);
-                $this->stopCollector($reflector, [], [], 'Invalidation skipped (error)');
-            } catch (Throwable) {
-                // ignore
-            }
+            $this->invalidateQuery($builder, Reflector::QUERY_TYPE_TRUNCATE, $write);
         }
     }
 
     /**
-     * @param  Closure(): array<mixed>  $queryClosure
+     * Retires the generation now and again when the transaction ends, committed or not: a
+     * transactional schema change only becomes visible at commit, while other databases apply
+     * schema changes immediately and cannot roll them back.
+     */
+    public function schemaChanged(ConnectionInterface $connection, RetireReason $reason = RetireReason::Schema): void
+    {
+        $this->invalidateNow(Invalidation::everything($reason));
+
+        if (self::inTransaction($connection)) {
+            $this->pending->add($connection, Invalidation::everything($reason));
+        }
+    }
+
+    /**
+     * Runs the builder's select through the cache. The query closure receives the compiled SQL,
+     * so it is compiled once for both the cache key and the database.
+     *
+     * @param  Closure(string): array<mixed>  $runQuery
      * @return array<mixed>
      */
-    public function cacheQuery(Closure $queryClosure): array
+    public function cacheQuery(QueryBuilder $builder, Closure $runQuery): array
     {
-        $this->startCollector();
-
-        $subQueryTags = $this->subQueryTags;
-        $this->subQueryTags = [];
-
-        if ($this->builder === null) {
-            return $queryClosure();
-        }
+        $collector = $this->startCollector();
+        $this->settleEndedTransaction($builder->getConnection());
 
         try {
-            $reflector = new Reflector($this->builder);
-            $manager = new Manager($reflector);
-
-            if (! $manager->shouldCache()) {
-                return $queryClosure();
-            }
-
-            $hasher = new Hasher($reflector);
+            $reflector = new Reflector($builder);
+            $sql = $reflector->getSql();
+            $bypass = (new Manager($reflector))->bypassReason();
+            $cacheable = $bypass === null;
             $tagger = new Tagger($reflector);
+            $key = $cacheable ? (new Hasher($reflector))->getHash() : '';
+            $tags = $cacheable ? $tagger->getTags() : [];
+            $cascadeReads = $cacheable ? $tagger->cascadeReads() : [];
+        } catch (Throwable $exception) {
+            FailureReporter::report(CacheOperation::Analyze, $exception);
+            $sql = $builder->toSql();
+            $this->metrics->count(Metric::UnparsedRead, StatementShape::of($sql));
 
-            $key = $hasher->getHash();
-            $tags = array_values(array_unique([...$tagger->getTags(), ...$subQueryTags]));
+            return $runQuery($sql);
+        }
 
-            $cached = $this->cache->has($key) ? $this->cache->get($key) : null;
-            $action = $cached === null ? 'Miss' : 'Hit';
+        $bypass ??= $this->replayFailedInvalidations() ? null : BypassReason::PendingInvalidations;
 
-            if ($cached === null) {
-                $cached = $queryClosure();
-                $this->cache->set($key, $tags, $cached);
-            } else {
-                // Self-heal tag membership inconsistencies by idempotently adding the key to each tag set.
-                $this->cache->repairTagMembership($key, $tags);
-            }
+        if ($bypass !== null) {
+            $this->metrics->count(Metric::Bypass, $bypass->value);
 
-            $this->stopCollector($reflector, $tags, $key, $action);
+            return $runQuery($sql);
+        }
 
-            return $cached;
-        } catch (Throwable) {
-            // On any reflection/type/tagging error, do not cache; run the query directly.
-            $result = $queryClosure();
-            // Best effort to stop collector with bypass info.
-            try {
-                $reflector = new Reflector($this->builder);
-                $this->stopCollector($reflector, [], '', 'Bypass (error)');
-            } catch (Throwable) {
-                // ignore
-            }
+        $table = $this->metrics->isEnabled() ? TableName::tagged(TableName::unqualified($reflector->getTables()[0] ?? '')) : '';
+        $lookup = $this->lookup($key, $tags, $cascadeReads, $table);
 
-            return $result;
+        if ($lookup === null) {
+            $this->metrics->count(Metric::Bypass, BypassReason::Unavailable->value);
+        }
+
+        if ($lookup instanceof CacheHit) {
+            $collector?->endMeasuring('Hit', [$key], $tags, $sql, $reflector->getParameters());
+
+            return $lookup->rows;
+        }
+
+        $rows = $runQuery($sql);
+
+        if ($lookup instanceof CacheMiss) {
+            $readFromReplica = ReplicaReads::readsFromReplica($builder->getConnection(), $builder->useWritePdo);
+            $this->store($lookup, $rows, $readFromReplica ? $tags : []);
+        }
+
+        $collector?->endMeasuring($lookup instanceof CacheMiss ? 'Miss' : 'Bypass', [$key], $tags, $sql, $reflector->getParameters());
+
+        return $rows;
+    }
+
+    /**
+     * Applies the invalidations held for a transaction Laravel reported no end of, once the
+     * connection is seen outside it: one ended with a raw `COMMIT` or `ROLLBACK`, or on the
+     * PDO object. Whether it committed is not known, and invalidating after a rollback only
+     * costs a miss.
+     */
+    public function settleEndedTransaction(ConnectionInterface $connection): void
+    {
+        if ($this->pending->has($connection) && ! self::inTransaction($connection)) {
+            $this->invalidateNow($this->pending->take($connection));
         }
     }
 
-    public function queueInvalidationForConnection(ConnectionInterface $connection, array $tags): void
+    public function transactionCommitted(ConnectionInterface $connection): void
     {
-        $name = (string) ($connection->getName() ?? 'default');
-        $existing = $this->queuedInvalidations[$name] ?? [];
-        $this->queuedInvalidations[$name] = array_values(array_unique([...$existing, ...$tags]));
-    }
-
-    public function flushQueuedInvalidationsForConnection(ConnectionInterface $connection): void
-    {
-        $name = (string) ($connection->getName() ?? 'default');
-        $tags = $this->queuedInvalidations[$name] ?? [];
-        if ($tags !== []) {
-            $this->invalidator->invalidate($tags);
+        if (self::inTransaction($connection)) {
+            return;
         }
-        unset($this->queuedInvalidations[$name]);
+
+        $this->invalidateNow($this->pending->take($connection));
     }
 
-    public function clearQueuedInvalidationsForConnection(ConnectionInterface $connection): void
+    public function transactionRolledBack(ConnectionInterface $connection): void
     {
-        $name = (string) ($connection->getName() ?? 'default');
-        unset($this->queuedInvalidations[$name]);
-    }
+        if (self::inTransaction($connection)) {
+            return;
+        }
 
-    private function startCollector(): void
-    {
-        try {
-            $this->collector = App::make('lada.collector');
-            $this->collector->startMeasuring();
-        } catch (Throwable) {
-            $this->collector = null;
+        $retires = $this->pending->take($connection)->retires;
+
+        if ($retires !== null) {
+            $this->invalidateNow(Invalidation::everything($retires));
         }
     }
 
     /**
      * @param  array<string>  $tags
-     * @param  array<string>|string  $hashes
+     * @param  list<CascadeRead>  $cascadeReads
      */
-    private function stopCollector(Reflector $reflector, array $tags, string|array $hashes, string $action): void
+    private function lookup(string $key, array $tags, array $cascadeReads, string $table): CacheHit|CacheMiss|null
     {
-        if ($this->collector === null) {
+        try {
+            return $this->cache->lookup($key, $tags, $cascadeReads, $table);
+        } catch (Throwable $exception) {
+            FailureReporter::report(CacheOperation::Read, $exception, ['key' => $key]);
+
+            return null;
+        }
+    }
+
+    /**
+     * @param  array<mixed>  $rows
+     * @param  array<string>  $tagsReadFromReplica
+     */
+    private function store(CacheMiss $miss, array $rows, array $tagsReadFromReplica): void
+    {
+        try {
+            $this->cache->store($miss, $rows, $tagsReadFromReplica);
+        } catch (Throwable $exception) {
+            FailureReporter::report(CacheOperation::Store, $exception, ['key' => $miss->key]);
+        }
+    }
+
+    /**
+     * Invalidates now, or at the outermost commit when the connection is inside a transaction.
+     *
+     * @return bool Whether the invalidation was deferred
+     */
+    private function invalidate(ConnectionInterface $connection, Invalidation $invalidation): bool
+    {
+        if (! self::inTransaction($connection)) {
+            $this->invalidateNow($invalidation);
+
+            return false;
+        }
+
+        $this->pending->add($connection, $invalidation);
+
+        return true;
+    }
+
+    private function invalidateNow(Invalidation $invalidation): void
+    {
+        if ($invalidation->isEmpty()) {
             return;
         }
 
-        $this->collector->endMeasuring(
-            $action,
-            (array) $hashes,
-            $tags,
-            $reflector->getSql(),
-            $reflector->getParameters()
-        );
+        try {
+            $this->replayPendingInvalidations(RedisCooldown::Respect);
+            $this->apply($invalidation, RedisCooldown::Respect);
+        } catch (Throwable $exception) {
+            $this->failed->record($invalidation);
+            FailureReporter::report(
+                $invalidation->retires !== null ? CacheOperation::Retire : CacheOperation::Invalidate,
+                $exception,
+                ['tags' => $invalidation->tags()],
+            );
+        }
+    }
+
+    /**
+     * Applies invalidations Redis rejected earlier, if any. Also run when a request or worker
+     * ends, ignoring the cooldown the rejection started, so invalidations kept only in memory
+     * are not lost with the process when Redis is back.
+     *
+     * @return bool Whether nothing is pending anymore, so the cache can be trusted again
+     */
+    public function replayFailedInvalidations(RedisCooldown $cooldown = RedisCooldown::Respect): bool
+    {
+        try {
+            $this->replayPendingInvalidations($cooldown);
+
+            return true;
+        } catch (Throwable $exception) {
+            FailureReporter::report(CacheOperation::Replay, $exception);
+
+            return false;
+        }
+    }
+
+    private function replayPendingInvalidations(RedisCooldown $cooldown): void
+    {
+        if (! $this->failed->hasPending()) {
+            return;
+        }
+
+        $this->failed->replay(fn (Invalidation $invalidation) => $this->apply($invalidation, $cooldown));
+    }
+
+    private function apply(Invalidation $invalidation, RedisCooldown $cooldown): void
+    {
+        if ($invalidation->retires !== null) {
+            $this->cache->retireAfterSchemaChange($invalidation->retires);
+
+            return;
+        }
+
+        $result = $this->cache->invalidate($invalidation, $cooldown);
+        $generation = $result['generation'];
+        $unknown = $result['databasesWithUnknownDependents'];
+
+        if ($generation === null || $unknown === []) {
+            return;
+        }
+
+        $stored = [];
+        foreach ($unknown as $database) {
+            if ($this->storeDependents($generation, $database, $invalidation->connectionOf($database), $cooldown)) {
+                $stored[] = $database;
+            }
+        }
+
+        if ($stored !== []) {
+            $this->cache->invalidate($invalidation->onlyCascadesOf($stored), $cooldown);
+        }
+    }
+
+    /**
+     * Reads what the database changes along with writes from its schema and stores it for the
+     * generation. A schema that cannot be read is stored as changing every table, so writes
+     * retire the cache without reading it again until that map expires.
+     */
+    private function storeDependents(Generation $generation, string $database, string $connection, RedisCooldown $cooldown): bool
+    {
+        try {
+            $dependents = DependentTables::load(DB::connection($connection));
+        } catch (Throwable $exception) {
+            FailureReporter::report(CacheOperation::ReadDependents, $exception, ['database' => $database]);
+
+            return $this->cache->storeUnreadableDependents($generation, $database, $cooldown);
+        }
+
+        return $this->cache->storeDependents($generation, $database, $dependents, $cooldown);
+    }
+
+    /**
+     * A delete of one table pinned to primary key values changes, through foreign keys referencing
+     * that key, only the child rows referencing those values.
+     */
+    private static function narrowedToDeletedKeys(Write $write, QueryBuilder $builder, Reflector $reflector): Write
+    {
+        $tables = $reflector->getTables();
+
+        if (count($tables) !== 1 || $reflector->getType() !== Reflector::QUERY_TYPE_DELETE) {
+            return $write;
+        }
+
+        $table = $tables[0];
+        $rows = $reflector->getRows()[$table] ?? null;
+        $keys = ColumnKeys::of($rows ?? []);
+
+        return $keys->isEmpty() ? $write : $write->deletingKeys($table, $builder->primaryKeyOf($table), $keys);
+    }
+
+    private static function inTransaction(ConnectionInterface $connection): bool
+    {
+        return Transactions::isOpen($connection);
+    }
+
+    private function startCollector(): ?CacheCollector
+    {
+        $collector = Services::collector();
+        $collector?->startMeasuring();
+
+        return $collector;
     }
 }

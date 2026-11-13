@@ -1,8 +1,81 @@
 # CHANGELOG
 
 ## [Unreleased]
+### Upgrading
+- Tables are tagged by their lower-case name. With `LADA_CACHE_LEGACY_INVALIDATION`, a table whose name contains upper-case letters is therefore not invalidated across versions: while hosts of both versions serve, either may serve entries of that table the other invalidated until they expire.
+- Entries use a new key layout and invalidation scheme, so hosts still running an earlier version neither read them nor invalidate them. Set `LADA_CACHE_LEGACY_INVALIDATION=true` for the duration of a rolling deploy, with both versions on the same Redis database, so writes by either version invalidate the entries of the other, and turn it off afterwards.
+- Migrations must run on a host with Lada Cache active against the shared Redis, since schema changes are detected from migration events only.
+
 ### Added
-- Added `withoutCache()` for per-query bypass of read caching and write invalidation (see https://github.com/spiritix/lada-cache/pull/151)
+- `lada-cache.metrics` (`LADA_CACHE_METRICS`, off by default) counts hits, misses, stores, invalidations and their cascade reach per table, retires, bypasses and failures by reason, and the statements that run uncached or retire the cache, inside the Redis calls Lada Cache already makes; `php artisan lada-cache:stats [--hours] [--table] [--json]` reports them. With metrics off the scripts and their arguments are unchanged
+- `lada-cache.legacy_invalidation` (`LADA_CACHE_LEGACY_INVALIDATION`, off by default): during a rolling deploy, writes also delete the 6.x entries of the tags they invalidate and of the tables foreign keys, triggers and views change along with them, so pods still on 6.x never serve results this version invalidated, and reads depend on the 6.x tag sets of their tags, so pods on this version never serve results a 6.x pod invalidated; reads pinned to rows also depend on their table's unspecific tag, so rows created by 6.x pods reach cached lookups of them, which makes any write to the table refresh them: row-precise tags only take effect once it is turned off
+- Added `php artisan lada-cache:invalidate <tables>` to invalidate specific tables after changes made outside Laravel, such as imports or manual fixes, without flushing the cache
+- Added `withoutCache()` to read a query from the database without caching it (see https://github.com/spiritix/lada-cache/pull/151); writes invalidate regardless, since skipping their invalidation left other readers with stale rows
+- Added `lada-cache.scope` (`LADA_CACHE_SCOPE`): `models` caches only reads from models using `LadaCacheTrait`, while writes from any builder still invalidate
+- Added `lada-cache.expiration_jitter` (`LADA_CACHE_EXPIRATION_JITTER`, default 15): spreads each expiration by up to that percentage so entries cached together do not expire together (based on https://github.com/spiritix/lada-cache/pull/154)
+- Writes invalidate the tables the database changes through foreign keys with cascading or nulling actions, read from the schema once per cache generation: deletes follow delete rules, updates follow update rules only when they assign a referenced column, a nulled child stops a delete from reaching the tables below it, writes affecting no rows, from the builder or raw `DB::update()`/`DB::delete()`, fire no foreign key, a delete pinned to primary key values invalidates only the cached child reads that may contain the rows its single-column CASCADE and SET NULL keys change, leaving reads pinned to other parents cached, with keys compared as the column's type compares them (read from the schema) and the whole child table invalidated for values that type cannot key, such as `'1abc'` for an integer column, and a truncate invalidates every referencing table, as PostgreSQL's `TRUNCATE ... CASCADE` empties them whatever their rules. Raw writes are classified by kind, so a raw `INSERT` no longer fires foreign keys and only `ON DUPLICATE KEY UPDATE` / `ON CONFLICT DO UPDATE` / `REPLACE` do; `lada-cache.dependent_tables` adds undeclared dependencies such as triggers
+- Writes invalidate cached reads of views over the written tables, read from the schema like foreign keys
+- SQL Lada reads itself (raw statements, raw expressions, view and trigger definitions) is parsed with a port of Apache DataFusion's sqlparser-rs tokenizer and its table and DML parsing for MySQL/MariaDB, PostgreSQL, SQLite and SQL Server, instead of regular expressions: quoting, comments, dollar-quoted and escaped strings and aliases follow each database's rules. Raw multi-table `UPDATE` and `DELETE` invalidate the tables they write, resolved through their aliases, instead of the whole cache; schema-qualified writes outside MySQL invalidate their table; `MERGE` follows insert, update and delete effects only; SQL Server batches that hide a second write without a semicolon change everything; raw updates and upserts are column-precise; table names are compared in lower case, so `UPDATE OWNERS` reaches reads of `owners` whatever the database's case sensitivity; reads whose FROM clause has a shape the parser does not know run uncached rather than risk an unknown table; each statement is parsed once per worker and its result kept for the next query with the same SQL; a MySQL connection configured with `modes` is read in them (`ANSI_QUOTES`, `NO_BACKSLASH_ESCAPES`)
+- Writes invalidate tables their triggers write, read from the schema with each trigger's events (`INSERT`, `UPDATE [OF columns]`, `DELETE`, `TRUNCATE`) and the kind of write its body makes to each table, so an `AFTER INSERT` audit trigger is followed only by inserts; MySQL triggers are read as created (`SHOW CREATE TRIGGER`) and in their own `sql_mode`, since `information_schema` lists bodies with the escapes of quoted strings removed; a trigger whose body cannot be parsed is logged as a warning and retires the cache on the writes firing it, while other writes keep it; a schema that cannot be read at all is logged as a warning and read again after a minute, with every write retiring the cache meanwhile, instead of being read on every write; writes through updatable views invalidate their base tables; on PostgreSQL a write to a partition or inheriting table invalidates reads of its parent and a write to the parent those of its children; MariaDB, which has no `information_schema.view_table_usage`, reads the tables of a view from its definition
+- Added `lada-cache.replica_lag` (`LADA_CACHE_REPLICA_LAG`, default 2): on connections with read replicas, replica reads of recently written tables are not cached
+- Added `lada-cache.max_entry_size` (`LADA_CACHE_MAX_ENTRY_SIZE`, default 8 MB): larger results are returned but not cached
+- Invalidations Redis rejects are kept, shared through APCu under PHP-FPM, and replayed before the cache is used again; reads bypass the cache until then. They are replayed again when the request, worker or `lada-cache:invalidate` ends, ignoring the failure cooldown, so a process that ends within 30 seconds of the rejection does not take them with it
+- Tables Laravel writes on nearly every request when sessions, cache or queues use the database are excluded from caching automatically, saving a lookup and store per request for entries the next write discards
+- Under Laravel Octane, including FrankenPHP worker mode, Lada's services are added to `octane.warm`, so the failure cooldown and invalidations awaiting replay live as long as the worker instead of one request
+- A restarted Redis or a promoted replica, which may have lost the newest invalidations, retires the cache on the first store or invalidation that reaches it, or on a lookup, which checks the server every 5 seconds per process
+- Invalidations merged over large transactions or backlogs collapse into table tags past 1000 row tags, so a bulk import commits with one small script instead of setting a version key per row
+- A Rollout suite (`make rollout`) running hosts of 6.x and of this version side by side against one database and Redis
+- Fuzz and multi-process test suites, and a test matrix over SQLite, MySQL and PostgreSQL with both Redis clients
+
+### Changed
+- The Docker setup runs every suite: PHP with the extensions the suites need, Redis, MySQL, MariaDB and PostgreSQL, behind `make` targets per database, suite and Redis client; `composer.lock` is committed and PHPStan and Pint run as real gates
+- Cache entries are scoped by a random generation id stored in Redis. Each completed migration and every flush replace it atomically, so results read before a schema change are never served afterwards, even if the migration batch fails midway or Redis is emptied. Retired generations are pruned in bounded `SCAN` batches when a migration batch finishes instead of a blocking `KEYS` scan. Existing entries from earlier versions are ignored and removed on the next prune
+- Replaced tag sets with per-tag version tokens checked atomically in Lua: a result read before a concurrent write is never served, a cache hit costs one Redis round trip instead of one plus one per tag, and an invalidation costs one round trip instead of five per tag
+- Cache failures never affect database access: they are logged (errors for failed invalidations) and the query runs uncached; after a failure Redis is skipped for 30 seconds per process. Redis is no longer contacted when query builders are created
+- `expiration_time` defaults to 7 days so invalidated entries leave Redis
+- Removed `Invalidator` and the `lada.invalidator` binding; invalidation is part of `Cache`
+- An invalid `lada-cache.scope`, `expiration_time` or `expiration_jitter` disables Lada Cache with a logged error instead of failing the application boot
+- Subquery tables are tracked on the builder that owns them instead of on the shared query handler, which also lets `include_tables`/`exclude_tables` see them
+- `schema:load`, `migrate:fresh`/`refresh` and raw DDL retire the generation; retiring after a schema change retries for about a second and ignores the failure cooldown, and a schema change inside a transaction retires again when it ends
+- The failure cooldown is shared across PHP-FPM requests and processes through APCu when available; under FrankenPHP worker mode and Octane it lasts for the worker. Pending transaction invalidations are held per connection object, so purged connections in long-lived workers leave nothing behind
+- Lua scripts run by SHA (`EVALSHA`, falling back to `EVAL` after `SCRIPT FLUSH`), so their source is no longer sent with every query
+- Cached results only decode to arrays of `stdClass` rows; a tampered entry can no longer instantiate arbitrary classes
+- Queries calling time-, randomness- or session-dependent SQL functions such as `NOW()` or `RAND()` are no longer cached
+- Raw statements are classified once where every statement passes through the connection, so driver-specific overrides are covered
+- With `consider_rows` disabled, tags separate database and table names, so database `a` with table `bc` and database `ab` with table `c` no longer share tags
+- Row tags treat primary keys the way databases compare them: "05", 5 and 5.0 share a tag, string keys of models ignore ASCII case, and keys a database may cast or collate differently, or more than 100 per table, fall back to table tags so a query never reads or writes an unbounded number of tags
+- `exists()` caches `select 1` instead of whole rows
+- Lada connections no longer open the primary and read PDO connections when resolved, only when first used
+- The debug collector lookup no longer throws and catches an exception for every query when Debugbar is not installed
+- `include_tables` and `exclude_tables` must be lists of table names and `prefix` and `redis_connection` strings; any other value disables Lada Cache with a logged error at boot instead of being cast, or failing on the first query. Integer settings accept integers and integer strings only, no longer floats or booleans; an empty value, as an environment variable defined without one gives, uses the default
+- `QueryBuilder`'s constructor is `final` and takes an `Illuminate\Database\Connection` instead of any `ConnectionInterface`
+- A write on a connection without a name logs a failed invalidation and invalidates everything, instead of invalidating under an empty connection name
+
+### Fixed
+- Writes inside a transaction opened with a raw `START TRANSACTION` or on the PDO object invalidated at once, so another host could cache the row as committed before the commit, and nothing invalidated it afterwards; such transactions now defer their invalidations to their end, and reads inside them bypass the cache
+- A failing SQL query was executed twice, and a successful query ran again when storing its result failed
+- Tables read by subqueries Laravel compiles to raw SQL were not tagged, so writes to them never invalidated the cached result: `whereIn()`/`whereNotIn()` subqueries (https://github.com/spiritix/lada-cache/pull/157), `fromSub()` (https://github.com/spiritix/lada-cache/pull/160), subquery columns in `where()`/`whereBetween()`, `orderBy()` subqueries, `crossJoinSub()`, `joinLateral()`, subqueries inside join closures, `selectSub()`/`joinSub()` with a closure or Eloquent builder, and unions with an Eloquent builder
+- `selectSub()`/`joinSub()` subquery tags were handed to whichever query ran next instead of the query they belonged to
+- Top-level `OR` and `whereNot` queries were scoped to the primary-key rows of one branch, leaving them stale after writes to other rows (https://github.com/spiritix/lada-cache/pull/156)
+- `findMany()`, `whereKey([...])` and BelongsTo eager loads were tagged table-wide and evicted by every write to the table (https://github.com/spiritix/lada-cache/pull/158)
+- Cached lookups of a missing row survived writes that created that row: `insertGetId()` and inserts with an explicit key (https://github.com/spiritix/lada-cache/pull/155), inserts without a key, `insertOrIgnore()`, `insertUsing()`, `insertOrIgnoreUsing()`, and updates that change the primary key
+- Raw statements (`DB::insert/update/delete/statement/affectingStatement/unprepared`, and writes through `DB::select()`) never invalidated anything
+- Raw `DB::insert()` on MySQL bypassed raw statement invalidation, because MySQL's connection overrides `insert()`
+- `lada-cache:enable` left results cached before Lada was disabled in place, although writes made while it was disabled never invalidated them; enabling now retires them
+- Writes cascading through foreign keys left cached reads of the cascaded tables stale
+- A read keyed `where id = '05'` stayed stale after a write keyed `where id = 5`, and string keys differing only in case missed each other on case-insensitive collations
+- Updates that set the primary key to an expression did not invalidate cached reads of the new key
+- `EXPLAIN ANALYZE` of a write, which PostgreSQL executes, did not invalidate
+- `fetchUsing()` fetch modes were dropped on Lada connections, and their results would have been cached under the default mode's key
+- Reads inside `DB::pretend()` cached the empty result pretending returns, so later real reads returned nothing
+- Reads naming tables only inside raw SQL (`whereRaw`, `selectRaw`, raw joins, `fromRaw`) were never invalidated by writes to those tables
+- Writes to tables in `exclude_tables` or missing from `include_tables` did not invalidate, so foreign key actions carrying them into cached tables left those stale
+- Equally named databases on different servers shared cache entries, so one could serve the other's rows; entries are now keyed by driver, host, port and socket as well
+- On MySQL, reads of `otherdb.table` and writes to `table` on a connection to `otherdb` (or the reverse) missed each other; database-qualified tables are now tagged under their database
+- `insertOrIgnoreReturning()` never invalidated anything
+- `updateOrInsert()` with callback values failed with a `TypeError`
+- A nested transaction commit flushed invalidations before the outer transaction committed, letting other hosts cache uncommitted-era results, and a savepoint rollback discarded the invalidations of the enclosing transaction
+- A Redis connection failure under phpredis bypassed the failure cooldown, costing a connection attempt per query
 
 ## [6.1.1] - 2026-05-22
 ### Fixed

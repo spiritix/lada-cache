@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Unit;
 
-use Illuminate\Support\Facades\Redis as RedisFacade;
 use Illuminate\Redis\Connections\Connection;
+use Illuminate\Support\Facades\Redis as RedisFacade;
 use Spiritix\LadaCache\Redis;
 use Spiritix\LadaCache\Tests\TestCase;
 
@@ -19,7 +19,7 @@ class RedisTest extends TestCase
 
         config(['lada-cache.prefix' => 'lada:']);
 
-        $this->redis = new Redis();
+        $this->redis = new Redis;
     }
 
     public function testPrefixConcatenatesConfiguredPrefixAndKey(): void

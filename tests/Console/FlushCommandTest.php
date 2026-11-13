@@ -32,4 +32,3 @@ class FlushCommandTest extends TestCase
             ->assertExitCode(0);
     }
 }
-

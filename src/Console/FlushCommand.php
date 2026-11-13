@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Console;
 
 use Illuminate\Console\Command;
+use Spiritix\LadaCache\Cache;
+use Spiritix\LadaCache\Services;
 
 /**
  * Flush all entries from the Lada Cache database cache.
@@ -27,10 +29,11 @@ final class FlushCommand extends Command
         }
 
         try {
-            /** @var \Spiritix\LadaCache\Cache $cache */
-            $cache = app('lada.cache');
-            $cache->flush();
+            $cache = Services::cache();
+            $started = hrtime(true);
+            $deleted = $cache->flush();
             $this->info('Lada Cache has been flushed successfully.');
+            $this->line(sprintf('Deleted %d retired keys in %.2f seconds.', $deleted, (hrtime(true) - $started) / 1e9));
 
             return self::SUCCESS;
         } catch (\Throwable $e) {

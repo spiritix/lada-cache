@@ -1,21 +1,19 @@
 # syntax=docker/dockerfile:1
-FROM php:8.3-cli AS base
+ARG PHP_VERSION=8.4
+FROM php:${PHP_VERSION}-cli
 
-## Install SQLite dev libs and build pdo_sqlite once in the image
-RUN set -e; \
-    apt-get update && apt-get install -y --no-install-recommends \
-        build-essential pkg-config libsqlite3-dev sqlite3 default-mysql-client libonig-dev git unzip \
-    && docker-php-ext-configure pdo_sqlite \
-    && docker-php-ext-install -j"$(nproc)" pdo_sqlite pdo_mysql \
-    && git config --system --add safe.directory /var/www \
-    && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends libsqlite3-dev libpq-dev git unzip; \
+    docker-php-ext-install -j"$(nproc)" pdo_sqlite pdo_mysql pdo_pgsql pcntl; \
+    pecl install redis apcu; \
+    docker-php-ext-enable redis apcu; \
+    printf 'apc.enable_cli=1\nmemory_limit=1G\n' > /usr/local/etc/php/conf.d/lada-cache.ini; \
+    git config --system --add safe.directory /var/www; \
+    rm -rf /var/lib/apt/lists/* /tmp/pear
 
-## Add Composer from official image
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-WORKDIR /var/www
+ENV COMPOSER_HOME=/tmp/composer
 
-## Pre-install dependencies to leverage Docker layer caching (useful for CI or non-mounted runs).
-## In dev with a bind mount, these will be overshadowed by the host.
-COPY composer.json composer.lock ./
-RUN composer install --no-interaction --prefer-dist --no-progress
+WORKDIR /var/www

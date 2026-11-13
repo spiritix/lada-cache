@@ -5,22 +5,32 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Support;
 
 /**
- * Small helper to parse SQL aliases from table/Expression references.
+ * Splits a query builder's `table as alias` the way Laravel's grammar does
+ * (`Grammar::wrapAliasedTable()`), so Lada reads the same table and alias the database is sent.
  */
 final class SqlAliasParser
 {
     public static function stripAlias(string $table): string
     {
-        return (string) preg_replace('/\s+as\s+[A-Za-z0-9_\.]+$/i', '', $table);
+        return self::split($table)[0];
     }
 
     public static function extractAlias(string $table): ?string
     {
-        return preg_match('/\s+as\s+([A-Za-z0-9_\.]+)$/i', $table, $m) === 1 ? $m[1] : null;
+        return self::split($table)[1];
     }
 
-    public static function extractAliasFromExpression(string $expr): ?string
+    /**
+     * @return array{string, string|null}
+     */
+    private static function split(string $table): array
     {
-        return preg_match('/\bas\s+[`"\[]?([A-Za-z0-9_\.]+)[`"\]]?\s*$/i', $expr, $m) === 1 ? $m[1] : null;
+        $segments = preg_split('/\s+as\s+/i', $table);
+
+        if ($segments === false || count($segments) !== 2) {
+            return [$table, null];
+        }
+
+        return [$segments[0], $segments[1]];
     }
 }

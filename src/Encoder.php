@@ -4,70 +4,38 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache;
 
-use JsonException;
-use Throwable;
+use stdClass;
 
 /**
- * Encoder
+ * Encodes query results for storage in Redis.
  *
- * Encodes and decodes cache payloads for storage.
- *
- * Strategy:
- * - Arrays are encoded via PHP's native serialization to preserve complex nested
- *   structures and prevent ambiguity with JSON objects vs arrays when decoding.
- * - Scalars and null are encoded as JSON (throwing on errors) to remain compact,
- *   portable, and human-inspectable.
- * - Objects attempt JSON encoding first to support simple DTO-like objects; if
- *   that fails, fall back to native serialization for full fidelity.
- *
- * Architectural notes:
- * - The class is immutable and stateless; marked as readonly for clarity.
- * - Decoding tries JSON first, then unserialize(); if both fail, returns null.
+ * Results are lists of rows as returned by PDO: stdClass objects or arrays of scalars.
+ * Decoding only allows stdClass, so a tampered Redis entry cannot instantiate arbitrary
+ * classes, and returns null for anything that is not a result.
  */
 final readonly class Encoder
 {
-    public function encode(mixed $data): string
-    {
-        if (is_array($data)) {
-            return serialize($data);
-        }
-        if (is_scalar($data) || $data === null) {
-            return json_encode($data, JSON_THROW_ON_ERROR);
-        }
+    private const array ALLOWED_CLASSES = [stdClass::class];
 
-        // For objects, prefer JSON to enable safe round-tripping of simple public data structures
-        // native serialization for complex framework types.
-        try {
-            return json_encode($data, JSON_THROW_ON_ERROR);
-        } catch (JsonException) {
-            return serialize($data);
-        }
+    /**
+     * @param  array<mixed>  $rows
+     */
+    public function encode(array $rows): string
+    {
+        return serialize($rows);
     }
 
-    public function decode(?string $data): mixed
+    /**
+     * @return array<mixed>|null
+     */
+    public function decode(string $payload): ?array
     {
-        if ($data === null) {
+        if (! str_starts_with($payload, 'a:')) {
             return null;
         }
 
-        try {
-            // If this is JSON, decode to arrays for arrays/scalars and to objects for JSON objects.
-            $trimmed = ltrim($data);
-            $assoc = ! str_starts_with($trimmed, '{');
+        $rows = @unserialize($payload, ['allowed_classes' => self::ALLOWED_CLASSES]);
 
-            return json_decode($data, $assoc, 512, JSON_THROW_ON_ERROR);
-        } catch (JsonException) {
-            try {
-                // Suppress warnings and convert unserialize failures to null (except for serialized false 'b:0;').
-                $result = @unserialize($data, ['allowed_classes' => true]);
-                if ($result === false && $data !== 'b:0;') {
-                    return null;
-                }
-
-                return $result;
-            } catch (Throwable) {
-                return null;
-            }
-        }
+        return is_array($rows) ? $rows : null;
     }
 }

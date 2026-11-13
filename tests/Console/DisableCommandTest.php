@@ -15,4 +15,3 @@ class DisableCommandTest extends TestCase
             ->assertExitCode(0);
     }
 }
-

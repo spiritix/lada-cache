@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Tests\Integration\Database;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Hasher;
-use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
 use Spiritix\LadaCache\Tests\TestCase;
 
@@ -21,14 +19,14 @@ final class TransactionInvalidationTest extends TestCase
         $builder = DB::table('cars')->where('id', 10);
         $builder->get();
 
-        $key = (new Hasher(new Reflector($builder)))->getHash();
-        $this->assertCacheHas($key, 'Expected key to exist after initial cached select');
+        [$key, $tags] = $this->cacheKeyAndTags($builder);
+        $this->assertCacheHas($key, $tags, 'Expected key to exist after initial cached select');
 
         DB::beginTransaction();
         try {
             DB::table('cars')->where('id', 10)->update(['name' => 'T2']);
 
-            $this->assertCacheHas($key, 'Expected key to still exist before transaction commit (invalidation queued)');
+            $this->assertCacheHas($key, $tags, 'Expected key to still exist before transaction commit (invalidation queued)');
 
             DB::commit();
         } catch (\Throwable $e) {
@@ -36,7 +34,7 @@ final class TransactionInvalidationTest extends TestCase
             throw $e;
         }
 
-        $this->assertCacheMissing($key, 'Expected key to be invalidated after transaction commit');
+        $this->assertCacheMissing($key, $tags, 'Expected key to be invalidated after transaction commit');
     }
 
     public function testQueuedInvalidationsAreClearedOnRollback(): void
@@ -46,8 +44,8 @@ final class TransactionInvalidationTest extends TestCase
         $builder = DB::table('cars')->where('id', 11);
         $builder->get();
 
-        $key = (new Hasher(new Reflector($builder)))->getHash();
-        $this->assertCacheHas($key, 'Expected key to exist after initial cached select');
+        [$key, $tags] = $this->cacheKeyAndTags($builder);
+        $this->assertCacheHas($key, $tags, 'Expected key to exist after initial cached select');
 
         DB::beginTransaction();
         try {
@@ -58,6 +56,6 @@ final class TransactionInvalidationTest extends TestCase
             throw $e;
         }
 
-        $this->assertCacheHas($key, 'Expected key to remain after rollback (queued invalidations cleared)');
+        $this->assertCacheHas($key, $tags, 'Expected key to remain after rollback (queued invalidations cleared)');
     }
 }

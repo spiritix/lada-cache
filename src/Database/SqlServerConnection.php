@@ -5,13 +5,15 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Database;
 
 use Illuminate\Database\SqlServerConnection as BaseSqlServerConnection;
-use Spiritix\LadaCache\QueryHandler as LadaQueryHandler;
+use Spiritix\LadaCache\Services;
 
 /**
  * Lada Cache-aware SQL Server connection.
  */
-final class SqlServerConnection extends BaseSqlServerConnection
+final class SqlServerConnection extends BaseSqlServerConnection implements RunsBuilderStatements
 {
+    use InvalidatesRawStatements;
+
     /** {@inheritDoc} */
     public function query()
     {
@@ -19,8 +21,7 @@ final class SqlServerConnection extends BaseSqlServerConnection
             return parent::query();
         }
 
-        /** @var LadaQueryHandler $handler */
-        $handler = app('lada.handler');
+        $handler = Services::handler();
 
         return new QueryBuilder(
             $this,

@@ -15,7 +15,7 @@ final class InvalidationExtendedTest extends TestCase
 {
     use CacheAssertions;
 
-    public function test_broad_update_invalidates_all_specific_and_unspecific_for_table(): void
+    public function testBroadUpdateInvalidatesAllSpecificAndUnspecificForTable(): void
     {
         DB::table('cars')->insert([
             ['id' => 30, 'name' => 'A', 'engine_id' => null, 'driver_id' => null],
@@ -25,6 +25,7 @@ final class InvalidationExtendedTest extends TestCase
         $mk = function (int $id): array {
             $b = DB::table('cars')->where('id', $id);
             $r = new Reflector($b);
+
             return [(new Hasher($r))->getHash(), (new Tagger($r))->getTags()];
         };
         [$k30, $t30] = $mk(30);
@@ -34,26 +35,23 @@ final class InvalidationExtendedTest extends TestCase
         $rb = new Reflector($broad);
         $kb = (new Hasher($rb))->getHash();
         $tb = (new Tagger($rb))->getTags();
+        $this->seedCache($k30, $t30, [['id' => 30, 'name' => 'A']]);
+        $this->seedCache($k31, $t31, [['id' => 31, 'name' => 'B']]);
+        $this->seedCache($kb, $tb, [['id' => 30], ['id' => 31]]);
 
-        /** @var \Spiritix\LadaCache\Cache $cache */
-        $cache = app('lada.cache');
-        $cache->set($k30, $t30, [['id' => 30, 'name' => 'A']]);
-        $cache->set($k31, $t31, [['id' => 31, 'name' => 'B']]);
-        $cache->set($kb, $tb, [['id' => 30], ['id' => 31]]);
-
-        $this->assertCacheHas($k30);
-        $this->assertCacheHas($k31);
-        $this->assertCacheHas($kb);
+        $this->assertCacheHas($k30, $t30);
+        $this->assertCacheHas($k31, $t31);
+        $this->assertCacheHas($kb, $tb);
 
         // Broad update: no specific rows detectable
         DB::table('cars')->update(['name' => 'ALL']);
 
-        $this->assertCacheMissing($k30);
-        $this->assertCacheMissing($k31);
-        $this->assertCacheMissing($kb);
+        $this->assertCacheMissing($k30, $t30);
+        $this->assertCacheMissing($k31, $t31);
+        $this->assertCacheMissing($kb, $tb);
     }
 
-    public function test_broad_delete_invalidates_all_specific_and_unspecific_for_table(): void
+    public function testBroadDeleteInvalidatesAllSpecificAndUnspecificForTable(): void
     {
         DB::table('cars')->insert([
             ['id' => 40, 'name' => 'A', 'engine_id' => null, 'driver_id' => null],
@@ -63,24 +61,22 @@ final class InvalidationExtendedTest extends TestCase
         $mk = function (int $id): array {
             $b = DB::table('cars')->where('id', $id);
             $r = new Reflector($b);
+
             return [(new Hasher($r))->getHash(), (new Tagger($r))->getTags()];
         };
         [$k40, $t40] = $mk(40);
         [$k41, $t41] = $mk(41);
+        $this->seedCache($k40, $t40, [['id' => 40, 'name' => 'A']]);
+        $this->seedCache($k41, $t41, [['id' => 41, 'name' => 'B']]);
 
-        /** @var \Spiritix\LadaCache\Cache $cache */
-        $cache = app('lada.cache');
-        $cache->set($k40, $t40, [['id' => 40, 'name' => 'A']]);
-        $cache->set($k41, $t41, [['id' => 41, 'name' => 'B']]);
-
-        $this->assertCacheHas($k40);
-        $this->assertCacheHas($k41);
+        $this->assertCacheHas($k40, $t40);
+        $this->assertCacheHas($k41, $t41);
 
         // Broad delete (no where clause) invalidates all
         DB::table('cars')->delete();
 
-        $this->assertCacheMissing($k40);
-        $this->assertCacheMissing($k41);
+        $this->assertCacheMissing($k40, $t40);
+        $this->assertCacheMissing($k41, $t41);
     }
 
     public function testTruncateRemovesSpecificAndUnspecificCachedKeys(): void
@@ -99,22 +95,19 @@ final class InvalidationExtendedTest extends TestCase
         $rs = new Reflector($spec);
         $ks = (new Hasher($rs))->getHash();
         $ts = (new Tagger($rs))->getTags();
+        $this->seedCache($kb, $tb, [['id' => 50], ['id' => 51]]);
+        $this->seedCache($ks, $ts, [['id' => 50, 'name' => 'A']]);
 
-        /** @var \Spiritix\LadaCache\Cache $cache */
-        $cache = app('lada.cache');
-        $cache->set($kb, $tb, [['id' => 50], ['id' => 51]]);
-        $cache->set($ks, $ts, [['id' => 50, 'name' => 'A']]);
-
-        $this->assertCacheHas($kb);
-        $this->assertCacheHas($ks);
+        $this->assertCacheHas($kb, $tb);
+        $this->assertCacheHas($ks, $ts);
 
         DB::table('cars')->truncate();
 
-        $this->assertCacheMissing($kb);
-        $this->assertCacheMissing($ks);
+        $this->assertCacheMissing($kb, $tb);
+        $this->assertCacheMissing($ks, $ts);
     }
 
-    public function test_specific_row_delete_invalidates_broad_select(): void
+    public function testSpecificRowDeleteInvalidatesBroadSelect(): void
     {
         DB::table('cars')->insert(['id' => 60, 'name' => 'ToDelete', 'engine_id' => null, 'driver_id' => null]);
 

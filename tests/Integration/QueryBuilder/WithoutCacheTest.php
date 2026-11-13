@@ -1,12 +1,11 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Integration\QueryBuilder;
 
 use Illuminate\Support\Facades\DB;
 use Spiritix\LadaCache\Database\QueryBuilder;
-use Spiritix\LadaCache\Hasher;
-use Spiritix\LadaCache\Reflector;
 use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
 use Spiritix\LadaCache\Tests\Database\Models\Car;
 use Spiritix\LadaCache\Tests\TestCase;
@@ -25,118 +24,116 @@ class WithoutCacheTest extends TestCase
         $result = $builder->withoutCache()->get();
         $this->assertNotEmpty($result);
 
-        $key = (new Hasher(new Reflector($builder)))->getHash();
-        $this->assertCacheMissing($key, 'withoutCache should not populate Redis on read');
+        [$key, $tags] = $this->cacheKeyAndTags($builder);
+        $this->assertCacheMissing($key, $tags, 'withoutCache should not populate Redis on read');
     }
 
-    public function testWithoutCacheBypassesUpdateInvalidation(): void
+    public function testWithoutCacheStillRunsTheUpdateInvalidation(): void
     {
         // Arrange: warm cache for the row
         DB::table('cars')->insert(['id' => 2020, 'name' => 'OriginalName', 'engine_id' => null, 'driver_id' => null]);
         $builder = DB::table('cars')->where('id', 2020);
         $builder->get();
 
-        $key = (new Hasher(new Reflector($builder)))->getHash();
-        $this->assertCacheHas($key);
+        [$key, $tags] = $this->cacheKeyAndTags($builder);
+        $this->assertCacheHas($key, $tags);
 
-        // Act: update with withoutCache() — invalidation must not fire
         DB::table('cars')->where('id', 2020)->withoutCache()->update(['name' => 'WithoutCacheWrite']);
 
-        // Assert: cache still has the (now-stale) key
-        $this->assertCacheHas($key, 'withoutCache write must not queue/fire invalidation');
+        $this->assertCacheMissing($key, $tags, 'Writes with withoutCache() must still invalidate, or other readers see stale rows');
     }
 
-    public function testWithoutCacheBypassesInsertInvalidation(): void
+    public function testWithoutCacheStillRunsTheInsertInvalidation(): void
     {
         // Warm cache on a "named row missing" query
         $builder = DB::table('cars')->where('name', 'InsertBypass');
         $builder->get();
-        $key = (new Hasher(new Reflector($builder)))->getHash();
-        $this->assertCacheHas($key);
+        [$key, $tags] = $this->cacheKeyAndTags($builder);
+        $this->assertCacheHas($key, $tags);
 
         DB::table('cars')->withoutCache()
             ->insert(['id' => 2030, 'name' => 'InsertBypass', 'engine_id' => null, 'driver_id' => null]);
 
-        $this->assertCacheHas($key, 'withoutCache insert must not invalidate');
+        $this->assertCacheMissing($key, $tags, 'Writes with withoutCache() must still invalidate, or other readers see stale rows');
     }
 
-    public function testWithoutCacheBypassesInsertGetIdInvalidation(): void
+    public function testWithoutCacheStillRunsTheInsertGetIdInvalidation(): void
     {
         $builder = DB::table('cars')->where('name', 'InsertGetIdBypass');
         $builder->get();
-        $key = (new Hasher(new Reflector($builder)))->getHash();
-        $this->assertCacheHas($key);
+        [$key, $tags] = $this->cacheKeyAndTags($builder);
+        $this->assertCacheHas($key, $tags);
 
         DB::table('cars')->withoutCache()
             ->insertGetId(['name' => 'InsertGetIdBypass', 'engine_id' => null, 'driver_id' => null]);
 
-        $this->assertCacheHas($key, 'withoutCache insertGetId must not invalidate');
+        $this->assertCacheMissing($key, $tags, 'Writes with withoutCache() must still invalidate, or other readers see stale rows');
     }
 
-    public function testWithoutCacheBypassesInsertOrIgnoreInvalidation(): void
+    public function testWithoutCacheStillRunsTheInsertOrIgnoreInvalidation(): void
     {
         $builder = DB::table('cars')->where('name', 'InsertOrIgnoreBypass');
         $builder->get();
-        $key = (new Hasher(new Reflector($builder)))->getHash();
-        $this->assertCacheHas($key);
+        [$key, $tags] = $this->cacheKeyAndTags($builder);
+        $this->assertCacheHas($key, $tags);
 
         DB::table('cars')->withoutCache()
             ->insertOrIgnore(['id' => 2040, 'name' => 'InsertOrIgnoreBypass', 'engine_id' => null, 'driver_id' => null]);
 
-        $this->assertCacheHas($key, 'withoutCache insertOrIgnore must not invalidate');
+        $this->assertCacheMissing($key, $tags, 'Writes with withoutCache() must still invalidate, or other readers see stale rows');
     }
 
-    public function testWithoutCacheBypassesUpsertInvalidation(): void
+    public function testWithoutCacheStillRunsTheUpsertInvalidation(): void
     {
         DB::table('cars')->insert(['id' => 2050, 'name' => 'UpsertBypassOriginal', 'engine_id' => null, 'driver_id' => null]);
         $builder = DB::table('cars')->where('id', 2050);
         $builder->get();
-        $key = (new Hasher(new Reflector($builder)))->getHash();
-        $this->assertCacheHas($key);
+        [$key, $tags] = $this->cacheKeyAndTags($builder);
+        $this->assertCacheHas($key, $tags);
 
         DB::table('cars')->withoutCache()
             ->upsert([['id' => 2050, 'name' => 'UpsertBypassNew']], ['id'], ['name']);
 
-        $this->assertCacheHas($key, 'withoutCache upsert must not invalidate');
+        $this->assertCacheMissing($key, $tags, 'Writes with withoutCache() must still invalidate, or other readers see stale rows');
     }
 
-    public function testWithoutCacheBypassesUpdateOrInsertInvalidation(): void
+    public function testWithoutCacheStillRunsTheUpdateOrInsertInvalidation(): void
     {
         $builder = DB::table('cars')->where('id', 2060);
         $builder->get();
-        $key = (new Hasher(new Reflector($builder)))->getHash();
-        $this->assertCacheHas($key);
+        [$key, $tags] = $this->cacheKeyAndTags($builder);
+        $this->assertCacheHas($key, $tags);
 
         DB::table('cars')->where('id', 2060)->withoutCache()
             ->updateOrInsert(['id' => 2060], ['name' => 'UpdateOrInsertBypass']);
 
-        $this->assertCacheHas($key, 'withoutCache updateOrInsert must not invalidate');
+        $this->assertCacheMissing($key, $tags, 'Writes with withoutCache() must still invalidate, or other readers see stale rows');
     }
 
-    public function testWithoutCacheBypassesDeleteInvalidation(): void
+    public function testWithoutCacheStillRunsTheDeleteInvalidation(): void
     {
         DB::table('cars')->insert(['id' => 2070, 'name' => 'DeleteBypass', 'engine_id' => null, 'driver_id' => null]);
         $builder = DB::table('cars')->where('id', 2070);
         $builder->get();
-        $key = (new Hasher(new Reflector($builder)))->getHash();
-        $this->assertCacheHas($key);
+        [$key, $tags] = $this->cacheKeyAndTags($builder);
+        $this->assertCacheHas($key, $tags);
 
         DB::table('cars')->where('id', 2070)->withoutCache()->delete();
 
-        $this->assertCacheHas($key, 'withoutCache delete must not invalidate');
+        $this->assertCacheMissing($key, $tags, 'Writes with withoutCache() must still invalidate, or other readers see stale rows');
     }
 
-    public function testWithoutCacheBypassesTruncateInvalidation(): void
+    public function testWithoutCacheStillRunsTheTruncateInvalidation(): void
     {
         DB::table('cars')->insert(['id' => 2080, 'name' => 'TruncateBypass', 'engine_id' => null, 'driver_id' => null]);
         $builder = DB::table('cars')->where('id', 2080);
         $builder->get();
-        $key = (new Hasher(new Reflector($builder)))->getHash();
-        $this->assertCacheHas($key);
+        [$key, $tags] = $this->cacheKeyAndTags($builder);
+        $this->assertCacheHas($key, $tags);
 
         DB::table('cars')->withoutCache()->truncate();
 
-        $this->assertCacheHas($key, 'withoutCache truncate must not invalidate');
+        $this->assertCacheMissing($key, $tags, 'Writes with withoutCache() must still invalidate, or other readers see stale rows');
     }
 
     public function testNormalWriteStillInvalidates(): void
@@ -146,12 +143,12 @@ class WithoutCacheTest extends TestCase
         $builder = DB::table('cars')->where('id', 2090);
         $builder->get();
 
-        $key = (new Hasher(new Reflector($builder)))->getHash();
-        $this->assertCacheHas($key);
+        [$key, $tags] = $this->cacheKeyAndTags($builder);
+        $this->assertCacheHas($key, $tags);
 
         DB::table('cars')->where('id', 2090)->update(['name' => 'NormalWriteAfter']);
 
-        $this->assertCacheMissing($key, 'Default write path must invalidate');
+        $this->assertCacheMissing($key, $tags, 'Default write path must invalidate');
     }
 
     public function testWithoutCacheReturnsBuilderForChaining(): void
@@ -182,14 +179,14 @@ class WithoutCacheTest extends TestCase
         // withoutCache() before where()
         $builderA = DB::table('cars')->withoutCache()->where('id', 2110);
         $builderA->get();
-        $keyA = (new Hasher(new Reflector($builderA)))->getHash();
-        $this->assertCacheMissing($keyA, 'withoutCache->where chain must bypass');
+        [$keyA, $tagsA] = $this->cacheKeyAndTags($builderA);
+        $this->assertCacheMissing($keyA, $tagsA, 'withoutCache->where chain must bypass');
 
         // where() before withoutCache()
         $builderB = DB::table('cars')->where('id', 2110)->withoutCache();
         $builderB->get();
-        $keyB = (new Hasher(new Reflector($builderB)))->getHash();
-        $this->assertCacheMissing($keyB, 'where->withoutCache chain must bypass');
+        [$keyB, $tagsB] = $this->cacheKeyAndTags($builderB);
+        $this->assertCacheMissing($keyB, $tagsB, 'where->withoutCache chain must bypass');
     }
 
     public function testExistsHonorsBypassFlag(): void
@@ -201,8 +198,8 @@ class WithoutCacheTest extends TestCase
 
         // exists() uses an internal clone-and-get path; verify that path also bypasses the cache
         $reflectorBuilder = DB::table('cars')->where('id', 2120)->limit(1);
-        $key = (new Hasher(new Reflector($reflectorBuilder)))->getHash();
-        $this->assertCacheMissing($key, 'exists() under withoutCache must not populate Redis');
+        [$key, $tags] = $this->cacheKeyAndTags($reflectorBuilder);
+        $this->assertCacheMissing($key, $tags, 'exists() under withoutCache must not populate Redis');
     }
 
     public function testNewQueryResetsBypassFlag(): void

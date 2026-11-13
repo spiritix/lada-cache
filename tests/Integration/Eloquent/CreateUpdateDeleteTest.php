@@ -6,14 +6,14 @@ namespace Spiritix\LadaCache\Tests\Integration\Eloquent;
 
 use PHPUnit\Framework\Assert;
 use Spiritix\LadaCache\Tests\Concerns\MakesTestModels;
-use Spiritix\LadaCache\Tests\TestCase;
 use Spiritix\LadaCache\Tests\Database\Models\Car;
+use Spiritix\LadaCache\Tests\TestCase;
 
 class CreateUpdateDeleteTest extends TestCase
 {
     use MakesTestModels;
 
-    public function test_create_via_factory_and_static_create(): void
+    public function testCreateViaFactoryAndStaticCreate(): void
     {
         $carA = $this->makeCar(['name' => 'alpha']);
 
@@ -25,7 +25,7 @@ class CreateUpdateDeleteTest extends TestCase
         Assert::assertSame('bravo', Car::find($carB->id)?->name);
     }
 
-    public function test_first_or_create_and_first_or_new(): void
+    public function testFirstOrCreateAndFirstOrNew(): void
     {
         $created = Car::firstOrCreate(['name' => 'unique-model']);
         Assert::assertTrue($created->exists);
@@ -39,7 +39,7 @@ class CreateUpdateDeleteTest extends TestCase
         Assert::assertTrue($new->exists);
     }
 
-    public function test_update_and_refresh(): void
+    public function testUpdateAndRefresh(): void
     {
         $car = $this->makeCar(['name' => 'before']);
 
@@ -50,7 +50,7 @@ class CreateUpdateDeleteTest extends TestCase
         Assert::assertSame('after', Car::find($car->id)?->name);
     }
 
-    public function test_update_or_create(): void
+    public function testUpdateOrCreate(): void
     {
         $created = Car::updateOrCreate(['name' => 'uo-target'], ['driver_id' => 5]);
         Assert::assertTrue($created->exists);
@@ -61,7 +61,7 @@ class CreateUpdateDeleteTest extends TestCase
         Assert::assertSame(7, $updated->driver_id);
     }
 
-    public function test_upsert(): void
+    public function testUpsert(): void
     {
         // Use primary key for SQLite compatibility: ON CONFLICT(id) ...
         Car::upsert([
@@ -88,7 +88,7 @@ class CreateUpdateDeleteTest extends TestCase
         Assert::assertSame(40, $u2->driver_id);
     }
 
-    public function test_new_model_save_populates_id(): void
+    public function testNewModelSavePopulatesId(): void
     {
         $car = new Car(['name' => 'save-populates-id']);
 
@@ -101,7 +101,7 @@ class CreateUpdateDeleteTest extends TestCase
         Assert::assertSame('save-populates-id', Car::find($car->id)?->name);
     }
 
-    public function test_delete_and_destroy(): void
+    public function testDeleteAndDestroy(): void
     {
         $car = $this->makeCar();
         $id = $car->id;

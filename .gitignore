@@ -6,12 +6,11 @@
 
 # Composer & vendor
 /vendor/
+/tests/Rollout/legacy/vendor/
 composer.phar
-composer.lock
 
 # Build artifacts
 /build/
-coverage.xml
 
 # PHPUnit cache
 .phpunit.result.cache

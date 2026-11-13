@@ -5,13 +5,15 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Database;
 
 use Illuminate\Database\PostgresConnection as BasePostgresConnection;
-use Spiritix\LadaCache\QueryHandler as LadaQueryHandler;
+use Spiritix\LadaCache\Services;
 
 /**
  * Lada Cache-aware Postgres connection.
  */
-final class PostgresConnection extends BasePostgresConnection
+final class PostgresConnection extends BasePostgresConnection implements RunsBuilderStatements
 {
+    use InvalidatesRawStatements;
+
     /** {@inheritDoc} */
     public function query()
     {
@@ -19,8 +21,7 @@ final class PostgresConnection extends BasePostgresConnection
             return parent::query();
         }
 
-        /** @var LadaQueryHandler $handler */
-        $handler = app('lada.handler');
+        $handler = Services::handler();
 
         return new QueryBuilder(
             $this,

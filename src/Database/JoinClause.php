@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Database;
 
+use Illuminate\Contracts\Database\Query\Expression as ExpressionContract;
+use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Query\JoinClause as BaseJoinClause;
+use LogicException;
 use Spiritix\LadaCache\QueryHandler;
 
 /**
@@ -15,13 +18,20 @@ use Spiritix\LadaCache\QueryHandler;
  * Extends Laravel's JoinClause to properly instantiate QueryBuilder instances
  * with the required QueryHandler when creating nested query builders.
  */
-class JoinClause extends BaseJoinClause
+class JoinClause extends BaseJoinClause implements HasCompiledSubQueries
 {
+    use TracksCompiledSubQueries;
+
     private readonly ?QueryHandler $parentHandler;
 
     private readonly ?Model $parentModel;
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     *
+     * @param  string  $type
+     * @param  ExpressionContract|string  $table
+     */
     public function __construct(Builder $parentQuery, $type, $table)
     {
         // Capture QueryBuilder-specific dependencies before parent constructor runs
@@ -41,18 +51,22 @@ class JoinClause extends BaseJoinClause
     {
         $class = $this->parentClass;
 
-        // If parent was a LadaCache QueryBuilder, instantiate with handler & model
-        if ($this->parentHandler !== null) {
-            return new $class(
-                $this->parentConnection,
-                $this->parentHandler,
-                $this->parentGrammar,
-                $this->parentProcessor,
-                $this->parentModel
-            );
+        if ($this->parentHandler === null) {
+            return is_a($class, Builder::class, true)
+                ? new $class($this->parentConnection, $this->parentGrammar, $this->parentProcessor)
+                : throw new LogicException('Join clause parent '.$class.' is not a query builder');
         }
 
-        // Otherwise, use standard Laravel Builder instantiation
-        return new $class($this->parentConnection, $this->parentGrammar, $this->parentProcessor);
+        if (! is_a($class, QueryBuilder::class, true) || ! $this->parentConnection instanceof Connection) {
+            throw new LogicException('Join clause parent '.$class.' carries a Lada Cache handler but is not a Lada Cache query builder on a database connection');
+        }
+
+        return new $class(
+            $this->parentConnection,
+            $this->parentHandler,
+            $this->parentGrammar,
+            $this->parentProcessor,
+            $this->parentModel
+        );
     }
 }

@@ -1,13 +1,12 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Integration\Cache;
 
 use Illuminate\Support\Facades\DB;
-use Spiritix\LadaCache\Hasher;
-use Spiritix\LadaCache\Reflector;
+use Spiritix\LadaCache\CacheMiss;
 use Spiritix\LadaCache\Redis as LadaRedis;
-use Spiritix\LadaCache\Tagger;
 use Spiritix\LadaCache\Tests\Concerns\CacheAssertions;
 use Spiritix\LadaCache\Tests\TestCase;
 
@@ -15,40 +14,49 @@ class ConcurrencyTest extends TestCase
 {
     use CacheAssertions;
 
-    public function testSelfHealsTagMembershipOnCacheHit(): void
+    public function testResultReadBeforeAConcurrentWriteIsNeverServed(): void
     {
-        // Seed a row and build a simple cached SELECT
-        DB::table('cars')->insert(['id' => 910, 'name' => 'X', 'engine_id' => null, 'driver_id' => null]);
+        DB::table('cars')->insert(['id' => 910, 'name' => 'before', 'engine_id' => null, 'driver_id' => null]);
         $builder = DB::table('cars')->where('id', 910);
-
-        $reflector = new Reflector($builder);
-        $dbName = $reflector->getDatabase();
-        $tags = (new Tagger($reflector))->getTags();
-
-        /** @var \Spiritix\LadaCache\Cache $cache */
+        [$key, $tags] = $this->cacheKeyAndTags($builder);
         $cache = app('lada.cache');
 
-        // Compute key and seed cache entry directly (stable in transactional harness)
-        $key = (new Hasher($reflector))->getHash();
-        $payload = [['id' => 910, 'name' => 'X']];
-        $cache->set($key, $tags, $payload);
-        $this->assertCacheHas($key);
+        $slowReader = $this->lookupRead($key, $tags);
+        $this->assertInstanceOf(CacheMiss::class, $slowReader);
+        $rowsReadBeforeWrite = [['id' => 910, 'name' => 'before', 'engine_id' => null, 'driver_id' => null]];
 
-        // Remove membership from both specific and unspecific table tags
-        $unspecificTag = "tags:database:{$dbName}:table_unspecific:cars";
-        $specificTag = "tags:database:{$dbName}:table_specific:cars";
-        $redis = new LadaRedis();
-        $redis->srem($redis->prefix($unspecificTag), $redis->prefix($key));
-        $redis->srem($redis->prefix($specificTag), $redis->prefix($key));
-        $this->assertFalse((bool) $redis->sismember($redis->prefix($unspecificTag), $redis->prefix($key)));
-        $this->assertFalse((bool) $redis->sismember($redis->prefix($specificTag), $redis->prefix($key)));
+        DB::table('cars')->where('id', 910)->update(['name' => 'after']);
+        $cache->store($slowReader, $rowsReadBeforeWrite);
 
-        // Directly exercise repair to avoid relying on read path timing
-        $cache->repairTagMembership($key, $tags);
+        $this->assertCacheMissing($key, $tags);
+        $this->assertSame('after', DB::table('cars')->where('id', 910)->value('name'));
+    }
 
-        // Membership should be restored in at least one of the table tags
-        $restoredUnspecific = (bool) $redis->sismember($redis->prefix($unspecificTag), $redis->prefix($key));
-        $restoredSpecific = (bool) $redis->sismember($redis->prefix($specificTag), $redis->prefix($key));
-        $this->assertTrue($restoredUnspecific || $restoredSpecific, 'Expected tag membership to be repaired');
+    public function testEvictedTagVersionMakesDependentEntriesMiss(): void
+    {
+        DB::table('cars')->insert(['id' => 911, 'name' => 'X', 'engine_id' => null, 'driver_id' => null]);
+        $builder = DB::table('cars')->where('id', 911);
+        $builder->get();
+        [$key, $tags] = $this->cacheKeyAndTags($builder);
+        $this->assertCacheHas($key, $tags);
+
+        $redis = new LadaRedis;
+        $generation = (string) $redis->get($redis->prefix('generation'));
+        $redis->del($redis->prefix($generation.':v:'.$tags->tags[0]));
+
+        $this->assertCacheMissing($key, $tags);
+    }
+
+    public function testEvictedGenerationKeyMakesEveryEntryMiss(): void
+    {
+        DB::table('cars')->insert(['id' => 912, 'name' => 'X', 'engine_id' => null, 'driver_id' => null]);
+        $builder = DB::table('cars')->where('id', 912);
+        $builder->get();
+        [$key, $tags] = $this->cacheKeyAndTags($builder);
+
+        $redis = new LadaRedis;
+        $redis->del($redis->prefix('generation'));
+
+        $this->assertCacheMissing($key, $tags);
     }
 }

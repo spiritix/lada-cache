@@ -49,6 +49,7 @@ final class TaggerMatrixTest extends TestCase
                 return true;
             }
         }
+
         return false;
     }
 }

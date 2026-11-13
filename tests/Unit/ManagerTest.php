@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Tests\Unit;
 
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 use Spiritix\LadaCache\Manager;
 use Spiritix\LadaCache\Reflector;
+use Spiritix\LadaCache\Tests\Database\Models\Car;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class ManagerTest extends TestCase
@@ -19,6 +21,7 @@ class ManagerTest extends TestCase
         foreach ($tables as $t) {
             $builder->join($t, "$first.id", '=', "$t.id");
         }
+
         return new Reflector($builder);
     }
 
@@ -69,7 +72,7 @@ class ManagerTest extends TestCase
         // Temporarily enable to get a Lada query builder, then test Manager with inactive config
         config(['lada-cache.active' => true]);
         $reflector = $this->makeReflectorFromTables(['cars']);
-        
+
         // Now set inactive and test that Manager respects it
         config([
             'lada-cache.active' => false,
@@ -79,5 +82,37 @@ class ManagerTest extends TestCase
 
         $manager = new Manager($reflector);
         $this->assertFalse($manager->shouldCache());
+    }
+
+    public function testModelsScopeCachesOnlyModelQueries(): void
+    {
+        config(['lada-cache.scope' => 'models']);
+
+        $this->assertFalse((new Manager($this->makeReflectorFromTables(['cars'])))->shouldCache());
+        $this->assertTrue((new Manager(new Reflector(Car::query()->getQuery())))->shouldCache());
+    }
+
+    public function testModelsScopeStillInvalidatesQueryBuilderWrites(): void
+    {
+        config(['lada-cache.scope' => 'models']);
+
+        $this->assertTrue((new Manager($this->makeReflectorFromTables(['cars'])))->shouldInvalidate());
+    }
+
+    public function testAllScopeCachesQueryBuilderQueries(): void
+    {
+        config(['lada-cache.scope' => 'all']);
+
+        $this->assertTrue((new Manager($this->makeReflectorFromTables(['cars'])))->shouldCache());
+    }
+
+    public function testInvalidScopeFailsLoudly(): void
+    {
+        config(['lada-cache.scope' => 'everything']);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid lada-cache.scope "everything", expected one of: all, models');
+
+        new Manager($this->makeReflectorFromTables(['cars']));
     }
 }

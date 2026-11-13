@@ -11,12 +11,12 @@ class CacheCollectorTest extends TestCase
 {
     public function testStartAndEndMeasuringAddsMeasureAndCollectCountsIt(): void
     {
-        $collector = new CacheCollector();
+        $collector = new CacheCollector;
 
         $collector->startMeasuring();
         $collector->endMeasuring(
             'miss',
-            'hash-abc',
+            ['hash-abc'],
             ['tag1', 'tag2'],
             'select * from cars where id = ?',
             [1]
@@ -55,7 +55,7 @@ class CacheCollectorTest extends TestCase
 
     public function testGetNameAndWidgets(): void
     {
-        $collector = new CacheCollector();
+        $collector = new CacheCollector;
 
         $this->assertSame('lada', $collector->getName());
 

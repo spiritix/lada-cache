@@ -6,14 +6,14 @@ namespace Spiritix\LadaCache\Tests\Integration\Eloquent;
 
 use PHPUnit\Framework\Assert;
 use Spiritix\LadaCache\Tests\Concerns\MakesTestModels;
-use Spiritix\LadaCache\Tests\TestCase;
 use Spiritix\LadaCache\Tests\Database\Models\Car;
+use Spiritix\LadaCache\Tests\TestCase;
 
 class AggregatesTest extends TestCase
 {
     use MakesTestModels;
 
-    public function test_count_exists_and_doesnt_exist(): void
+    public function testCountExistsAndDoesntExist(): void
     {
         Assert::assertSame(0, Car::count());
         Assert::assertFalse(Car::exists());
@@ -27,7 +27,7 @@ class AggregatesTest extends TestCase
         Assert::assertFalse(Car::doesntExist());
     }
 
-    public function test_min_max_sum_avg_value_and_pluck(): void
+    public function testMinMaxSumAvgValueAndPluck(): void
     {
         $a = $this->makeCar(['name' => 'a', 'driver_id' => 5]);
         $b = $this->makeCar(['name' => 'b', 'driver_id' => 10]);

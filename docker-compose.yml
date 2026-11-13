@@ -1,66 +1,75 @@
 services:
   app:
-    build: .
-    image: lada-cache-app:latest
-    container_name: lada-cache-app
+    build:
+      context: .
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.4}
+    image: lada-cache-app:php${PHP_VERSION:-8.4}
     working_dir: /var/www
     volumes:
       - .:/var/www
     environment:
-      - REDIS_HOST=redis
+      REDIS_HOST: redis
+      LADA_FUZZ_SEED: ${LADA_FUZZ_SEED:-}
+      LADA_FUZZ_ITERATIONS: ${LADA_FUZZ_ITERATIONS:-}
     depends_on:
-      - redis
-    command: >
-      bash -lc "set -e; vendor/bin/phpunit --configuration phpunit.xml --coverage-clover coverage.xml"
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
     networks:
       - main
 
   redis:
     image: redis:7-alpine
-    container_name: lada-cache-redis
-    ports:
-      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
     networks:
       - main
 
   mysql:
-    image: mysql:8.0
-    container_name: lada-cache-mysql
+    image: mysql:8.4
     environment:
       MYSQL_DATABASE: test
       MYSQL_ROOT_PASSWORD: secret
-    ports:
-      - "3306:3306"
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -psecret --silent"]
-      interval: 5s
+      test: ["CMD-SHELL", "mysql -uroot -psecret -e 'select 1' test"]
+      interval: 2s
       timeout: 5s
-      retries: 20
+      retries: 60
     networks:
       - main
 
-  app-mysql:
-    build: .
-    image: lada-cache-app:latest
-    container_name: lada-cache-app-mysql
-    working_dir: /var/www
-    volumes:
-      - .:/var/www
+  mariadb:
+    image: mariadb:11.4
     environment:
-      - REDIS_HOST=redis
-      - DB_CONNECTION=mysql
-      - DB_HOST=mysql
-      - DB_PORT=3306
-      - DB_DATABASE=test
-      - DB_USERNAME=root
-      - DB_PASSWORD=secret
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    command: >
-      bash -lc "set -e; vendor/bin/phpunit --configuration phpunit.xml --coverage-clover coverage-mysql.xml"
+      MARIADB_DATABASE: test
+      MARIADB_ROOT_PASSWORD: secret
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    networks:
+      - main
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: test
+      POSTGRES_PASSWORD: secret
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d test"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
     networks:
       - main
 

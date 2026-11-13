@@ -36,8 +36,8 @@ class ComplexEloquentTest extends TestCase
 
         // Materials
         $mSteel = Material::factory()->create(['name' => 'steel']);
-        $mAl   = Material::factory()->create(['name' => 'aluminum']);
-        $mPl   = Material::factory()->create(['name' => 'plastic']);
+        $mAl = Material::factory()->create(['name' => 'aluminum']);
+        $mPl = Material::factory()->create(['name' => 'plastic']);
 
         // Pivot attach
         $c1->materials()->attach([$mSteel->id, $mAl->id]);
@@ -47,18 +47,18 @@ class ComplexEloquentTest extends TestCase
         return compact('d1', 'd2', 'c1', 'c2', 'c3', 'e1', 'e2', 'e3', 'mSteel', 'mAl', 'mPl');
     }
 
-    public function test_complex_eloquent_query_cached_and_invalidated(): void
+    public function testComplexEloquentQueryCachedAndInvalidated(): void
     {
         $data = $this->seedData();
 
         // Eloquent query with nested whereHas, withCount, eager loads, and subquery constraints
         $eloquent = Car::with([
-                'driver',
-                'engine',
-                'materials' => static function ($q): void {
-                    $q->whereIn('materials.name', ['steel', 'aluminum']);
-                },
-            ])
+            'driver',
+            'engine',
+            'materials' => static function ($q): void {
+                $q->whereIn('materials.name', ['steel', 'aluminum']);
+            },
+        ])
             ->withCount([
                 // Count only metal materials
                 'materials as metal_count' => static function ($q): void {

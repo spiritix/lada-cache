@@ -27,7 +27,7 @@ final readonly class Hasher
     public function getHash(): string
     {
         $identifier = implode('|', [
-            $this->reflector->getDatabase(),
+            $this->reflector->getDatabaseServer(),
             $this->reflector->getSql(),
             serialize($this->reflector->getParameters()),
         ]);

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Database;
 
 use Illuminate\Database\MySqlConnection as BaseMySqlConnection;
-use Spiritix\LadaCache\QueryHandler as LadaQueryHandler;
+use Spiritix\LadaCache\Services;
 
 /**
  * Lada Cache-aware MySQL connection.
@@ -13,8 +13,10 @@ use Spiritix\LadaCache\QueryHandler as LadaQueryHandler;
  * Extends Laravel's MySqlConnection to return the Lada QueryBuilder when active,
  * preserving all driver-specific behaviors (schema builder, insert IDs, etc.).
  */
-final class MySqlConnection extends BaseMySqlConnection
+final class MySqlConnection extends BaseMySqlConnection implements RunsBuilderStatements
 {
+    use InvalidatesRawStatements;
+
     /** {@inheritDoc} */
     public function query()
     {
@@ -22,8 +24,7 @@ final class MySqlConnection extends BaseMySqlConnection
             return parent::query();
         }
 
-        /** @var LadaQueryHandler $handler */
-        $handler = app('lada.handler');
+        $handler = Services::handler();
 
         return new QueryBuilder(
             $this,

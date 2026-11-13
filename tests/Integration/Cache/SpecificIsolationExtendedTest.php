@@ -16,7 +16,7 @@ final class SpecificIsolationExtendedTest extends TestCase
 {
     use CacheAssertions;
 
-    public function test_specific_update_on_one_table_does_not_invalidate_other_rows_or_tables(): void
+    public function testSpecificUpdateOnOneTableDoesNotInvalidateOtherRowsOrTables(): void
     {
         // Seed two cars and one driver row. We'll cache car rows; driver stays untouched but ensures multi-table scenario.
         DB::table('cars')->insert([
@@ -35,23 +35,20 @@ final class SpecificIsolationExtendedTest extends TestCase
         $k11 = (new Hasher($r11))->getHash();
         $t10 = (new Tagger($r10))->getTags();
         $t11 = (new Tagger($r11))->getTags();
+        $this->seedCache($k10, $t10, [['id' => 10, 'name' => 'A']]);
+        $this->seedCache($k11, $t11, [['id' => 11, 'name' => 'B']]);
 
-        /** @var \Spiritix\LadaCache\Cache $cache */
-        $cache = app('lada.cache');
-        $cache->set($k10, $t10, [['id' => 10, 'name' => 'A']]);
-        $cache->set($k11, $t11, [['id' => 11, 'name' => 'B']]);
-
-        $this->assertCacheHas($k10);
-        $this->assertCacheHas($k11);
+        $this->assertCacheHas($k10, $t10);
+        $this->assertCacheHas($k11, $t11);
 
         // Specific update on cars.id=11 must not evict cached row id=10
         DB::table('cars')->where('id', 11)->update(['name' => 'B2']);
 
-        $this->assertCacheHas($k10, 'Specific update should not evict other specific rows');
-        $this->assertCacheMissing($k11, 'Row 11 cache should be invalidated');
+        $this->assertCacheHas($k10, $t10, 'Specific update should not evict other specific rows');
+        $this->assertCacheMissing($k11, $t11, 'Row 11 cache should be invalidated');
     }
 
-    public function test_update_where_in_invalidates_only_listed_rows(): void
+    public function testUpdateWhereInInvalidatesOnlyListedRows(): void
     {
         DB::table('cars')->insert([
             ['id' => 20, 'name' => 'X', 'engine_id' => null, 'driver_id' => null],
@@ -62,28 +59,26 @@ final class SpecificIsolationExtendedTest extends TestCase
         $mk = function (int $id): array {
             $b = DB::table('cars')->where('id', $id);
             $r = new Reflector($b);
+
             return [(new Hasher($r))->getHash(), (new Tagger($r))->getTags()];
         };
 
         [$k20, $t20] = $mk(20);
         [$k21, $t21] = $mk(21);
         [$k22, $t22] = $mk(22);
+        $this->seedCache($k20, $t20, [['id' => 20, 'name' => 'X']]);
+        $this->seedCache($k21, $t21, [['id' => 21, 'name' => 'Y']]);
+        $this->seedCache($k22, $t22, [['id' => 22, 'name' => 'Z']]);
 
-        /** @var \Spiritix\LadaCache\Cache $cache */
-        $cache = app('lada.cache');
-        $cache->set($k20, $t20, [['id' => 20, 'name' => 'X']]);
-        $cache->set($k21, $t21, [['id' => 21, 'name' => 'Y']]);
-        $cache->set($k22, $t22, [['id' => 22, 'name' => 'Z']]);
-
-        $this->assertCacheHas($k20);
-        $this->assertCacheHas($k21);
-        $this->assertCacheHas($k22);
+        $this->assertCacheHas($k20, $t20);
+        $this->assertCacheHas($k21, $t21);
+        $this->assertCacheHas($k22, $t22);
 
         DB::table('cars')->whereIn('id', [20, 22])->update(['name' => 'UPD']);
 
-        $this->assertCacheMissing($k20);
-        $this->assertCacheHas($k21);
-        $this->assertCacheMissing($k22);
+        $this->assertCacheMissing($k20, $t20);
+        $this->assertCacheHas($k21, $t21);
+        $this->assertCacheMissing($k22, $t22);
 
         // Verify DB reflect changes for sanity
         Assert::assertSame('Y', DB::table('cars')->where('id', 21)->value('name'));

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Integration\Cache;
@@ -21,6 +22,33 @@ class InvalidationMatrixTest extends TestCase
         // Read again → should reflect new count (invalidated and re-cached)
         $after = DB::table('cars')->where('name', 'C')->count();
         $this->assertSame($before + 1, $after);
+    }
+
+    public function testInsertGetIdInvalidatesCachedMissingRow(): void
+    {
+        $missingId = ((int) DB::table('cars')->max('id')) + 1;
+
+        $this->assertNull(DB::table('cars')->where('id', $missingId)->first());
+
+        $id = DB::table('cars')->insertGetId([
+            'name' => 'Created after cached miss',
+            'engine_id' => null,
+            'driver_id' => null,
+        ]);
+
+        $this->assertSame($missingId, (int) $id);
+        $this->assertNotNull(DB::table('cars')->where('id', $id)->first());
+    }
+
+    public function testInsertWithExplicitIdInvalidatesCachedMissingRow(): void
+    {
+        $missingId = ((int) DB::table('cars')->max('id')) + 1;
+
+        $this->assertNull(DB::table('cars')->where('id', $missingId)->first());
+
+        DB::table('cars')->insert(['id' => $missingId, 'name' => 'Inserted after cached miss', 'engine_id' => null, 'driver_id' => null]);
+
+        $this->assertNotNull(DB::table('cars')->where('id', $missingId)->first());
     }
 
     public function testUpdateInvalidatesCachedSelect(): void
@@ -77,7 +105,7 @@ class InvalidationMatrixTest extends TestCase
 
         // Mutate: upsert should update existing row
         DB::table('cars')->upsert([
-            ['id' => 1006, 'name' => 'U2']
+            ['id' => 1006, 'name' => 'U2'],
         ], ['id'], ['name']);
 
         $second = DB::table('cars')->where('id', 1006)->value('name');

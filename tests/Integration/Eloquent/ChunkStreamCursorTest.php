@@ -20,7 +20,7 @@ class ChunkStreamCursorTest extends TestCase
         }
     }
 
-    public function test_chunk(): void
+    public function testChunk(): void
     {
         $this->seedCars(7);
 
@@ -36,7 +36,7 @@ class ChunkStreamCursorTest extends TestCase
         Assert::assertSame('car-7', $seen[6]);
     }
 
-    public function test_chunk_by_id(): void
+    public function testChunkById(): void
     {
         $this->seedCars(9);
 
@@ -51,7 +51,7 @@ class ChunkStreamCursorTest extends TestCase
         Assert::assertSame(range(1, 9), $ids);
     }
 
-    public function test_cursor(): void
+    public function testCursor(): void
     {
         $this->seedCars(5);
 
@@ -63,4 +63,3 @@ class ChunkStreamCursorTest extends TestCase
         Assert::assertSame(['car-1', 'car-2', 'car-3', 'car-4', 'car-5'], $names);
     }
 }
-

@@ -9,11 +9,11 @@ use Spiritix\LadaCache\Tests\Database\Models\Engine;
 
 class EngineFactory extends Factory
 {
-    /** @var class-string<\Spiritix\LadaCache\Tests\Database\Models\Engine> */
+    /** @var class-string<Engine> */
     protected $model = Engine::class;
 
     /**
-     * @inheritDoc
+     * {@inheritDoc}
      */
     public function definition(): array
     {

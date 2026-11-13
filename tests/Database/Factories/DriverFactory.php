@@ -9,11 +9,11 @@ use Spiritix\LadaCache\Tests\Database\Models\Driver;
 
 class DriverFactory extends Factory
 {
-    /** @var class-string<\Spiritix\LadaCache\Tests\Database\Models\Driver> */
+    /** @var class-string<Driver> */
     protected $model = Driver::class;
 
     /**
-     * @inheritDoc
+     * {@inheritDoc}
      */
     public function definition(): array
     {

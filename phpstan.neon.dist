@@ -1,0 +1,7 @@
+parameters:
+    level: max
+    paths:
+        - src
+        - tests/Database/Models/License.php
+    stubFiles:
+        - stubs/JoinClause.stub

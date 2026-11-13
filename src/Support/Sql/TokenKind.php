@@ -1,0 +1,117 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Spiritix\LadaCache\Support\Sql;
+
+/**
+ * Ported from sqlparser-rs src/tokenizer.rs (Apache-2.0), commit 8a176d9: the variants of `Token`.
+ */
+enum TokenKind
+{
+    case Word;
+    case Number;
+    case Char;
+    case SingleQuotedString;
+    case DoubleQuotedString;
+    case TripleSingleQuotedString;
+    case TripleDoubleQuotedString;
+    case DollarQuotedString;
+    case SingleQuotedByteStringLiteral;
+    case DoubleQuotedByteStringLiteral;
+    case TripleSingleQuotedByteStringLiteral;
+    case TripleDoubleQuotedByteStringLiteral;
+    case SingleQuotedRawStringLiteral;
+    case DoubleQuotedRawStringLiteral;
+    case TripleSingleQuotedRawStringLiteral;
+    case TripleDoubleQuotedRawStringLiteral;
+    case NationalStringLiteral;
+    case QuoteDelimitedStringLiteral;
+    case NationalQuoteDelimitedStringLiteral;
+    case EscapedStringLiteral;
+    case UnicodeStringLiteral;
+    case HexStringLiteral;
+    case Comma;
+    case Whitespace;
+    case DoubleEq;
+    case Eq;
+    case Neq;
+    case Lt;
+    case Gt;
+    case LtEq;
+    case GtEq;
+    case Spaceship;
+    case Plus;
+    case Minus;
+    case Mul;
+    case Div;
+    case DuckIntDiv;
+    case Mod;
+    case StringConcat;
+    case LParen;
+    case RParen;
+    case Period;
+    case Colon;
+    case DoubleColon;
+    case Assignment;
+    case SemiColon;
+    case Backslash;
+    case CopyData;
+    case LBracket;
+    case RBracket;
+    case Ampersand;
+    case Pipe;
+    case Caret;
+    case LBrace;
+    case RBrace;
+    case RArrow;
+    case Sharp;
+    case DoubleSharp;
+    case Tilde;
+    case TildeAsterisk;
+    case ExclamationMarkTilde;
+    case ExclamationMarkTildeAsterisk;
+    case DoubleTilde;
+    case DoubleTildeAsterisk;
+    case ExclamationMarkDoubleTilde;
+    case ExclamationMarkDoubleTildeAsterisk;
+    case ShiftLeft;
+    case ShiftRight;
+    case Overlap;
+    case ExclamationMark;
+    case DoubleExclamationMark;
+    case AtSign;
+    case CaretAt;
+    case PGSquareRoot;
+    case PGCubeRoot;
+    case Placeholder;
+    case Arrow;
+    case LongArrow;
+    case HashArrow;
+    case AtDashAt;
+    case QuestionMarkDash;
+    case AmpersandLeftAngleBracket;
+    case AmpersandRightAngleBracket;
+    case AmpersandLeftAngleBracketVerticalBar;
+    case VerticalBarAmpersandRightAngleBracket;
+    case TwoWayArrow;
+    case LeftAngleBracketCaret;
+    case RightAngleBracketCaret;
+    case QuestionMarkSharp;
+    case QuestionMarkDashVerticalBar;
+    case QuestionMarkDoubleVerticalBar;
+    case TildeEqual;
+    case ShiftLeftVerticalBar;
+    case VerticalBarShiftRight;
+    case VerticalBarRightAngleBracket;
+    case HashLongArrow;
+    case AtArrow;
+    case ArrowAt;
+    case HashMinus;
+    case AtQuestion;
+    case AtAt;
+    case Question;
+    case QuestionAnd;
+    case QuestionPipe;
+    case CustomBinaryOperator;
+}
