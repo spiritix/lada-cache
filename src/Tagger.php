@@ -54,6 +54,10 @@ final readonly class Tagger
 
         /** @var array<string, array<int, scalar>> $rows */
         $rows = $this->reflector->getRows();
+        if ($this->reflector->getType() === Reflector::QUERY_TYPE_SELECT) {
+            // The outer wheres do not scope the rows a subquery reads from the same table.
+            $rows = array_diff_key($rows, array_flip($this->reflector->getSubQueryTables()));
+        }
         $tags = $this->getTableTags($tables, $rows);
 
         foreach ($tables as $table) {

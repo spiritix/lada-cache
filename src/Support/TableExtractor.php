@@ -4,14 +4,16 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Support;
 
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as BaseBuilder;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Query\JoinClause;
+use Spiritix\LadaCache\Database\HasSubQueries;
 
 /**
  * Utility to extract table names (as strings) from a Laravel Query Builder.
  *
- * Handles FROM, JOINs, EXISTS subqueries, and UNION branches.
+ * Handles FROM, JOINs, where subqueries, compiled subqueries, and UNION branches.
  */
 final class TableExtractor
 {
@@ -26,8 +28,6 @@ final class TableExtractor
         $from = $builder->from;
         if (is_string($from)) {
             $tables[] = SqlAliasParser::stripAlias($from);
-        } elseif ($from instanceof BaseBuilder) {
-            $tables = array_merge($tables, self::extractTables($from));
         } elseif ($from instanceof Expression) {
             $expr = $builder->getGrammar()->getValue($from);
             $alias = SqlAliasParser::extractAliasFromExpression($expr);
@@ -55,25 +55,54 @@ final class TableExtractor
             }
         }
 
-        // WHEREs: dive into subqueries (Exists/NotExists and nested where queries)
-        foreach ($builder->wheres ?? [] as $where) {
-            $type = $where['type'] ?? null;
-            $query = $where['query'] ?? null;
-            if ($query instanceof BaseBuilder) {
-                $tables = array_merge($tables, self::extractTables($query));
-            } elseif ($type === 'Exists' || $type === 'NotExists') {
-                if ($query instanceof BaseBuilder) {
-                    $tables = array_merge($tables, self::extractTables($query));
-                }
-            }
-        }
-
         // UNION branches
         foreach (($builder->unions ?? []) as $union) {
             $sub = $union['query'] ?? null;
+            if ($sub instanceof EloquentBuilder) {
+                $sub = $sub->toBase();
+            }
             if ($sub instanceof BaseBuilder) {
                 $tables = array_merge($tables, self::extractTables($sub));
             }
+        }
+
+        return array_values(array_unique([...$tables, ...self::extractSubQueryTables($builder)]));
+    }
+
+    /**
+     * Tables read by subqueries, whose rows are not scoped by the outer query's wheres.
+     *
+     * @return array<int, string>
+     */
+    public static function extractSubQueryTables(BaseBuilder $builder): array
+    {
+        $subQueries = $builder instanceof HasSubQueries ? $builder->getSubQueries() : [];
+        if ($builder->from instanceof BaseBuilder) {
+            $subQueries[] = $builder->from;
+        }
+
+        $tables = [];
+        foreach ($builder->wheres ?? [] as $where) {
+            $query = $where['query'] ?? null;
+            if (! ($query instanceof BaseBuilder)) {
+                continue;
+            }
+            // Nested where groups read the outer tables; only their own subqueries count.
+            if (($where['type'] ?? null) === 'Nested') {
+                $tables = array_merge($tables, self::extractSubQueryTables($query));
+            } else {
+                $subQueries[] = $query;
+            }
+        }
+
+        foreach ($builder->joins ?? [] as $join) {
+            if ($join instanceof JoinClause) {
+                $tables = array_merge($tables, self::extractSubQueryTables($join));
+            }
+        }
+
+        foreach ($subQueries as $subQuery) {
+            $tables = array_merge($tables, self::extractTables($subQuery));
         }
 
         return array_values(array_unique($tables));

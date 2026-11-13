@@ -17,8 +17,10 @@ use Spiritix\LadaCache\Reflector;
  *
  * Extends the base query builder to provide automatic caching and invalidation.
  */
-class QueryBuilder extends Builder
+class QueryBuilder extends Builder implements HasSubQueries
 {
+    use TracksSubQueries;
+
     public const string DEFAULT_PRIMARY_KEY_NAME = 'id';
 
     private readonly QueryHandler $handler;
@@ -123,27 +125,6 @@ class QueryBuilder extends Builder
                     ! $this->useWritePdo
                 );
             });
-    }
-
-    /** {@inheritDoc} */
-    public function selectSub($query, $as)
-    {
-        // Only collect tags if the subquery is our own builder instance.
-        if ($query instanceof self) {
-            $this->handler->setBuilder($query)->collectSubQueryTags();
-        }
-
-        return parent::selectSub($query, $as);
-    }
-
-    /** {@inheritDoc} */
-    public function joinSub($query, $as, $first, $operator = null, $second = null, $type = 'inner', $where = false)
-    {
-        if ($query instanceof self) {
-            $this->handler->setBuilder($query)->collectSubQueryTags();
-        }
-
-        return parent::joinSub($query, $as, $first, $operator, $second, $type, $where);
     }
 
     /** {@inheritDoc} */

@@ -26,9 +26,6 @@ final class QueryHandler
 
     private ?CacheCollector $collector = null;
 
-    /** @var string[] */
-    private array $subQueryTags = [];
-
     /** @var array<string, array<int, string>> */
     private array $queuedInvalidations = [];
 
@@ -42,31 +39,6 @@ final class QueryHandler
         $this->builder = $builder;
 
         return $this;
-    }
-
-    public function collectSubQueryTags(): void
-    {
-        if ($this->builder === null) {
-            return;
-        }
-
-        try {
-            $reflector = new Reflector($this->builder);
-            $manager = new Manager($reflector);
-
-            if (! $manager->shouldCache()) {
-                return;
-            }
-
-            $tagger = new Tagger($reflector);
-            $this->subQueryTags = array_values(array_unique([
-                ...$this->subQueryTags,
-                ...$tagger->getTags(),
-            ]));
-        } catch (Throwable) {
-            // On any reflection/type error, skip collecting subquery tags.
-            return;
-        }
     }
 
     /**
@@ -130,9 +102,6 @@ final class QueryHandler
     {
         $this->startCollector();
 
-        $subQueryTags = $this->subQueryTags;
-        $this->subQueryTags = [];
-
         if ($this->builder === null) {
             return $queryClosure();
         }
@@ -149,7 +118,7 @@ final class QueryHandler
             $tagger = new Tagger($reflector);
 
             $key = $hasher->getHash();
-            $tags = array_values(array_unique([...$tagger->getTags(), ...$subQueryTags]));
+            $tags = $tagger->getTags();
 
             $cached = $this->cache->has($key) ? $this->cache->get($key) : null;
             $action = $cached === null ? 'Miss' : 'Hit';

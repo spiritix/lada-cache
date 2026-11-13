@@ -52,6 +52,32 @@ class TaggerTest extends TestCase
         $this->assertContains($this->dbTagPrefix() . ':table_specific:cars:row:2', $tags);
     }
 
+    public function testNestedWhereGroupKeepsRowScope(): void
+    {
+        config(['lada-cache.consider_rows' => true]);
+
+        $b = DB::table('cars')->where('id', 1)->where(function ($q): void {
+            $q->where('name', 'a')->orWhere('name', 'b');
+        });
+        $tags = (new Tagger(new Reflector($b)))->getTags();
+
+        $this->assertContains($this->dbTagPrefix() . ':table_specific:cars:row:1', $tags);
+        $this->assertNotContains($this->dbTagPrefix() . ':table_unspecific:cars', $tags);
+    }
+
+    public function testSubQueryOnTheSameTableDropsRowScope(): void
+    {
+        config(['lada-cache.consider_rows' => true]);
+
+        $b = DB::table('cars')->where('id', 1)->whereExists(function ($q): void {
+            $q->from('cars as other')->whereColumn('other.driver_id', 'cars.driver_id');
+        });
+        $tags = (new Tagger(new Reflector($b)))->getTags();
+
+        $this->assertContains($this->dbTagPrefix() . ':table_unspecific:cars', $tags);
+        $this->assertNotContains($this->dbTagPrefix() . ':table_specific:cars', $tags);
+    }
+
     public function testUpdateWithoutRowsProducesBothTableTags(): void
     {
         config(['lada-cache.consider_rows' => true]);
