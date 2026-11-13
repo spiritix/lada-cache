@@ -21,6 +21,7 @@ use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Database\SqliteConnection as LadaSqliteConnection;
 use Spiritix\LadaCache\Database\SqlServerConnection as LadaSqlServerConnection;
 use Spiritix\LadaCache\Debug\CacheCollector;
+use Spiritix\LadaCache\Support\FrameworkTables;
 
 /**
  * Lada Cache service provider for Laravel.
@@ -56,6 +57,12 @@ final class LadaCacheServiceProvider extends ServiceProvider
         if (! (bool) config('lada-cache.active', true)) {
             return;
         }
+
+        // Never cache tables Laravel writes on nearly every request (database sessions, cache, queues).
+        config(['lada-cache.exclude_tables' => array_values(array_unique([
+            ...(array) config('lada-cache.exclude_tables', []),
+            ...FrameworkTables::volatile(),
+        ]))]);
 
         if (config('lada-cache.enable_debugbar') && $this->app->bound('debugbar')) {
             $this->registerDebugbarCollector();

@@ -124,6 +124,11 @@ return [
     | If a query touches any table listed here, it will not be cached.
     | This is the inverse of "include_tables".
     |
+    | Tables Laravel writes on nearly every request when sessions, the cache
+    | or queues use the database (sessions, cache, cache_locks, jobs,
+    | failed_jobs, job_batches) are added automatically from their
+    | configuration.
+    |
     */
     'exclude_tables' => [],
 

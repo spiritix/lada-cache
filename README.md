@@ -125,7 +125,7 @@ After publishing the configuration file (see [Installation](#installation)), you
 This file allows you to fine-tune cache behavior, such as:
 - Enabling or disabling Lada Cache globally  
 - Setting key prefixes and expiration times  
-- Defining which tables to include or exclude from caching  
+- Defining which tables to include or exclude from caching (tables Laravel uses for database-backed sessions, cache and queues are excluded automatically)  
 - Enabling Debugbar integration for cache inspection  
 
 The default configuration is already optimized for most Laravel applications, so you typically won’t need to modify it unless you want more granular control.

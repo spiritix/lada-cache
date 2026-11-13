@@ -4,6 +4,8 @@
 ### Added
 - Added `withoutCache()` for per-query bypass of read caching and write invalidation (see https://github.com/spiritix/lada-cache/pull/151)
 - Added `lada-cache.max_entry_size` (`LADA_CACHE_MAX_ENTRY_SIZE`, default 8 MB): larger results are returned but not cached
+### Changed
+- Tables Laravel writes on nearly every request when sessions, cache or queues use the database are excluded from caching automatically
 ### Fixed
 - Cached results are decoded only to arrays of `stdClass` rows; a tampered Redis entry can no longer instantiate arbitrary classes
 - Queries calling time-, randomness- or session-dependent SQL functions such as `NOW()`, `CURRENT_TIMESTAMP` or `RAND()` are no longer cached and served stale
