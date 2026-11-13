@@ -87,4 +87,19 @@ class QueryHandlerTest extends TestCase
             $this->assertSame(1, (int) $this->redis->sismember($this->redis->prefix($tag), $this->redis->prefix($key)));
         }
     }
+
+    public function testCacheQueryRunsTheQueryAndOverwritesEntriesThatAreNotResults(): void
+    {
+        $handler = new QueryHandler($this->cache, $this->invalidator);
+        $builder = DB::table('cars');
+        $handler->setBuilder($builder);
+
+        $key = (new Hasher(new Reflector($builder)))->getHash();
+        $this->redis->set($this->redis->prefix($key), serialize(new \ArrayObject([['id' => 99]])));
+
+        $result = $handler->cacheQuery(static fn (): array => [['id' => 1]]);
+
+        $this->assertSame([['id' => 1]], $result);
+        $this->assertSame([['id' => 1]], $this->cache->get($key));
+    }
 }

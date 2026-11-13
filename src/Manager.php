@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use Illuminate\Support\Facades\Config;
+use Spiritix\LadaCache\Support\NonDeterministicSql;
 
 /**
  * Manager decides whether the current query, as reflected by a `Reflector`, should be cached.
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\Config;
  * - This class is immutable and declared as readonly; configuration values are captured at construction.
  * - Inclusion has precedence: when `lada-cache.include_tables` is non-empty, all referenced tables must be included.
  * - Otherwise an exclusion list `lada-cache.exclude_tables` is honored.
+ * - Queries calling time-, randomness- or session-dependent SQL functions are never cached.
  */
 final readonly class Manager
 {
@@ -39,7 +41,9 @@ final readonly class Manager
             return false;
         }
 
-        return $this->cacheActive && $this->tablesCacheable();
+        return $this->cacheActive
+            && $this->tablesCacheable()
+            && ! NonDeterministicSql::isNonDeterministic($this->reflector->getSql());
     }
 
     public function shouldInvalidate(): bool

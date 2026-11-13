@@ -66,7 +66,7 @@ The result is **automatic, consistent caching** across all database operations.
 
 Real-world gains range from **5% to 95%**, depending on how many and how complex your queries are. Typical Laravel apps see **~10–30%** faster responses and a **significant drop in DB load**.
 
-- Large payloads still cost to move/encode; e.g. a query returning ~500MB won’t get faster from caching alone.
+- Large payloads still cost to move and encode, so results larger than `lada-cache.max_entry_size` (`LADA_CACHE_MAX_ENTRY_SIZE`, 8 MB by default) are returned but not cached.
 - The more redundant and complex the queries per request, the bigger the benefit.
 - Reduced database traffic can translate to lower infra cost and easier horizontal scaling.
 
@@ -125,7 +125,7 @@ After publishing the configuration file (see [Installation](#installation)), you
 This file allows you to fine-tune cache behavior, such as:
 - Enabling or disabling Lada Cache globally  
 - Setting key prefixes and expiration times  
-- Defining which tables to include or exclude from caching  
+- Defining which tables to include or exclude from caching (tables Laravel uses for database-backed sessions, cache and queues are excluded automatically)  
 - Enabling Debugbar integration for cache inspection  
 
 The default configuration is already optimized for most Laravel applications, so you typically won’t need to modify it unless you want more granular control.

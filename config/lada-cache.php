@@ -67,6 +67,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Maximum Entry Size
+    |--------------------------------------------------------------------------
+    |
+    | Results whose encoded size exceeds this many bytes are returned but not
+    | cached, since moving them through Redis costs about as much as running
+    | the query again and blocks Redis while it happens. Set to 0 for no limit.
+    |
+    */
+    'max_entry_size' => env('LADA_CACHE_MAX_ENTRY_SIZE', 8 * 1024 * 1024),
+
+    /*
+    |--------------------------------------------------------------------------
     | Cache Granularity
     |--------------------------------------------------------------------------
     |
@@ -111,6 +123,11 @@ return [
     | Use this array if you want to cache all tables *except* specific ones.
     | If a query touches any table listed here, it will not be cached.
     | This is the inverse of "include_tables".
+    |
+    | Tables Laravel writes on nearly every request when sessions, the cache
+    | or queues use the database (sessions, cache, cache_locks, jobs,
+    | failed_jobs, job_batches) are added automatically from their
+    | configuration.
     |
     */
     'exclude_tables' => [],
