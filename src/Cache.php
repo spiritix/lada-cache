@@ -36,10 +36,14 @@ final class Cache
         return (bool) $this->redis->exists($this->redis->prefix($key));
     }
 
-    public function set(string $key, array $tags, mixed $data): void
+    /**
+     * @param  array<string>  $tags
+     * @param  array<mixed>  $rows
+     */
+    public function set(string $key, array $tags, array $rows): void
     {
         $key = $this->redis->prefix($key);
-        $value = $this->encoder->encode($data);
+        $value = $this->encoder->encode($rows);
 
         if ($this->expirationTime > 0) {
             $this->redis->set($key, $value, 'EX', $this->expirationTime);
@@ -52,7 +56,12 @@ final class Cache
         }
     }
 
-    public function get(string $key): mixed
+    /**
+     * Returns the cached rows, or null when the entry is missing or not a valid result.
+     *
+     * @return array<mixed>|null
+     */
+    public function get(string $key): ?array
     {
         $encoded = $this->redis->get($this->redis->prefix($key));
 

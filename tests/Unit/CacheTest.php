@@ -71,7 +71,7 @@ class CacheTest extends TestCase
         $prefixedKey = 'p:k2';
         $tags = ['t'];
         $prefixedTag = 'p:t';
-        $value = 'string-value';
+        $value = [['id' => 1, 'name' => 'car']];
         $encoded = $this->encoder->encode($value);
 
         $this->assertSame($prefixedKey, $this->redis->prefix($key));
@@ -102,7 +102,7 @@ class CacheTest extends TestCase
     {
         $key = 'payload';
         $prefixed = 'p:payload';
-        $original = ['x' => 10, 'y' => [1, 2]];
+        $original = [['x' => 10, 'y' => 'z'], ['x' => 11, 'y' => null]];
         $encoded = $this->encoder->encode($original);
 
         $this->assertSame($prefixed, $this->redis->prefix($key));
@@ -110,6 +110,16 @@ class CacheTest extends TestCase
         $this->redis->set($prefixed, $encoded);
         $cache = new Cache($this->redis, $this->encoder, 0);
         $this->assertSame($original, $cache->get($key));
+    }
+
+    public function testGetReturnsNullForEntriesThatAreNotResults(): void
+    {
+        $key = 'tampered';
+        $prefixed = 'p:tampered';
+
+        $this->redis->set($prefixed, serialize(new \ArrayObject([1])));
+        $cache = new Cache($this->redis, $this->encoder, 0);
+        $this->assertNull($cache->get($key));
     }
 
     public function testFlushScansAndDeletesAllPrefixedKeys(): void

@@ -29,8 +29,8 @@ class FlushWithConnectionPrefixTest extends TestCase
         $encoder = new Encoder();
         $cache = new Cache($redis, $encoder, 0);
 
-        $cache->set('k1', [], '1');
-        $cache->set('k2', [], '2');
+        $cache->set('k1', [], [['id' => 1]]);
+        $cache->set('k2', [], [['id' => 2]]);
 
         $keysBefore = RedisFacade::connection('cache')->keys('*lada:*');
         $this->assertGreaterThanOrEqual(2, count($keysBefore));

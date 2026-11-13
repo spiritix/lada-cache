@@ -3,6 +3,8 @@
 ## [Unreleased]
 ### Added
 - Added `withoutCache()` for per-query bypass of read caching and write invalidation (see https://github.com/spiritix/lada-cache/pull/151)
+### Fixed
+- Cached results are decoded only to arrays of `stdClass` rows; a tampered Redis entry can no longer instantiate arbitrary classes
 
 ## [6.1.1] - 2026-05-22
 ### Fixed
