@@ -105,8 +105,9 @@ class QueryBuilder extends Builder
     {
         // Do not cache queries that use pessimistic locks (lockForUpdate/sharedLock).
         // Laravel stores lock intent in $this->lock; when present we should always hit the DB.
-        // Also bypass when the caller opted out via withoutCache().
-        if ($this->lock !== null || $this->cacheBypassed) {
+        // Also bypass when the caller opted out via withoutCache(), and for custom PDO
+        // fetch modes (fetchUsing()), whose results differ from the cached default mode.
+        if ($this->lock !== null || $this->cacheBypassed || $this->fetchUsing !== []) {
             return parent::runSelect();
         }
 
