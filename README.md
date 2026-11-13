@@ -278,42 +278,34 @@ Counters are kept in one Redis hash per time bucket (`LADA_CACHE_METRICS_BUCKET`
 
 Pull requests and issue reports are welcome!
 
-- Format with **Pint** (`just format`) and keep `just lint analyse` clean  
+- Format with **Pint** (`make format`) and keep `make lint analyse` clean  
 - Add tests for all new features  
 - Submit via feature branches (no direct PRs from `master`)
 
-### Development environment
-
-The PHP version, its extensions (`redis`, `apcu`, `pcntl`, `pdo_mysql`, `pdo_pgsql`, `pdo_sqlite`) and Composer come from the Nix flake, so nothing needs installing by hand:
-
-```bash
-nix develop        # or direnv allow, the repository has an .envrc
-just               # list the recipes
-```
-
-The databases run as containers behind `just services`; they are published on ports 13306 (MySQL), 15432 (PostgreSQL) and 16379 (Redis), so they never collide with a database already running on the machine. `just env` prints the exports needed to run PHPUnit by hand.
-
 ### Running the tests
 
-The suites run against SQLite, MySQL 8.4 and PostgreSQL 17, with both Redis clients:
+The suites run in Docker against SQLite, MySQL 8.4, MariaDB 11.4 and PostgreSQL 17, with both Redis clients. The image carries PHP 8.4 (`PHP_VERSION=8.3` builds the other supported version) with the extensions the suites need (`redis`, `apcu`, `pcntl`, `pdo_mysql`, `pdo_pgsql`, `pdo_sqlite`); the databases and Redis are reached on the compose network only, so nothing is published on the host:
 
 ```bash
-just test                 # SQLite with phpredis
-just test-mysql           # MySQL
-just test-pgsql           # PostgreSQL
-just test-matrix          # every database with phpredis and Predis
-just test --filter=RowKeysTest
-LADA_FUZZ_ITERATIONS=5000 just fuzz
-just concurrency          # several processes against MySQL and PostgreSQL
-just rollout              # hosts of 5.x and this version side by side, like a rolling deploy
-just lint analyse         # Pint and PHPStan
+make test                 # SQLite with phpredis
+make test-mysql           # MySQL
+make test-mariadb         # MariaDB
+make test-pgsql           # PostgreSQL
+make test-matrix          # every database with phpredis and Predis
+make test ARGS=--filter=RowKeysTest
+make test-mysql REDIS_CLIENT=predis
+make fuzz LADA_FUZZ_ITERATIONS=5000
+make concurrency          # several processes against MySQL and PostgreSQL
+make rollout              # hosts of 5.x and this version side by side, like a rolling deploy
+make lint analyse         # Pint and PHPStan
+make down                 # stop the services and delete their volumes
 ```
 
 - **Unit** and **Integration** cover behaviour case by case.
 - **Fuzz** runs a seeded random workload of reads, writes, raw statements, transactions, foreign key cascades, cache flushes, an emptied Redis and evicted keys, and compares every cached read with the same query run without the cache. A failure prints the seed and the operations that led to it; rerun with `LADA_FUZZ_SEED=<seed>`.
-- **Benchmark** (`just bench`) reports reads per second with and without the cache, and the Redis commands a cached read costs.
+- **Benchmark** (`make bench`) reports reads per second with and without the cache, and the Redis commands a cached read costs.
 - **Concurrency** forks worker processes, like pods sharing one database and Redis, runs the same workload in all of them at once, and checks that every cached read matches the database once they finish.
-- **Rollout** (`just rollout`) runs hosts of 5.x, installed from `tests/Rollout/legacy`, beside hosts of this version as separate processes on MySQL and PostgreSQL. It covers writes in both directions, transactions, migrations, an emptied Redis, rolling back and turning legacy invalidation off, and runs long-lived workers of both versions concurrently before each checks its own cached reads against the database.
+- **Rollout** (`make rollout`) runs hosts of 5.x, installed from `tests/Rollout/legacy`, beside hosts of this version as separate processes on MySQL and PostgreSQL. It covers writes in both directions, transactions, migrations, an emptied Redis, rolling back and turning legacy invalidation off, and runs long-lived workers of both versions concurrently before each checks its own cached reads against the database.
 
 ## License
 

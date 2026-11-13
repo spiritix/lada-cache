@@ -11,8 +11,6 @@ composer.phar
 
 # Build artifacts
 /build/
-/result
-/result-*
 
 # PHPUnit cache
 .phpunit.result.cache

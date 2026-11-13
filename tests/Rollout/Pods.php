@@ -99,7 +99,7 @@ final class Pods
     }
 
     /**
-     * The same defaults TestCase uses, so the suites share the databases `just services` starts.
+     * The same defaults TestCase uses, so the suites share the databases docker-compose.yml starts.
      *
      * @return array<string, string>
      */

@@ -1,8 +1,31 @@
 services:
+  app:
+    build:
+      context: .
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.4}
+    image: lada-cache-app:php${PHP_VERSION:-8.4}
+    working_dir: /var/www
+    volumes:
+      - .:/var/www
+    environment:
+      REDIS_HOST: redis
+      LADA_FUZZ_SEED: ${LADA_FUZZ_SEED:-}
+      LADA_FUZZ_ITERATIONS: ${LADA_FUZZ_ITERATIONS:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - main
+
   redis:
     image: redis:7-alpine
-    ports:
-      - "16379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 2s
@@ -13,8 +36,6 @@ services:
 
   mysql:
     image: mysql:8.4
-    ports:
-      - "13306:3306"
     environment:
       MYSQL_DATABASE: test
       MYSQL_ROOT_PASSWORD: secret
@@ -28,8 +49,6 @@ services:
 
   mariadb:
     image: mariadb:11.4
-    ports:
-      - "13307:3306"
     environment:
       MARIADB_DATABASE: test
       MARIADB_ROOT_PASSWORD: secret
@@ -43,8 +62,6 @@ services:
 
   postgres:
     image: postgres:17-alpine
-    ports:
-      - "15432:5432"
     environment:
       POSTGRES_DB: test
       POSTGRES_PASSWORD: secret
