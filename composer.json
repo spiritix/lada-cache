@@ -35,7 +35,7 @@
         "phpstan/phpstan": "^2.1"
     },
     "suggest": {
-        "barryvdh/laravel-debugbar": "Provides debug information about the cache"
+        "fruitcake/laravel-debugbar": "Provides debug information about the cache"
     },
     "autoload": {
         "psr-4": {
