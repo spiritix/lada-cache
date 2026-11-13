@@ -224,6 +224,16 @@ class QueryBuilder extends Builder
     }
 
     /** {@inheritDoc} */
+    public function insertOrIgnoreReturning(array $values, array $returning = ['*'], array|string|null $uniqueBy = null)
+    {
+        $result = parent::insertOrIgnoreReturning($values, $returning, $uniqueBy);
+        // Insert-or-ignore may still insert rows; invalidate as INSERT.
+        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, $values);
+
+        return $result;
+    }
+
+    /** {@inheritDoc} */
     public function updateOrInsert(array $attributes, callable|array $values = [])
     {
         $result = parent::updateOrInsert($attributes, $values);

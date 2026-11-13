@@ -32,4 +32,17 @@ class WriteMethodsTest extends TestCase
 
         $this->assertSame('updated', DB::table('cars')->where('id', 1)->value('name'));
     }
+
+    public function testInsertOrIgnoreReturningInvalidates(): void
+    {
+        $this->assertSame(0, DB::table('cars')->count());
+
+        $inserted = DB::table('cars')->insertOrIgnoreReturning(
+            ['id' => 1, 'name' => 'returned', 'engine_id' => null, 'driver_id' => null],
+            ['id', 'name'],
+        );
+
+        $this->assertSame('returned', $inserted->first()->name);
+        $this->assertSame(1, DB::table('cars')->count());
+    }
 }
