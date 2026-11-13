@@ -4,6 +4,9 @@
 ### Added
 - Added `withoutCache()` for per-query bypass of read caching and write invalidation (see https://github.com/spiritix/lada-cache/pull/151)
 
+### Fixed
+- Fixed nested transaction commits invalidating before the outermost commit, and savepoint rollbacks discarding the invalidations of the enclosing transaction
+
 ## [6.1.1] - 2026-05-22
 ### Fixed
 - Fixed cache key collision for deferred query mutations (see https://github.com/spiritix/lada-cache/pull/150)

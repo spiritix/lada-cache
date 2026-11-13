@@ -35,10 +35,6 @@ final class TransactionInvalidationTest extends TestCase
         $this->assertCacheHas($k);
         DB::commit();
 
-        // After commit, ensure queued invalidations are flushed
-        /** @var \Spiritix\LadaCache\QueryHandler $handler */
-        $handler = $this->app->make('lada.handler');
-        $handler->flushQueuedInvalidationsForConnection(DB::connection());
         $this->assertCacheMissing($k);
     }
 }
