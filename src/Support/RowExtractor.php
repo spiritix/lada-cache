@@ -67,6 +67,13 @@ final class RowExtractor
             }
         }
 
+        // A table read more than once, e.g. joined to itself, also yields rows its conditions do not pin.
+        foreach (TableExtractor::countTables($builder) as $table => $count) {
+            if ($count > 1) {
+                unset($rows[$table]);
+            }
+        }
+
         return $rows;
     }
 
