@@ -166,6 +166,10 @@ By default every query on a Lada connection is cached. Set `LADA_CACHE_SCOPE=mod
 LADA_CACHE_SCOPE=models
 ```
 
+### Laravel Octane
+
+When Octane is configured, Lada Cache adds its services to `octane.warm`, so each worker keeps one instance and one Redis connection instead of rebuilding them on every request.
+
 ## Console Commands
 
 ```bash

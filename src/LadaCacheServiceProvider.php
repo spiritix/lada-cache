@@ -37,6 +37,13 @@ final class LadaCacheServiceProvider extends ServiceProvider
 {
     public const CONFIG_FILE = 'lada-cache.php';
 
+    private const array SERVICES = [
+        'lada.redis',
+        'lada.cache',
+        'lada.invalidator',
+        'lada.handler',
+    ];
+
     public function boot(): void
     {
         $this->publishes([
@@ -64,6 +71,8 @@ final class LadaCacheServiceProvider extends ServiceProvider
         if (config('lada-cache.enable_debugbar') && $this->app->bound('debugbar')) {
             $this->registerDebugbarCollector();
         }
+
+        $this->warmServicesUnderOctane();
 
         // Register transaction event listeners to coordinate transaction-aware invalidations.
         $events = $this->app['events'];
@@ -115,12 +124,23 @@ final class LadaCacheServiceProvider extends ServiceProvider
      */
     public function provides(): array
     {
-        return [
-            'lada.redis',
-            'lada.cache',
-            'lada.invalidator',
-            'lada.handler',
-        ];
+        return self::SERVICES;
+    }
+
+    /**
+     * Octane resolves services that are not warmed again in every request's
+     * copy of the container, which rebuilds Lada's services and reconnects to
+     * Redis per request. Warming them keeps one instance per worker.
+     */
+    private function warmServicesUnderOctane(): void
+    {
+        $warm = config('octane.warm');
+
+        if (! is_array($warm)) {
+            return;
+        }
+
+        config(['octane.warm' => array_values(array_unique([...$warm, ...self::SERVICES]))]);
     }
 
     private function registerSingletons(): void

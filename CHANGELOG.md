@@ -5,6 +5,7 @@
 - Added `withoutCache()` for per-query bypass of read caching and write invalidation (see https://github.com/spiritix/lada-cache/pull/151)
 - Added `lada-cache:invalidate <tables...>` to invalidate the cached entries of specific tables after changes made outside Laravel
 - Added `lada-cache.scope` (`LADA_CACHE_SCOPE`): `models` caches only reads from models using `LadaCacheTrait`, while writes from any builder still invalidate
+- Lada Cache's services are added to `octane.warm` under Laravel Octane
 - `lada-cache:flush` reports how many keys it deleted and fails when Redis is unreachable instead of reporting success
 
 ### Changed

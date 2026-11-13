@@ -114,4 +114,9 @@ class ConfigurationBehaviourTest extends TestCase
         DB::table('cars')->get();
         $this->assertTrue(true);
     }
+
+    public function testOctaneConfigIsLeftAloneWithoutOctane(): void
+    {
+        $this->assertNull(config('octane'));
+    }
 }
