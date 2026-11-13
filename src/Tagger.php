@@ -36,7 +36,6 @@ final readonly class Tagger
 
     public function getTags(): array
     {
-        $databaseTag = $this->prefix($this->reflector->getDatabase(), self::PREFIX_DATABASE);
         // Normalize tables to strings only, ignoring any non-string artifacts
         $rawTables = $this->reflector->getTables();
         $tables = [];
@@ -48,28 +47,49 @@ final readonly class Tagger
             }
         }
 
-        if (! $this->considerRows) {
-            // Without row tracking every query is table-wide, using the same tags as with it,
-            // so hosts with either setting sharing one Redis still invalidate each other.
-            return $this->prefix($this->getTableTags($tables, []), $databaseTag);
-        }
-
+        // Without row tracking every query is table-wide, using the same tags as with it,
+        // so hosts with either setting sharing one Redis still invalidate each other.
         /** @var array<string, array<int, scalar>> $rows */
-        $rows = $this->reflector->getRows();
-        $tags = $this->getTableTags($tables, $rows);
+        $rows = $this->considerRows ? $this->reflector->getRows() : [];
+        $tags = [];
 
         foreach ($tables as $table) {
-            if (empty($rows[$table])) {
-                continue;
+            [$database, $name] = $this->locate($table);
+            $tableRows = $rows[$table] ?? [];
+            $tableTags = $this->getTableTags([$name], [$name => $tableRows]);
+
+            if ($tableRows !== []) {
+                $tablePrefix = $this->prefix($name, self::PREFIX_TABLE_SPECIFIC);
+                $rowPrefix = $this->prefix(self::PREFIX_ROW, $tablePrefix);
+                $tableTags = array_merge($tableTags, $this->prefix($tableRows, $rowPrefix));
             }
 
-            $tablePrefix = $this->prefix($table, self::PREFIX_TABLE_SPECIFIC);
-            $rowPrefix = $this->prefix(self::PREFIX_ROW, $tablePrefix);
-
-            $tags = array_merge($tags, $this->prefix($rows[$table], $rowPrefix));
+            $databaseTag = $this->prefix($database, self::PREFIX_DATABASE);
+            $tags = array_merge($tags, $this->prefix($tableTags, $databaseTag));
         }
 
-        return $this->prefix($tags, $databaseTag);
+        return array_values(array_unique($tags));
+    }
+
+    /**
+     * Splits a possibly qualified table name into the database and the table name it is tagged under.
+     *
+     * On MySQL and MariaDB the qualifier names a database, so `reports.sales` shares tags with
+     * `sales` written on a connection to `reports`. Elsewhere it names a schema within the
+     * connection's database; schemas share tags, which may only over-invalidate.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function locate(string $table): array
+    {
+        $segments = explode('.', $table);
+        $name = (string) array_pop($segments);
+
+        if ($segments === [] || ! $this->reflector->qualifiersNameDatabases()) {
+            return [$this->reflector->getDatabase(), $name];
+        }
+
+        return [(string) end($segments), $name];
     }
 
     private function getTableTags(array $tables, array $rows): array

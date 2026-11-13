@@ -70,6 +70,17 @@ final readonly class Reflector
         ]);
     }
 
+    /**
+     * Whether a table qualifier such as `reports.sales` names a database rather than a schema.
+     */
+    public function qualifiersNameDatabases(): bool
+    {
+        $connection = $this->queryBuilder->getConnection();
+
+        return $connection instanceof Connection
+            && in_array($connection->getDriverName(), ['mysql', 'mariadb'], true);
+    }
+
     public function getTables(): array
     {
         return TableExtractor::extractTables($this->queryBuilder);
