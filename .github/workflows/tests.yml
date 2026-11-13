@@ -116,7 +116,7 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist
 
-      - name: Install the 5.x release the Rollout suite runs beside this version
+      - name: Install the 6.x release the Rollout suite runs beside this version
         if: matrix.suite == 'Rollout'
         run: composer install --no-interaction --prefer-dist -d tests/Rollout/legacy
 

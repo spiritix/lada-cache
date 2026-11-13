@@ -8,7 +8,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * A rolling deploy from 5.x: hosts of both versions serve at once against one database and one
+ * A rolling deploy from 6.x: hosts of both versions serve at once against one database and one
  * Redis, each a separate process. With legacy invalidation on, a write by a host of either
  * version must reach the cached reads of hosts of the other.
  */

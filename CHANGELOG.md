@@ -8,7 +8,7 @@
 
 ### Added
 - `lada-cache.metrics` (`LADA_CACHE_METRICS`, off by default) counts hits, misses, stores, invalidations and their cascade reach per table, retires, bypasses and failures by reason, and the statements that run uncached or retire the cache, inside the Redis calls Lada Cache already makes; `php artisan lada-cache:stats [--hours] [--table] [--json]` reports them. With metrics off the scripts and their arguments are unchanged
-- `lada-cache.legacy_invalidation` (`LADA_CACHE_LEGACY_INVALIDATION`, off by default): during a rolling deploy, writes also delete the 5.x entries of the tags they invalidate and of the tables foreign keys, triggers and views change along with them, so pods still on 5.x never serve results this version invalidated, and reads depend on the 5.x tag sets of their tags, so pods on this version never serve results a 5.x pod invalidated; reads pinned to rows also depend on their table's unspecific tag, so rows created by 5.x pods reach cached lookups of them, which makes any write to the table refresh them: row-precise tags only take effect once it is turned off
+- `lada-cache.legacy_invalidation` (`LADA_CACHE_LEGACY_INVALIDATION`, off by default): during a rolling deploy, writes also delete the 6.x entries of the tags they invalidate and of the tables foreign keys, triggers and views change along with them, so pods still on 6.x never serve results this version invalidated, and reads depend on the 6.x tag sets of their tags, so pods on this version never serve results a 6.x pod invalidated; reads pinned to rows also depend on their table's unspecific tag, so rows created by 6.x pods reach cached lookups of them, which makes any write to the table refresh them: row-precise tags only take effect once it is turned off
 - Added `php artisan lada-cache:invalidate <tables>` to invalidate specific tables after changes made outside Laravel, such as imports or manual fixes, without flushing the cache
 - Added `withoutCache()` to read a query from the database without caching it (see https://github.com/spiritix/lada-cache/pull/151); writes invalidate regardless, since skipping their invalidation left other readers with stale rows
 - Added `lada-cache.scope` (`LADA_CACHE_SCOPE`): `models` caches only reads from models using `LadaCacheTrait`, while writes from any builder still invalidate
@@ -24,7 +24,7 @@
 - Under Laravel Octane, including FrankenPHP worker mode, Lada's services are added to `octane.warm`, so the failure cooldown and invalidations awaiting replay live as long as the worker instead of one request
 - A restarted Redis or a promoted replica, which may have lost the newest invalidations, retires the cache on the first store or invalidation that reaches it, or on a lookup, which checks the server every 5 seconds per process
 - Invalidations merged over large transactions or backlogs collapse into table tags past 1000 row tags, so a bulk import commits with one small script instead of setting a version key per row
-- A Rollout suite (`make rollout`) running hosts of 5.x and of this version side by side against one database and Redis
+- A Rollout suite (`make rollout`) running hosts of 6.x and of this version side by side against one database and Redis
 - Fuzz and multi-process test suites, and a test matrix over SQLite, MySQL and PostgreSQL with both Redis clients
 
 ### Changed

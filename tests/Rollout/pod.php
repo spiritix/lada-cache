@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /*
  * One host of a rolling deploy: boots an application on either this version ("new") or the
- * 5.x release in tests/Rollout/legacy ("old"), against the database and Redis named by the
+ * 6.x release in tests/Rollout/legacy ("old"), against the database and Redis named by the
  * environment, runs one operation and prints its result as JSON. RolloutTest starts these as
  * separate processes, so hosts of both versions share the database and Redis like pods do.
  *

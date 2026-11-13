@@ -15,10 +15,10 @@ use Spiritix\LadaCache\Tests\Database\Models\Car;
 use Spiritix\LadaCache\Tests\TestCase;
 
 /**
- * Hosts on 5.x keep entries and tag sets under the keys that version wrote, which this version
+ * Hosts on 6.x keep entries and tag sets under the keys that version wrote, which this version
  * never touches. Enabling legacy invalidation makes every write delete them too, so a rolling
  * deploy does not leave pods on the old version serving results the new version invalidated, and
- * makes this version's reads depend on the 5.x tag sets, so writes by pods still on 5.x invalidate
+ * makes this version's reads depend on the 6.x tag sets, so writes by pods still on 6.x invalidate
  * what this version cached.
  */
 final class LegacyInvalidationTest extends TestCase
@@ -29,7 +29,7 @@ final class LegacyInvalidationTest extends TestCase
     }
 
     /**
-     * What a 5.x host does to invalidate a tag: read and delete the tag set in one transaction,
+     * What a 6.x host does to invalidate a tag: read and delete the tag set in one transaction,
      * then delete every key it listed, each member being a key without the connection prefix.
      */
     private function invalidateAs5x(Redis $redis, string $tag, bool $deleteMembers = true): void
@@ -166,12 +166,12 @@ final class LegacyInvalidationTest extends TestCase
         config(['lada-cache.legacy_invalidation' => true]);
         $redis = new Redis;
         $this->assertNull(Car::query()->find(7));
-        DB::connection()->getPdo()->exec("insert into cars (id, name) values (7, 'inserted by 5.x')");
+        DB::connection()->getPdo()->exec("insert into cars (id, name) values (7, 'inserted by 6.x')");
         $this->assertNull(Car::query()->find(7));
 
         $this->invalidateAs5x($redis, $this->carsTag());
 
-        $this->assertSame('inserted by 5.x', Car::query()->find(7)?->name);
+        $this->assertSame('inserted by 6.x', Car::query()->find(7)?->name);
     }
 
     public function testReadsLeaveTheTagSetsOfEarlierVersionsAloneByDefault(): void

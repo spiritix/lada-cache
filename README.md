@@ -18,7 +18,7 @@ A **Redis-based**, fully automated, and scalable query cache layer for Laravel.
 - [Why?](#why)
 - [Why only Redis?](#why-only-redis)
 - [Installation](#installation)
-- [Upgrading from 5.x](#upgrading-from-5x)
+- [Upgrading from 6.x](#upgrading-from-6x)
 - [Configuration](#configuration)
 - [Usage](#usage)
 - [Console Commands](#console-commands)
@@ -119,17 +119,16 @@ class Car extends Model
 
 > 💡 It’s best to add the trait in a shared `BaseModel` class that all models extend.
 
-### Upgrading from 5.x
+### Upgrading from 6.x
 
 Entries are kept under a new key layout, so a deploy is safe to run side by side for as long as you make the old version's entries invalid too:
 
 1. Point the `spiritix/lada-cache` requirement at this version.
-2. Publish the new `config/lada-cache.php`. The old file's keys were renamed (`expiration-time` to `expiration_time`, `consider-rows` to `consider_rows`, `include-tables`/`exclude-tables` to `include_tables`/`exclude_tables`, `enable-debugbar` to `enable_debugbar`); a file still using the old names disables the cache with an error naming them, rather than silently running with defaults.
-3. Set `LADA_CACHE_LEGACY_INVALIDATION=true` and deploy (see [Rolling deployments](#rolling-deployments)). Pods on 5.x then stop serving results this version invalidated, and pods on this version stop serving results 5.x pods invalidated.
-4. Keep `lada-cache.scope` at `models` while the rollout lasts if you want the same reads cached as before; switch it to `all` once you have checked the wider set (see [Caching only selected models](#caching-only-selected-models)).
-5. Give the Redis connection named by `LADA_CACHE_REDIS_CONNECTION` short timeouts (see [Redis connection](#redis-connection)). 5.x used the default connection; this version defaults to the connection named `cache`. Point it at the same Redis database 5.x used, or legacy invalidation cannot reach the 5.x keys.
-6. Run migrations from a host with Lada Cache active against the shared Redis (see [Rolling deployments](#rolling-deployments)).
-7. Unset `LADA_CACHE_LEGACY_INVALIDATION` once every host runs this version. Entries cached while it was set then miss once, and the remaining 5.x keys expire or are pruned with the next migration batch or `lada-cache:flush`.
+2. Publish the new `config/lada-cache.php`. Coming from 5.x, whose keys used dashes (`expiration-time`, `consider-rows`, `include-tables`/`exclude-tables`, `enable-debugbar`), a file still using those names disables the cache with an error naming them, rather than silently running with defaults.
+3. Set `LADA_CACHE_LEGACY_INVALIDATION=true` and deploy (see [Rolling deployments](#rolling-deployments)). Pods on 6.x then stop serving results this version invalidated, and pods on this version stop serving results 6.x pods invalidated.
+4. Give the Redis connection named by `LADA_CACHE_REDIS_CONNECTION` short timeouts (see [Redis connection](#redis-connection)). Point it at the same Redis database the 6.x hosts use, or legacy invalidation cannot reach the 6.x keys.
+5. Run migrations from a host with Lada Cache active against the shared Redis (see [Rolling deployments](#rolling-deployments)).
+6. Unset `LADA_CACHE_LEGACY_INVALIDATION` once every host runs this version. Entries cached while it was set then miss once, and the remaining 6.x keys expire or are pruned with the next migration batch or `lada-cache:flush`.
 
 Code that reached into the package's internals to invalidate single tables, such as building a `QueryBuilder` and calling `setBuilder()` and `invalidateQuery()`, now uses `php artisan lada-cache:invalidate <tables>`, which also invalidates what the database changes along with those tables. `lada.invalidator` is gone; invalidation is part of `lada.cache`.
 
@@ -200,7 +199,7 @@ LADA_CACHE_SCOPE=models
 
 ### Rolling deployments
 
-While pods of two versions serve at once, the version that wrote an entry is the only one that invalidates it: 5.x entries and tag sets live under different keys than this version's, so a write by a pod on either version leaves pods on the other serving stale entries. Set `LADA_CACHE_LEGACY_INVALIDATION=true` for the duration of such a rollout. Every write then also deletes the 5.x entries of the tags it invalidates and of the tables the database changes along with it, in the same Redis script. Every read also registers a token for each of its tags in that tag's 5.x tag set and makes its entry depend on it, for two more commands per tag; a 5.x pod invalidating the tag deletes the set and every key it lists, the token included, so the entries this version cached become unreachable. Reads pinned to rows also depend on their table's unspecific tag, the only one a 5.x insert invalidates, so a row a 5.x pod creates reaches a cached lookup of it; such reads miss on every write to their table by either version, so row-precise tags only take effect once legacy invalidation is turned off. Both versions must use the same Redis database. 5.x never followed foreign key cascades: after a cascading write by a 5.x pod, cached reads of the cascaded tables stay stale on pods of both versions, as they always did. Statements that retire the whole cache on this version, such as raw DDL, do not delete 5.x entries; those go when the migration batch is pruned. Turn it off once every host runs this version.
+While pods of two versions serve at once, the version that wrote an entry is the only one that invalidates it: 6.x entries and tag sets live under different keys than this version's, so a write by a pod on either version leaves pods on the other serving stale entries. Set `LADA_CACHE_LEGACY_INVALIDATION=true` for the duration of such a rollout. Every write then also deletes the 6.x entries of the tags it invalidates and of the tables the database changes along with it, in the same Redis script. Every read also registers a token for each of its tags in that tag's 6.x tag set and makes its entry depend on it, for two more commands per tag; a 6.x pod invalidating the tag deletes the set and every key it lists, the token included, so the entries this version cached become unreachable. Reads pinned to rows also depend on their table's unspecific tag, the only one a 6.x insert invalidates, so a row a 6.x pod creates reaches a cached lookup of it; such reads miss on every write to their table by either version, so row-precise tags only take effect once legacy invalidation is turned off. Both versions must use the same Redis database. 6.x never followed foreign key cascades: after a cascading write by a 6.x pod, cached reads of the cascaded tables stay stale on pods of both versions, as they always did. Statements that retire the whole cache on this version, such as raw DDL, do not delete 6.x entries; those go when the migration batch is pruned. Turn it off once every host runs this version.
 
 Cache entries are stored under a random generation id kept in Redis. Every schema change replaces that id, which retires every entry for all hosts sharing the Redis instance in one atomic step: each completed migration, `schema:load`, `migrate:fresh`/`refresh`, raw DDL run through Laravel (`DB::statement('ALTER TABLE ...')`), and `lada-cache:flush`. Inside a transaction the retire happens again when the transaction ends, because a transactional schema change only becomes visible at commit. Retiring after a schema change keeps trying Redis for about a second, even while Redis is skipped after a failure. Retired entries are pruned in bounded `SCAN` batches when a migration batch finishes. A query that started before the switch can never store a result that is served afterwards, and because ids are random, an emptied or restarted Redis simply starts a new generation and never revives entries written under an earlier one.
 
@@ -296,7 +295,7 @@ make test ARGS=--filter=RowKeysTest
 make test-mysql REDIS_CLIENT=predis
 make fuzz LADA_FUZZ_ITERATIONS=5000
 make concurrency          # several processes against MySQL and PostgreSQL
-make rollout              # hosts of 5.x and this version side by side, like a rolling deploy
+make rollout              # hosts of 6.x and this version side by side, like a rolling deploy
 make lint analyse         # Pint and PHPStan
 make down                 # stop the services and delete their volumes
 ```
@@ -305,7 +304,7 @@ make down                 # stop the services and delete their volumes
 - **Fuzz** runs a seeded random workload of reads, writes, raw statements, transactions, foreign key cascades, cache flushes, an emptied Redis and evicted keys, and compares every cached read with the same query run without the cache. A failure prints the seed and the operations that led to it; rerun with `LADA_FUZZ_SEED=<seed>`.
 - **Benchmark** (`make bench`) reports reads per second with and without the cache, and the Redis commands a cached read costs.
 - **Concurrency** forks worker processes, like pods sharing one database and Redis, runs the same workload in all of them at once, and checks that every cached read matches the database once they finish.
-- **Rollout** (`make rollout`) runs hosts of 5.x, installed from `tests/Rollout/legacy`, beside hosts of this version as separate processes on MySQL and PostgreSQL. It covers writes in both directions, transactions, migrations, an emptied Redis, rolling back and turning legacy invalidation off, and runs long-lived workers of both versions concurrently before each checks its own cached reads against the database.
+- **Rollout** (`make rollout`) runs hosts of 6.x, installed from `tests/Rollout/legacy`, beside hosts of this version as separate processes on MySQL and PostgreSQL. It covers writes in both directions, transactions, migrations, an emptied Redis, rolling back and turning legacy invalidation off, and runs long-lived workers of both versions concurrently before each checks its own cached reads against the database.
 
 ## License
 

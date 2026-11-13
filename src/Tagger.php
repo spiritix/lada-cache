@@ -137,9 +137,9 @@ final readonly class Tagger
     }
 
     /**
-     * Tags a 5.x host's writes must invalidate for a read carrying `$tags` to miss: the tags
+     * Tags a 6.x host's writes must invalidate for a read carrying `$tags` to miss: the tags
      * themselves and, for every table the read is pinned to rows of, the table's unspecific tag.
-     * A 5.x insert invalidates only that one, so a row created by a 5.x host would otherwise
+     * A 6.x insert invalidates only that one, so a row created by a 6.x host would otherwise
      * leave a cached lookup of the missing row in place.
      *
      * @param  list<string>  $tags

@@ -28,8 +28,8 @@ use Spiritix\LadaCache\Support\Write;
  *                                       named by database and dependency configuration; `Write::ANY_TABLE_FIELD` is always
  *                                       present and lists `DependentTables::EVERY_TABLE` when the schema could not be read
  * - `<base>stats:<bucket start>`        with metrics, a hash of counters for one time bucket (see `Metrics`)
- * - `<base>legacy:<tag>`                with legacy invalidation, a token listed in the 5.x tag set `<base><tag>`,
- *                                       so a 5.x host invalidating the tag deletes it
+ * - `<base>legacy:<tag>`                with legacy invalidation, a token listed in the 6.x tag set `<base><tag>`,
+ *                                       so a 6.x host invalidating the tag deletes it
  *
  * An entry is valid only while the fingerprint of its tags' current tokens matches the one
  * captured before the query ran, so a result read before a concurrent write is never served.
@@ -198,10 +198,10 @@ final class LuaScripts
      * The tokens of all tags are read with one MGET, in the order the tags are named.
      *
      * Legacy tags are only passed with legacy invalidation on (see `Tagger::legacyDependencies()`);
-     * each contributes the token of `<base>legacy:<tag>` to the fingerprint. That key is listed in the tag's 5.x tag set, which a 5.x host invalidating the
+     * each contributes the token of `<base>legacy:<tag>` to the fingerprint. That key is listed in the tag's 6.x tag set, which a 6.x host invalidating the
      * tag deletes along with every key it lists, so the fingerprint changes and entries this
-     * version stored before the 5.x write become unreachable. A token whose key is missing or no
-     * longer listed in the set, because the 5.x host deleted the set but not yet its keys, is replaced.
+     * version stored before the 6.x write become unreachable. A token whose key is missing or no
+     * longer listed in the set, because the 6.x host deleted the set but not yet its keys, is replaced.
      */
     public const string LOOKUP = self::NO_METRICS.self::LOOKUP_BODY;
 
@@ -352,10 +352,10 @@ final class LuaScripts
      * field, unless the call only follows up the cascades of one already counted (it replaces no
      * tags), and the tables the cascades reached.
      *
-     * With legacy invalidation, every table-level tag replaced also has its 5.x tag set and the
-     * entries it lists deleted, so hosts still running 5.x during a rolling deploy stop serving
-     * what this version invalidated, cascades included; a row-precise cascade deletes the 5.x
-     * entries of the whole child table, which 5.x cannot narrow. 5.x stores each entry in its tag
+     * With legacy invalidation, every table-level tag replaced also has its 6.x tag set and the
+     * entries it lists deleted, so hosts still running 6.x during a rolling deploy stop serving
+     * what this version invalidated, cascades included; a row-precise cascade deletes the 6.x
+     * entries of the whole child table, which 6.x cannot narrow. 6.x stores each entry in its tag
      * sets with the Lada prefix but without the client's connection prefix. A generation is
      * started when there is none, so the cascades of the first write are still looked up.
      * Returns {0} when

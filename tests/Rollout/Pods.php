@@ -9,7 +9,7 @@ use RuntimeException;
 
 /**
  * Starts hosts of a rolling deploy as separate PHP processes running pod.php, each on either
- * this version or the 5.x release in tests/Rollout/legacy, all sharing one database and Redis.
+ * this version or the 6.x release in tests/Rollout/legacy, all sharing one database and Redis.
  */
 final class Pods
 {
@@ -21,11 +21,11 @@ final class Pods
     public static function skipReason(): ?string
     {
         if (! in_array(getenv('DB_CONNECTION'), ['mysql', 'pgsql'], true)) {
-            return 'The Rollout suite needs MySQL or PostgreSQL, which hosts of both versions share; 5.x never wrapped SQLite connections.';
+            return 'The Rollout suite needs MySQL or PostgreSQL, so that hosts of both versions, running as separate processes, share one database server.';
         }
 
         if (! is_file(__DIR__.'/legacy/vendor/autoload.php')) {
-            return 'Install the 5.x release first: composer install -d tests/Rollout/legacy';
+            return 'Install the 6.x release first: composer install -d tests/Rollout/legacy';
         }
 
         return null;
