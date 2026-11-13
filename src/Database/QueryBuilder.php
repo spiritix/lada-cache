@@ -7,6 +7,7 @@ namespace Spiritix\LadaCache\Database;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Query\Grammars\Grammar;
 use Illuminate\Database\Query\Processors\Processor;
 use Spiritix\LadaCache\QueryHandler;
@@ -64,7 +65,8 @@ class QueryBuilder extends Builder
 
         // Use a cached-select pathway by limiting to 1 row and checking non-emptiness.
         // This ensures existence checks benefit from caching without changing semantics.
-        return $this->clone()->limit(1)->get(['*'])->isNotEmpty();
+        // Unless columns were selected explicitly, select a constant instead of whole rows.
+        return $this->clone()->limit(1)->get([new Expression('1')])->isNotEmpty();
     }
 
     public function getHandler(): QueryHandler
@@ -105,8 +107,9 @@ class QueryBuilder extends Builder
     {
         // Do not cache queries that use pessimistic locks (lockForUpdate/sharedLock).
         // Laravel stores lock intent in $this->lock; when present we should always hit the DB.
-        // Also bypass when the caller opted out via withoutCache().
-        if ($this->lock !== null || $this->cacheBypassed) {
+        // Also bypass when the caller opted out via withoutCache(), and for custom PDO
+        // fetch modes (fetchUsing()), whose results differ from the cached default mode.
+        if ($this->lock !== null || $this->cacheBypassed || $this->fetchUsing !== []) {
             return parent::runSelect();
         }
 
@@ -224,11 +227,22 @@ class QueryBuilder extends Builder
     }
 
     /** {@inheritDoc} */
+    public function insertOrIgnoreReturning(array $values, array $returning = ['*'], array|string|null $uniqueBy = null)
+    {
+        $result = parent::insertOrIgnoreReturning($values, $returning, $uniqueBy);
+        // Insert-or-ignore may still insert rows; invalidate as INSERT.
+        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_INSERT, $values);
+
+        return $result;
+    }
+
+    /** {@inheritDoc} */
     public function updateOrInsert(array $attributes, callable|array $values = [])
     {
         $result = parent::updateOrInsert($attributes, $values);
         // May perform insert or update; invalidate conservatively as UPDATE.
-        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_UPDATE, $values ?: $attributes);
+        // Callback values are resolved inside the parent, so fall back to the attributes.
+        $this->invalidateUnlessBypassed(Reflector::QUERY_TYPE_UPDATE, is_array($values) && $values !== [] ? $values : $attributes);
 
         return $result;
     }

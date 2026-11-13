@@ -129,25 +129,15 @@ final class LadaCacheServiceProvider extends ServiceProvider
     }
 
     /**
-     * Copy driver-specific state from the base connection to the Lada connection.
+     * Hand the base connection's unresolved read PDO to the Lada connection.
+     *
+     * PDO resolvers are passed on unresolved, so connecting is deferred until first use.
+     * Grammars and the post processor are not copied: the Lada connection builds its own,
+     * bound to itself instead of to the discarded base connection.
      */
-    private function hydrateLadaConnection(\Illuminate\Database\Connection $base, \Illuminate\Database\Connection $lada, string $name): \Illuminate\Database\Connection
+    private function hydrateLadaConnection(\Illuminate\Database\Connection $base, \Illuminate\Database\Connection $lada): \Illuminate\Database\Connection
     {
-        if (method_exists($lada, 'setReadPdo')) {
-            $lada->setReadPdo($base->getReadPdo());
-        }
-        if (method_exists($lada, 'setName')) {
-            $lada->setName($name);
-        }
-
-        $lada->setQueryGrammar($base->getQueryGrammar());
-        $lada->setPostProcessor($base->getPostProcessor());
-
-        // Initialize schema grammar on base, then mirror it
-        $base->getSchemaBuilder();
-        if (method_exists($lada, 'setSchemaGrammar') && $base->getSchemaGrammar() !== null) {
-            $lada->setSchemaGrammar($base->getSchemaGrammar());
-        }
+        $lada->setReadPdo($base->getRawReadPdo());
 
         return $lada;
     }
@@ -158,12 +148,12 @@ final class LadaCacheServiceProvider extends ServiceProvider
             /** @var \Illuminate\Database\MySqlConnection $base */
             $base = app('db.factory')->make($config, $name);
             $lada = new LadaMySqlConnection(
-                $base->getPdo(),
+                $base->getRawPdo(),
                 $base->getDatabaseName(),
                 $base->getTablePrefix(),
                 $base->getConfig(),
             );
-            return $this->hydrateLadaConnection($base, $lada, $name);
+            return $this->hydrateLadaConnection($base, $lada);
         });
 
         // Optional explicit MariaDB driver (alias of MySQL)
@@ -171,48 +161,48 @@ final class LadaCacheServiceProvider extends ServiceProvider
             /** @var \Illuminate\Database\MySqlConnection $base */
             $base = app('db.factory')->make($config, $name);
             $lada = new LadaMariaDbConnection(
-                $base->getPdo(),
+                $base->getRawPdo(),
                 $base->getDatabaseName(),
                 $base->getTablePrefix(),
                 $base->getConfig(),
             );
-            return $this->hydrateLadaConnection($base, $lada, $name);
+            return $this->hydrateLadaConnection($base, $lada);
         });
 
         DB::extend('pgsql', function (array $config, string $name): \Illuminate\Database\Connection {
             /** @var \Illuminate\Database\PostgresConnection $base */
             $base = app('db.factory')->make($config, $name);
             $lada = new LadaPostgresConnection(
-                $base->getPdo(),
+                $base->getRawPdo(),
                 $base->getDatabaseName(),
                 $base->getTablePrefix(),
                 $base->getConfig(),
             );
-            return $this->hydrateLadaConnection($base, $lada, $name);
+            return $this->hydrateLadaConnection($base, $lada);
         });
 
         DB::extend('sqlite', function (array $config, string $name): \Illuminate\Database\Connection {
             /** @var \Illuminate\Database\SqliteConnection $base */
             $base = app('db.factory')->make($config, $name);
             $lada = new LadaSqliteConnection(
-                $base->getPdo(),
+                $base->getRawPdo(),
                 $base->getDatabaseName(),
                 $base->getTablePrefix(),
                 $base->getConfig(),
             );
-            return $this->hydrateLadaConnection($base, $lada, $name);
+            return $this->hydrateLadaConnection($base, $lada);
         });
 
         DB::extend('sqlsrv', function (array $config, string $name): \Illuminate\Database\Connection {
             /** @var \Illuminate\Database\SqlServerConnection $base */
             $base = app('db.factory')->make($config, $name);
             $lada = new LadaSqlServerConnection(
-                $base->getPdo(),
+                $base->getRawPdo(),
                 $base->getDatabaseName(),
                 $base->getTablePrefix(),
                 $base->getConfig(),
             );
-            return $this->hydrateLadaConnection($base, $lada, $name);
+            return $this->hydrateLadaConnection($base, $lada);
         });
     }
 

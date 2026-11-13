@@ -137,47 +137,53 @@ final class QueryHandler
             return $queryClosure();
         }
 
+        // The query runs outside of any catch block, so a failing query propagates
+        // instead of running a second time. Cache errors only bypass the cache.
         try {
             $reflector = new Reflector($this->builder);
             $manager = new Manager($reflector);
+            $shouldCache = $manager->shouldCache();
 
-            if (! $manager->shouldCache()) {
-                return $queryClosure();
+            if ($shouldCache) {
+                $hasher = new Hasher($reflector);
+                $tagger = new Tagger($reflector);
+
+                $key = $hasher->getHash();
+                $tags = array_values(array_unique([...$tagger->getTags(), ...$subQueryTags]));
+
+                $cached = $this->cache->has($key) ? $this->cache->get($key) : null;
             }
+        } catch (Throwable) {
+            $this->stopCollectorForBypass();
 
-            $hasher = new Hasher($reflector);
-            $tagger = new Tagger($reflector);
+            return $queryClosure();
+        }
 
-            $key = $hasher->getHash();
-            $tags = array_values(array_unique([...$tagger->getTags(), ...$subQueryTags]));
+        if (! $shouldCache) {
+            return $queryClosure();
+        }
 
-            $cached = $this->cache->has($key) ? $this->cache->get($key) : null;
-            $action = $cached === null ? 'Miss' : 'Hit';
-
-            if ($cached === null) {
-                $cached = $queryClosure();
-                $this->cache->set($key, $tags, $cached);
-            } else {
-                // Self-heal tag membership inconsistencies by idempotently adding the key to each tag set.
-                $this->cache->repairTagMembership($key, $tags);
-            }
-
-            $this->stopCollector($reflector, $tags, $key, $action);
+        if ($cached !== null) {
+            // Self-heal tag membership inconsistencies by idempotently adding the key to each tag set.
+            $this->cache->repairTagMembership($key, $tags);
+            $this->stopCollector($reflector, $tags, $key, 'Hit');
 
             return $cached;
-        } catch (Throwable) {
-            // On any reflection/type/tagging error, do not cache; run the query directly.
-            $result = $queryClosure();
-            // Best effort to stop collector with bypass info.
-            try {
-                $reflector = new Reflector($this->builder);
-                $this->stopCollector($reflector, [], '', 'Bypass (error)');
-            } catch (Throwable) {
-                // ignore
-            }
-
-            return $result;
         }
+
+        $result = $queryClosure();
+        $action = 'Miss';
+
+        try {
+            $this->cache->set($key, $tags, $result);
+        } catch (Throwable) {
+            // The result stays valid when it cannot be stored; it is just not cached.
+            $action = 'Miss (store failed)';
+        }
+
+        $this->stopCollector($reflector, $tags, $key, $action);
+
+        return $result;
     }
 
     public function queueInvalidationForConnection(ConnectionInterface $connection, array $tags): void
@@ -205,11 +211,21 @@ final class QueryHandler
 
     private function startCollector(): void
     {
+        // The collector is only bound when Debugbar integration is enabled.
+        $this->collector = App::bound('lada.collector') ? App::make('lada.collector') : null;
+        $this->collector?->startMeasuring();
+    }
+
+    private function stopCollectorForBypass(): void
+    {
+        if ($this->collector === null || $this->builder === null) {
+            return;
+        }
+
         try {
-            $this->collector = App::make('lada.collector');
-            $this->collector->startMeasuring();
+            $this->stopCollector(new Reflector($this->builder), [], '', 'Bypass (error)');
         } catch (Throwable) {
-            $this->collector = null;
+            // ignore
         }
     }
 

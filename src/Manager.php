@@ -39,6 +39,11 @@ final readonly class Manager
             return false;
         }
 
+        // DB::pretend() returns empty results without querying; never cache them.
+        if ($this->reflector->isPretending()) {
+            return false;
+        }
+
         return $this->cacheActive && $this->tablesCacheable();
     }
 
