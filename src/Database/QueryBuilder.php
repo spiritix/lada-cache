@@ -7,6 +7,7 @@ namespace Spiritix\LadaCache\Database;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Query\Grammars\Grammar;
 use Illuminate\Database\Query\Processors\Processor;
 use Spiritix\LadaCache\QueryHandler;
@@ -64,7 +65,8 @@ class QueryBuilder extends Builder
 
         // Use a cached-select pathway by limiting to 1 row and checking non-emptiness.
         // This ensures existence checks benefit from caching without changing semantics.
-        return $this->clone()->limit(1)->get(['*'])->isNotEmpty();
+        // Unless columns were selected explicitly, select a constant instead of whole rows.
+        return $this->clone()->limit(1)->get([new Expression('1')])->isNotEmpty();
     }
 
     public function getHandler(): QueryHandler

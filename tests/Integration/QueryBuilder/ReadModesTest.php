@@ -39,4 +39,21 @@ class ReadModesTest extends TestCase
 
         $this->assertSame('first', DB::table('cars')->where('id', 1)->value('name'));
     }
+
+    public function testExistsCachesNoRowData(): void
+    {
+        DB::table('cars')->insert(['id' => 1, 'name' => 'first', 'engine_id' => null, 'driver_id' => null]);
+
+        DB::enableQueryLog();
+        $exists = DB::table('cars')->where('id', 1)->exists();
+        $queries = DB::getQueryLog();
+        DB::disableQueryLog();
+
+        $this->assertTrue($exists);
+        $this->assertCount(1, $queries);
+        $this->assertSame(
+            DB::table('cars')->select(DB::raw('1'))->where('id', 1)->limit(1)->toSql(),
+            $queries[0]['query'],
+        );
+    }
 }
