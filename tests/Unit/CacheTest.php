@@ -85,6 +85,39 @@ class CacheTest extends TestCase
         $this->assertSame(1, (int) $this->redis->sismember($prefixedTag, $prefixedKey));
     }
 
+    public function testSetDoesNotStoreResultsLargerThanTheMaxEntrySize(): void
+    {
+        config(['lada-cache.max_entry_size' => 100]);
+        $cache = new Cache($this->redis, $this->encoder, 0);
+
+        $cache->set('small', ['t'], [['name' => 'a']]);
+        $cache->set('large', ['t'], [['name' => str_repeat('a', 200)]]);
+
+        $this->assertTrue($cache->has('small'));
+        $this->assertFalse($cache->has('large'));
+        $this->assertSame(0, (int) $this->redis->sismember('p:t', 'p:large'));
+    }
+
+    public function testZeroMaxEntrySizeStoresResultsOfAnySize(): void
+    {
+        config(['lada-cache.max_entry_size' => 0]);
+        $cache = new Cache($this->redis, $this->encoder, 0);
+
+        $cache->set('large', ['t'], [['name' => str_repeat('a', 10000)]]);
+
+        $this->assertTrue($cache->has('large'));
+    }
+
+    public function testNegativeMaxEntrySizeIsRejected(): void
+    {
+        config(['lada-cache.max_entry_size' => -1]);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('lada-cache.max_entry_size');
+
+        new Cache($this->redis, $this->encoder, 0);
+    }
+
     public function testGetReturnsNullWhenKeyMissing(): void
     {
         $key = 'missing';

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use Illuminate\Support\Facades\Log;
+use InvalidArgumentException;
 use Throwable;
 
 /**
@@ -15,20 +16,34 @@ use Throwable;
  *
  * Architectural notes:
  * - Keys are prefixed via `Redis::prefix()` to avoid collisions.
+ * - Results whose encoded size exceeds `lada-cache.max_entry_size` bytes are not stored,
+ *   since moving them through the single-threaded Redis costs as much as querying again.
  * - `flush()` removes all keys for the Lada prefix and safely handles
  *   connection-level Redis prefixes (Predis/PhpRedis) by stripping the
  *   connection prefix before deletion and batching deletes (preferring UNLINK).
  */
 final class Cache
 {
+    private const int DEFAULT_MAX_ENTRY_SIZE = 8 * 1024 * 1024;
+
     private readonly int $expirationTime;
+
+    private readonly int $maxEntrySize;
 
     public function __construct(
         private readonly Redis $redis,
         private readonly Encoder $encoder,
         ?int $expirationTime = null,
+        ?int $maxEntrySize = null,
     ) {
         $this->expirationTime = $expirationTime ?? (int) config('lada-cache.expiration_time', 0);
+        $this->maxEntrySize = $maxEntrySize ?? (int) config('lada-cache.max_entry_size', self::DEFAULT_MAX_ENTRY_SIZE);
+
+        if ($this->maxEntrySize < 0) {
+            throw new InvalidArgumentException(
+                "Invalid lada-cache.max_entry_size {$this->maxEntrySize}, expected 0 for no limit or a number of bytes"
+            );
+        }
     }
 
     public function has(string $key): bool
@@ -42,8 +57,13 @@ final class Cache
      */
     public function set(string $key, array $tags, array $rows): void
     {
-        $key = $this->redis->prefix($key);
         $value = $this->encoder->encode($rows);
+
+        if ($this->maxEntrySize > 0 && strlen($value) > $this->maxEntrySize) {
+            return;
+        }
+
+        $key = $this->redis->prefix($key);
 
         if ($this->expirationTime > 0) {
             $this->redis->set($key, $value, 'EX', $this->expirationTime);
