@@ -11,7 +11,7 @@ namespace Spiritix\LadaCache;
  * metadata provided by `Reflector`.
  *
  * Strategy:
- * - Concatenate database name, raw SQL, and serialized parameters into a single
+ * - Concatenate database server and name, raw SQL, and serialized parameters into a single
  *   canonical string and hash it for compact storage and lookup.
  *
  * Architectural notes:
@@ -27,7 +27,7 @@ final readonly class Hasher
     public function getHash(): string
     {
         $identifier = implode('|', [
-            $this->reflector->getDatabase(),
+            $this->reflector->getDatabaseServer(),
             $this->reflector->getSql(),
             serialize($this->reflector->getParameters()),
         ]);
