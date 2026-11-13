@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache\Tests\Unit;
 
+use Illuminate\Redis\Connections\Connection;
 use Illuminate\Support\Facades\DB;
+use Mockery;
+use RuntimeException;
 use Spiritix\LadaCache\Cache;
 use Spiritix\LadaCache\Encoder;
 use Spiritix\LadaCache\Hasher;
@@ -86,5 +89,44 @@ class QueryHandlerTest extends TestCase
         foreach ($tags as $tag) {
             $this->assertSame(1, (int) $this->redis->sismember($this->redis->prefix($tag), $this->redis->prefix($key)));
         }
+    }
+
+    public function testCacheQueryRunsAFailingQueryOnce(): void
+    {
+        $handler = new QueryHandler($this->cache, $this->invalidator);
+        $handler->setBuilder(DB::table('cars'));
+
+        $executions = 0;
+
+        try {
+            $handler->cacheQuery(function () use (&$executions): array {
+                $executions++;
+                throw new RuntimeException('query failed');
+            });
+            $this->fail('Expected the query exception to propagate');
+        } catch (RuntimeException $e) {
+            $this->assertSame('query failed', $e->getMessage());
+        }
+
+        $this->assertSame(1, $executions);
+    }
+
+    public function testCacheQueryDoesNotRerunTheQueryWhenStoringFails(): void
+    {
+        $connection = Mockery::mock(Connection::class);
+        $connection->shouldReceive('exists')->andReturn(0);
+        $connection->shouldReceive('set')->andThrow(new RuntimeException('redis down'));
+
+        $handler = new QueryHandler(new Cache(new Redis($connection), new Encoder(), 0), $this->invalidator);
+        $handler->setBuilder(DB::table('cars'));
+
+        $executions = 0;
+        $result = $handler->cacheQuery(function () use (&$executions): array {
+            $executions++;
+            return [['id' => $executions]];
+        });
+
+        $this->assertSame(1, $executions);
+        $this->assertSame([['id' => 1]], $result);
     }
 }
