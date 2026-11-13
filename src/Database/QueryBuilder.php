@@ -27,6 +27,9 @@ class QueryBuilder extends Builder
 
     private bool $cacheBypassed = false;
 
+    /** @var array<int, Builder> Subqueries compiled to raw SQL, kept so their tables can be tagged */
+    private array $subQueries = [];
+
     public function __construct(
         ConnectionInterface $connection,
         QueryHandler $handler,
@@ -65,6 +68,14 @@ class QueryBuilder extends Builder
         // Use a cached-select pathway by limiting to 1 row and checking non-emptiness.
         // This ensures existence checks benefit from caching without changing semantics.
         return $this->clone()->limit(1)->get(['*'])->isNotEmpty();
+    }
+
+    /**
+     * @return array<int, Builder>
+     */
+    public function getSubQueries(): array
+    {
+        return $this->subQueries;
     }
 
     public function getHandler(): QueryHandler
@@ -128,9 +139,8 @@ class QueryBuilder extends Builder
     /** {@inheritDoc} */
     public function selectSub($query, $as)
     {
-        // Only collect tags if the subquery is our own builder instance.
-        if ($query instanceof self) {
-            $this->handler->setBuilder($query)->collectSubQueryTags();
+        if ($query instanceof Builder) {
+            $this->subQueries[] = $query;
         }
 
         return parent::selectSub($query, $as);
@@ -139,8 +149,8 @@ class QueryBuilder extends Builder
     /** {@inheritDoc} */
     public function joinSub($query, $as, $first, $operator = null, $second = null, $type = 'inner', $where = false)
     {
-        if ($query instanceof self) {
-            $this->handler->setBuilder($query)->collectSubQueryTags();
+        if ($query instanceof Builder) {
+            $this->subQueries[] = $query;
         }
 
         return parent::joinSub($query, $as, $first, $operator, $second, $type, $where);

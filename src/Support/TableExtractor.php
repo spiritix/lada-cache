@@ -7,11 +7,12 @@ namespace Spiritix\LadaCache\Support;
 use Illuminate\Database\Query\Builder as BaseBuilder;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Query\JoinClause;
+use Spiritix\LadaCache\Database\QueryBuilder;
 
 /**
  * Utility to extract table names (as strings) from a Laravel Query Builder.
  *
- * Handles FROM, JOINs, where subqueries, and UNION branches.
+ * Handles FROM, JOINs, where subqueries, compiled subqueries, and UNION branches.
  */
 final class TableExtractor
 {
@@ -71,7 +72,7 @@ final class TableExtractor
      */
     public static function extractSubQueryTables(BaseBuilder $builder): array
     {
-        $subQueries = [];
+        $subQueries = $builder instanceof QueryBuilder ? $builder->getSubQueries() : [];
         if ($builder->from instanceof BaseBuilder) {
             $subQueries[] = $builder->from;
         }
