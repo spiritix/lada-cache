@@ -130,6 +130,8 @@ This file allows you to fine-tune cache behavior, such as:
 
 The default configuration is already optimized for most Laravel applications, so you typically won’t need to modify it unless you want more granular control.
 
+Invalid values fail at boot with an error naming the key, instead of being silently cast: `prefix` and `redis_connection` must be strings, `expiration_time` a non-negative integer (or `null`), and `include_tables` / `exclude_tables` lists of strings.
+
 ## Usage
 
 After installation, Lada Cache works **automatically**.  

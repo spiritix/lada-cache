@@ -23,6 +23,7 @@ use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Database\SqliteConnection as LadaSqliteConnection;
 use Spiritix\LadaCache\Database\SqlServerConnection as LadaSqlServerConnection;
 use Spiritix\LadaCache\Debug\CacheCollector;
+use Spiritix\LadaCache\Support\ConfigValue;
 use Throwable;
 
 /**
@@ -101,6 +102,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
 
         // Only register when active to avoid bootstrap overhead when disabled
         if ((bool) config('lada-cache.active', true)) {
+            ConfigValue::validate();
             $this->registerSingletons();
             $this->registerDatabaseDecorator();
         }

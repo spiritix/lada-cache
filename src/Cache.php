@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use Illuminate\Support\Facades\Log;
+use Spiritix\LadaCache\Support\ConfigValue;
 use Throwable;
 
 /**
@@ -29,7 +30,7 @@ final class Cache
         private readonly Encoder $encoder,
         ?int $expirationTime = null,
     ) {
-        $this->expirationTime = $expirationTime ?? (int) config('lada-cache.expiration_time', 0);
+        $this->expirationTime = $expirationTime ?? ConfigValue::expirationTime();
     }
 
     public function has(string $key): bool

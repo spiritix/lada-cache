@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use Illuminate\Support\Facades\Config;
+use Spiritix\LadaCache\Support\ConfigValue;
 
 /**
  * Manager decides whether the current query, as reflected by a `Reflector`, should be cached.
@@ -27,8 +28,8 @@ final readonly class Manager
     public function __construct(private Reflector $reflector)
     {
         $this->cacheActive = (bool) Config::get('lada-cache.active', true);
-        $this->includeTables = (array) Config::get('lada-cache.include_tables', []);
-        $this->excludeTables = (array) Config::get('lada-cache.exclude_tables', []);
+        $this->includeTables = ConfigValue::includeTables();
+        $this->excludeTables = ConfigValue::excludeTables();
     }
 
     public function shouldCache(): bool

@@ -6,6 +6,7 @@ namespace Spiritix\LadaCache;
 
 use Illuminate\Redis\Connections\Connection;
 use Illuminate\Support\Facades\Redis as RedisFacade;
+use Spiritix\LadaCache\Support\ConfigValue;
 
 /**
  * Thin Redis proxy providing custom Lada Cache prefixing and raw command passthrough.
@@ -31,10 +32,10 @@ final readonly class Redis
         if ($connection !== null) {
             $this->connection = $connection;
         } else {
-            $connectionName = (string) config('lada-cache.redis_connection', 'cache');
+            $connectionName = ConfigValue::redisConnection();
             $this->connection = RedisFacade::connection($connectionName);
         }
-        $this->prefix = (string) config('lada-cache.prefix', 'lada:');
+        $this->prefix = ConfigValue::prefix();
     }
 
     public function prefix(string $key): string
