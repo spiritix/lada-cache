@@ -6,6 +6,7 @@ namespace Spiritix\LadaCache\Tests;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Redis\Connections\PredisConnection;
 use Orchestra\Testbench\TestCase as BaseTestCase;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Redis;
 use Predis\Client;
 use Spiritix\LadaCache\LadaCacheServiceProvider;
@@ -33,6 +34,15 @@ class TestCase extends BaseTestCase
         // Ensure a clean cache for every test: flush configured Redis connection
         $connection = (string) config('lada-cache.redis_connection', 'cache');
         Redis::connection($connection)->flushdb();
+    }
+
+    protected function tearDown(): void
+    {
+        // The enable/disable commands publish the config into the shared Testbench skeleton,
+        // which would otherwise leak their setting into every later test.
+        File::delete(config_path(LadaCacheServiceProvider::CONFIG_FILE));
+
+        parent::tearDown();
     }
 
     /**
