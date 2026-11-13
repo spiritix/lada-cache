@@ -15,8 +15,10 @@ use Spiritix\LadaCache\QueryHandler;
  * Extends Laravel's JoinClause to properly instantiate QueryBuilder instances
  * with the required QueryHandler when creating nested query builders.
  */
-class JoinClause extends BaseJoinClause
+class JoinClause extends BaseJoinClause implements HasSubQueries
 {
+    use TracksSubQueries;
+
     private readonly ?QueryHandler $parentHandler;
 
     private readonly ?Model $parentModel;

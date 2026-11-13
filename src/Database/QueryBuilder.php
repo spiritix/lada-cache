@@ -17,8 +17,10 @@ use Spiritix\LadaCache\Reflector;
  *
  * Extends the base query builder to provide automatic caching and invalidation.
  */
-class QueryBuilder extends Builder
+class QueryBuilder extends Builder implements HasSubQueries
 {
+    use TracksSubQueries;
+
     public const string DEFAULT_PRIMARY_KEY_NAME = 'id';
 
     private readonly QueryHandler $handler;
@@ -26,9 +28,6 @@ class QueryBuilder extends Builder
     private readonly ?Model $model;
 
     private bool $cacheBypassed = false;
-
-    /** @var array<int, Builder> Subqueries compiled to raw SQL, kept so their tables can be tagged */
-    private array $subQueries = [];
 
     public function __construct(
         ConnectionInterface $connection,
@@ -68,14 +67,6 @@ class QueryBuilder extends Builder
         // Use a cached-select pathway by limiting to 1 row and checking non-emptiness.
         // This ensures existence checks benefit from caching without changing semantics.
         return $this->clone()->limit(1)->get(['*'])->isNotEmpty();
-    }
-
-    /**
-     * @return array<int, Builder>
-     */
-    public function getSubQueries(): array
-    {
-        return $this->subQueries;
     }
 
     public function getHandler(): QueryHandler
@@ -134,26 +125,6 @@ class QueryBuilder extends Builder
                     ! $this->useWritePdo
                 );
             });
-    }
-
-    /** {@inheritDoc} */
-    public function selectSub($query, $as)
-    {
-        if ($query instanceof Builder) {
-            $this->subQueries[] = $query;
-        }
-
-        return parent::selectSub($query, $as);
-    }
-
-    /** {@inheritDoc} */
-    public function joinSub($query, $as, $first, $operator = null, $second = null, $type = 'inner', $where = false)
-    {
-        if ($query instanceof Builder) {
-            $this->subQueries[] = $query;
-        }
-
-        return parent::joinSub($query, $as, $first, $operator, $second, $type, $where);
     }
 
     /** {@inheritDoc} */
