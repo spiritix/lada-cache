@@ -18,6 +18,7 @@ use Throwable;
  * - `flush()` removes all keys for the Lada prefix and safely handles
  *   connection-level Redis prefixes (Predis/PhpRedis) by stripping the
  *   connection prefix before deletion and batching deletes (preferring UNLINK).
+ *   Redis errors are left to the caller, so a failed flush is not reported as done.
  */
 final class Cache
 {
@@ -72,33 +73,40 @@ final class Cache
         }
     }
 
-    public function flush(): void
+    /**
+     * Delete every key under the Lada prefix.
+     *
+     * @return int  The number of deleted keys
+     */
+    public function flush(): int
     {
-        try {
-            $connectionPrefix = (string) (config('database.redis.options.prefix') ?? '');
+        $connectionPrefix = (string) (config('database.redis.options.prefix') ?? '');
 
-            // Fetch all Lada keys as returned by the connection (includes connection prefix if set)
-            $keys = $this->redis->keys($this->redis->prefix('*'));
+        // Fetch all Lada keys as returned by the connection (includes connection prefix if set)
+        $keys = $this->redis->keys($this->redis->prefix('*'));
 
-            if (! empty($keys)) {
-                // Strip the connection-level prefix so the driver applies it exactly once when deleting
-                $toDelete = $connectionPrefix !== ''
-                    ? array_map(
-                        static fn(string $k): string => str_starts_with($k, $connectionPrefix) ? substr($k, strlen($connectionPrefix)) : $k,
-                        $keys
-                    )
-                    : $keys;
-
-                foreach (array_chunk($toDelete, 1000) as $batch) {
-                    try {
-                        $this->redis->unlink(...$batch);
-                    } catch (Throwable) {
-                        $this->redis->del(...$batch);
-                    }
-                }
-            }
-        } catch (Throwable $e) {
-            Log::warning('[LadaCache] Redis flush failed: '.$e->getMessage());
+        if (empty($keys)) {
+            return 0;
         }
+
+        // Strip the connection-level prefix so the driver applies it exactly once when deleting
+        $toDelete = $connectionPrefix !== ''
+            ? array_map(
+                static fn(string $k): string => str_starts_with($k, $connectionPrefix) ? substr($k, strlen($connectionPrefix)) : $k,
+                $keys
+            )
+            : $keys;
+
+        $deleted = 0;
+
+        foreach (array_chunk($toDelete, 1000) as $batch) {
+            try {
+                $deleted += (int) $this->redis->unlink(...$batch);
+            } catch (Throwable) {
+                $deleted += (int) $this->redis->del(...$batch);
+            }
+        }
+
+        return $deleted;
     }
 }

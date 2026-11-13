@@ -10,6 +10,7 @@ use Illuminate\Database\Events\MigrationsEnded;
 use Illuminate\Database\Events\TransactionCommitted;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 use Spiritix\LadaCache\Console\DisableCommand;
 use Spiritix\LadaCache\Console\EnableCommand;
@@ -22,6 +23,7 @@ use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Database\SqliteConnection as LadaSqliteConnection;
 use Spiritix\LadaCache\Database\SqlServerConnection as LadaSqlServerConnection;
 use Spiritix\LadaCache\Debug\CacheCollector;
+use Throwable;
 
 /**
  * Lada Cache service provider for Laravel.
@@ -77,9 +79,13 @@ final class LadaCacheServiceProvider extends ServiceProvider
 
         // Auto-flush cache after migrations complete to prevent stale schema-related cache.
         $events->listen(MigrationsEnded::class, function (): void {
-            /** @var Cache $cache */
-            $cache = $this->app->make('lada.cache');
-            $cache->flush();
+            try {
+                /** @var Cache $cache */
+                $cache = $this->app->make('lada.cache');
+                $cache->flush();
+            } catch (Throwable $e) {
+                Log::warning('[LadaCache] Redis flush after migrations failed: '.$e->getMessage());
+            }
         });
     }
 

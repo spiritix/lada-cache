@@ -159,7 +159,7 @@ This is useful for freshness-critical reads, diagnostics, or ad-hoc cache bustin
 ## Console Commands
 
 ```bash
-# Flush all cached entries
+# Flush all cached entries and report how many keys were deleted
 php artisan lada-cache:flush
 
 # Invalidate the cached entries of specific tables after changes made outside Laravel
