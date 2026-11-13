@@ -88,7 +88,28 @@ final readonly class Reflector
 
     public function getRows(): array
     {
+        // An update assigning a primary key moves rows to keys its where clause does not name.
+        if ($this->sqlOperation === self::QUERY_TYPE_UPDATE && $this->assignsPrimaryKey()) {
+            return [];
+        }
+
         return RowExtractor::extractRows($this->queryBuilder);
+    }
+
+    private function assignsPrimaryKey(): bool
+    {
+        $keys = array_unique([QueryBuilder::DEFAULT_PRIMARY_KEY_NAME, $this->queryBuilder->getPrimaryKeyName()]);
+
+        foreach (array_keys($this->values) as $column) {
+            $column = (string) $column;
+            foreach ($keys as $key) {
+                if ($column === $key || str_ends_with($column, '.'.$key)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
