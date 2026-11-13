@@ -53,6 +53,11 @@ final readonly class Reflector
         return TableExtractor::extractTables($this->queryBuilder);
     }
 
+    public function getSubQueryTables(): array
+    {
+        return TableExtractor::extractSubQueryTables($this->queryBuilder);
+    }
+
     public function getRows(): array
     {
         return RowExtractor::extractRows($this->queryBuilder);
