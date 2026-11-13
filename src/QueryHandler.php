@@ -211,12 +211,9 @@ final class QueryHandler
 
     private function startCollector(): void
     {
-        try {
-            $this->collector = App::make('lada.collector');
-            $this->collector->startMeasuring();
-        } catch (Throwable) {
-            $this->collector = null;
-        }
+        // The collector is only bound when Debugbar integration is enabled.
+        $this->collector = App::bound('lada.collector') ? App::make('lada.collector') : null;
+        $this->collector?->startMeasuring();
     }
 
     private function stopCollectorForBypass(): void

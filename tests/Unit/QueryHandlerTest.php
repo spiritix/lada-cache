@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Mockery;
 use RuntimeException;
 use Spiritix\LadaCache\Cache;
+use Spiritix\LadaCache\Debug\CacheCollector;
 use Spiritix\LadaCache\Encoder;
 use Spiritix\LadaCache\Hasher;
 use Spiritix\LadaCache\Invalidator;
@@ -128,5 +129,33 @@ class QueryHandlerTest extends TestCase
 
         $this->assertSame(1, $executions);
         $this->assertSame([['id' => 1]], $result);
+    }
+
+    public function testCacheQueryDoesNotResolveAnUnboundCollector(): void
+    {
+        $this->assertFalse($this->app->bound('lada.collector'));
+
+        $resolutions = 0;
+        $this->app->beforeResolving('lada.collector', function () use (&$resolutions): void {
+            $resolutions++;
+        });
+
+        $handler = new QueryHandler($this->cache, $this->invalidator);
+        $handler->setBuilder(DB::table('cars'));
+        $handler->cacheQuery(fn (): array => []);
+
+        $this->assertSame(0, $resolutions);
+    }
+
+    public function testCacheQueryReportsToABoundCollector(): void
+    {
+        $collector = new CacheCollector();
+        $this->app->instance('lada.collector', $collector);
+
+        $handler = new QueryHandler($this->cache, $this->invalidator);
+        $handler->setBuilder(DB::table('cars'));
+        $handler->cacheQuery(fn (): array => []);
+
+        $this->assertStringContainsString('[Miss]', $collector->collect()['measures'][0]['label']);
     }
 }
