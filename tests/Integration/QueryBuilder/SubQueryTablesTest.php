@@ -250,4 +250,19 @@ final class SubQueryTablesTest extends TestCase
 
         $this->assertSame(1, $carsWithEngines());
     }
+
+    public function testEloquentUnionIsRefreshedByWritesToTheUnionedTable(): void
+    {
+        DB::table('drivers')->insert(['id' => 1, 'name' => 'driver']);
+        $names = fn (): array => DB::table('drivers')->select('name')
+            ->union(Car::query()->select('name'))
+            ->orderBy('name')
+            ->pluck('name')
+            ->all();
+        $this->assertSame(['driver'], $names());
+
+        Car::query()->create(['name' => 'car']);
+
+        $this->assertSame(['car', 'driver'], $names());
+    }
 }
