@@ -56,7 +56,7 @@ final class QueryHandler
             $reflector = new Reflector($this->builder);
             $manager = new Manager($reflector);
 
-            if (! $manager->shouldCache()) {
+            if (! $manager->shouldCacheAsSubQuery()) {
                 return;
             }
 

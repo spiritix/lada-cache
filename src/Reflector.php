@@ -48,6 +48,11 @@ final readonly class Reflector
         return $this->queryBuilder->getConnection()->getDatabaseName();
     }
 
+    public function isModelQuery(): bool
+    {
+        return $this->queryBuilder->getModel() !== null;
+    }
+
     public function getTables(): array
     {
         return TableExtractor::extractTables($this->queryBuilder);

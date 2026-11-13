@@ -6,6 +6,7 @@ namespace Spiritix\LadaCache\Tests\Unit\Support;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Spiritix\LadaCache\CacheScope;
 use Spiritix\LadaCache\LadaCacheServiceProvider;
 use Spiritix\LadaCache\Support\ConfigValue;
 use Spiritix\LadaCache\Tests\TestCase;
@@ -20,6 +21,7 @@ class ConfigValueTest extends TestCase
             'lada-cache.expiration_time' => '3600',
             'lada-cache.include_tables' => ['users', 'posts'],
             'lada-cache.exclude_tables' => ['jobs' => 'jobs'],
+            'lada-cache.scope' => 'models',
         ]);
 
         $this->assertSame('lada', ConfigValue::redisConnection());
@@ -27,6 +29,7 @@ class ConfigValueTest extends TestCase
         $this->assertSame(3600, ConfigValue::expirationTime());
         $this->assertSame(['users', 'posts'], ConfigValue::includeTables());
         $this->assertSame(['jobs'], ConfigValue::excludeTables());
+        $this->assertSame(CacheScope::Models, ConfigValue::scope());
     }
 
     public function testEmptyOrNullValuesFallBackToDefaults(): void
@@ -36,12 +39,14 @@ class ConfigValueTest extends TestCase
             'lada-cache.prefix' => null,
             'lada-cache.expiration_time' => null,
             'lada-cache.include_tables' => null,
+            'lada-cache.scope' => '',
         ]);
 
         $this->assertSame('cache', ConfigValue::redisConnection());
         $this->assertSame('lada:', ConfigValue::prefix());
         $this->assertSame(0, ConfigValue::expirationTime());
         $this->assertSame([], ConfigValue::includeTables());
+        $this->assertSame(CacheScope::All, ConfigValue::scope());
     }
 
     /**
@@ -56,6 +61,7 @@ class ConfigValueTest extends TestCase
             'negative expiration' => ['expiration_time', -1, 'Invalid lada-cache configuration lada-cache.expiration_time: expected a non-negative integer, got -1.'],
             'fractional expiration' => ['expiration_time', 1.5, 'Invalid lada-cache configuration lada-cache.expiration_time: expected a non-negative integer, got 1.5.'],
             'string include tables' => ['include_tables', 'users', "Invalid lada-cache configuration lada-cache.include_tables: expected a list of strings, got 'users'."],
+            'unknown scope' => ['scope', 'everything', "Invalid lada-cache configuration lada-cache.scope: expected one of all, models, got 'everything'."],
             'nested exclude tables' => ['exclude_tables', ['cars', ['engines']], 'Invalid lada-cache configuration lada-cache.exclude_tables: expected a list of strings, got an entry array.'],
         ];
     }

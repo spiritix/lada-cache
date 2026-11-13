@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache\Support;
 
 use InvalidArgumentException;
+use Spiritix\LadaCache\CacheScope;
 
 /**
  * Typed access to the Lada Cache configuration.
@@ -27,6 +28,7 @@ final class ConfigValue
         self::expirationTime();
         self::includeTables();
         self::excludeTables();
+        self::scope();
     }
 
     public static function redisConnection(): string
@@ -61,6 +63,19 @@ final class ConfigValue
     public static function excludeTables(): array
     {
         return self::strings('lada-cache.exclude_tables');
+    }
+
+    public static function scope(): CacheScope
+    {
+        $value = config('lada-cache.scope');
+
+        if ($value === null || $value === '') {
+            return CacheScope::All;
+        }
+
+        $expected = 'one of '.implode(', ', array_column(CacheScope::cases(), 'value'));
+
+        return (is_string($value) ? CacheScope::tryFrom($value) : null) ?? throw self::invalid('lada-cache.scope', $expected, $value);
     }
 
     private static function string(string $key, string $default): string

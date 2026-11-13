@@ -7,6 +7,7 @@ namespace Spiritix\LadaCache\Tests\Unit;
 use Illuminate\Support\Facades\DB;
 use Spiritix\LadaCache\Manager;
 use Spiritix\LadaCache\Reflector;
+use Spiritix\LadaCache\Tests\Database\Models\Car;
 use Spiritix\LadaCache\Tests\TestCase;
 
 class ManagerTest extends TestCase
@@ -79,5 +80,30 @@ class ManagerTest extends TestCase
 
         $manager = new Manager($reflector);
         $this->assertFalse($manager->shouldCache());
+    }
+
+    public function testModelsScopeCachesOnlyModelQueries(): void
+    {
+        config(['lada-cache.scope' => 'models']);
+
+        $this->assertFalse((new Manager($this->makeReflectorFromTables(['cars'])))->shouldCache());
+        $this->assertTrue((new Manager(new Reflector(Car::query()->getQuery())))->shouldCache());
+    }
+
+    public function testModelsScopeStillInvalidatesAndTracksSubQueriesOfQueryBuilders(): void
+    {
+        config(['lada-cache.scope' => 'models']);
+
+        $manager = new Manager($this->makeReflectorFromTables(['cars']));
+
+        $this->assertTrue($manager->shouldInvalidate());
+        $this->assertTrue($manager->shouldCacheAsSubQuery());
+    }
+
+    public function testAllScopeCachesQueryBuilderQueries(): void
+    {
+        config(['lada-cache.scope' => 'all']);
+
+        $this->assertTrue((new Manager($this->makeReflectorFromTables(['cars'])))->shouldCache());
     }
 }

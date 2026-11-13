@@ -4,10 +4,11 @@
 ### Added
 - Added `withoutCache()` for per-query bypass of read caching and write invalidation (see https://github.com/spiritix/lada-cache/pull/151)
 - Added `lada-cache:invalidate <tables...>` to invalidate the cached entries of specific tables after changes made outside Laravel
+- Added `lada-cache.scope` (`LADA_CACHE_SCOPE`): `models` caches only reads from models using `LadaCacheTrait`, while writes from any builder still invalidate
 - `lada-cache:flush` reports how many keys it deleted and fails when Redis is unreachable instead of reporting success
 
 ### Changed
-- Invalid configuration values (`prefix`, `redis_connection`, `expiration_time`, `include_tables`, `exclude_tables`) fail at boot with an error naming the key instead of being silently cast
+- Invalid configuration values (`prefix`, `redis_connection`, `expiration_time`, `scope`, `include_tables`, `exclude_tables`) fail at boot with an error naming the key instead of being silently cast
 
 ### Fixed
 - `lada-cache:enable` flushes results cached before Lada Cache was disabled, since writes made while disabled did not invalidate them

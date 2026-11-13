@@ -130,7 +130,7 @@ This file allows you to fine-tune cache behavior, such as:
 
 The default configuration is already optimized for most Laravel applications, so you typically won’t need to modify it unless you want more granular control.
 
-Invalid values fail at boot with an error naming the key, instead of being silently cast: `prefix` and `redis_connection` must be strings, `expiration_time` a non-negative integer (or `null`), and `include_tables` / `exclude_tables` lists of strings.
+Invalid values fail at boot with an error naming the key, instead of being silently cast: `prefix` and `redis_connection` must be strings, `expiration_time` a non-negative integer (or `null`), `scope` one of `all` and `models`, and `include_tables` / `exclude_tables` lists of strings.
 
 ## Usage
 
@@ -157,6 +157,14 @@ DB::table('users')->where('id', $id)->withoutCache()->update(['name' => 'New']);
 ```
 
 This is useful for freshness-critical reads, diagnostics, or ad-hoc cache busting without touching the configuration.
+
+### Caching only selected models
+
+By default every query on a Lada connection is cached. Set `LADA_CACHE_SCOPE=models` to cache only reads issued by models that use `LadaCacheTrait`. `DB::table()` reads and models without the trait then always hit the database, while writes from any builder still invalidate, so cached models never go stale through code paths that are not cached themselves.
+
+```env
+LADA_CACHE_SCOPE=models
+```
 
 ## Console Commands
 
