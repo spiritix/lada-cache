@@ -130,6 +130,8 @@ This file allows you to fine-tune cache behavior, such as:
 
 The default configuration is already optimized for most Laravel applications, so you typically won’t need to modify it unless you want more granular control.
 
+Invalid values fail at boot with an error naming the key, instead of being silently cast: `prefix` and `redis_connection` must be strings, `expiration_time` a non-negative integer (or `null`), `scope` one of `all` and `models`, and `include_tables` / `exclude_tables` lists of strings.
+
 ## Usage
 
 After installation, Lada Cache works **automatically**.  
@@ -156,16 +158,33 @@ DB::table('users')->where('id', $id)->withoutCache()->update(['name' => 'New']);
 
 This is useful for freshness-critical reads, diagnostics, or ad-hoc cache busting without touching the configuration.
 
+### Caching only selected models
+
+By default every query on a Lada connection is cached. Set `LADA_CACHE_SCOPE=models` to cache only reads issued by models that use `LadaCacheTrait`. `DB::table()` reads and models without the trait then always hit the database, while writes from any builder still invalidate, so cached models never go stale through code paths that are not cached themselves.
+
+```env
+LADA_CACHE_SCOPE=models
+```
+
+### Laravel Octane
+
+When Octane is configured, Lada Cache adds its services to `octane.warm`, so each worker keeps one instance and one Redis connection instead of rebuilding them on every request.
+
 ## Console Commands
 
 ```bash
-# Flush all cached entries
+# Flush all cached entries and report how many keys were deleted
 php artisan lada-cache:flush
+
+# Invalidate the cached entries of specific tables after changes made outside Laravel
+# (imports, manual fixes), without flushing everything
+php artisan lada-cache:invalidate users orders [--connection=mysql]
 
 # Temporarily disable cache
 php artisan lada-cache:disable
 
-# Re-enable cache
+# Re-enable cache; flushes results cached before it was disabled, since writes made
+# while disabled did not invalidate them
 php artisan lada-cache:enable
 ```
 
@@ -175,6 +194,7 @@ php artisan lada-cache:enable
 - Third-party packages with custom query builders may bypass caching.
 - Complex SQL constructs such as `UNION`/`INTERSECT`/advanced expressions may not be fully reflected for row-level tagging; invalidation falls back to table-level tags.
 - Raw SQL executed directly via the connection (e.g., `DB::select()`, `DB::statement()`) is not cached by design.
+- Writes that bypass Lada's query builder (raw statements, other applications, database consoles) do not invalidate the cache; run `php artisan lada-cache:invalidate <tables>` (or `lada-cache:flush`) after such changes.
 - Row-level tagging relies on standard single-column primary keys. Composite or unconventional primary keys fall back to table-level invalidation.
 
 ## Contributing

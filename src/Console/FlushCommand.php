@@ -9,7 +9,7 @@ use Illuminate\Console\Command;
 /**
  * Flush all entries from the Lada Cache database cache.
  *
- * Executes a full cache flush and reports the outcome.
+ * Executes a full cache flush and reports how many keys it deleted.
  */
 final class FlushCommand extends Command
 {
@@ -29,8 +29,10 @@ final class FlushCommand extends Command
         try {
             /** @var \Spiritix\LadaCache\Cache $cache */
             $cache = app('lada.cache');
-            $cache->flush();
+            $started = hrtime(true);
+            $deleted = $cache->flush();
             $this->info('Lada Cache has been flushed successfully.');
+            $this->line(sprintf('Deleted %d keys in %.2f seconds.', $deleted, (hrtime(true) - $started) / 1e9));
 
             return self::SUCCESS;
         } catch (\Throwable $e) {

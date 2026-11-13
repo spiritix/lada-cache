@@ -10,10 +10,12 @@ use Illuminate\Database\Events\MigrationsEnded;
 use Illuminate\Database\Events\TransactionCommitted;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 use Spiritix\LadaCache\Console\DisableCommand;
 use Spiritix\LadaCache\Console\EnableCommand;
 use Spiritix\LadaCache\Console\FlushCommand;
+use Spiritix\LadaCache\Console\InvalidateCommand;
 use Spiritix\LadaCache\Database\MySqlConnection as LadaMySqlConnection;
 use Spiritix\LadaCache\Database\MariaDbConnection as LadaMariaDbConnection;
 use Spiritix\LadaCache\Database\PostgresConnection as LadaPostgresConnection;
@@ -21,6 +23,8 @@ use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Database\SqliteConnection as LadaSqliteConnection;
 use Spiritix\LadaCache\Database\SqlServerConnection as LadaSqlServerConnection;
 use Spiritix\LadaCache\Debug\CacheCollector;
+use Spiritix\LadaCache\Support\ConfigValue;
+use Throwable;
 
 /**
  * Lada Cache service provider for Laravel.
@@ -32,6 +36,13 @@ use Spiritix\LadaCache\Debug\CacheCollector;
 final class LadaCacheServiceProvider extends ServiceProvider
 {
     public const CONFIG_FILE = 'lada-cache.php';
+
+    private const array SERVICES = [
+        'lada.redis',
+        'lada.cache',
+        'lada.invalidator',
+        'lada.handler',
+    ];
 
     public function boot(): void
     {
@@ -61,6 +72,8 @@ final class LadaCacheServiceProvider extends ServiceProvider
             $this->registerDebugbarCollector();
         }
 
+        $this->warmServicesUnderOctane();
+
         // Register transaction event listeners to coordinate transaction-aware invalidations.
         $events = $this->app['events'];
         $events->listen(TransactionCommitted::class, function (TransactionCommitted $event): void {
@@ -76,9 +89,13 @@ final class LadaCacheServiceProvider extends ServiceProvider
 
         // Auto-flush cache after migrations complete to prevent stale schema-related cache.
         $events->listen(MigrationsEnded::class, function (): void {
-            /** @var Cache $cache */
-            $cache = $this->app->make('lada.cache');
-            $cache->flush();
+            try {
+                /** @var Cache $cache */
+                $cache = $this->app->make('lada.cache');
+                $cache->flush();
+            } catch (Throwable $e) {
+                Log::warning('[LadaCache] Redis flush after migrations failed: '.$e->getMessage());
+            }
         });
     }
 
@@ -94,6 +111,7 @@ final class LadaCacheServiceProvider extends ServiceProvider
 
         // Only register when active to avoid bootstrap overhead when disabled
         if ((bool) config('lada-cache.active', true)) {
+            ConfigValue::validate();
             $this->registerSingletons();
             $this->registerDatabaseDecorator();
         }
@@ -106,12 +124,23 @@ final class LadaCacheServiceProvider extends ServiceProvider
      */
     public function provides(): array
     {
-        return [
-            'lada.redis',
-            'lada.cache',
-            'lada.invalidator',
-            'lada.handler',
-        ];
+        return self::SERVICES;
+    }
+
+    /**
+     * Octane resolves services that are not warmed again in every request's
+     * copy of the container, which rebuilds Lada's services and reconnects to
+     * Redis per request. Warming them keeps one instance per worker.
+     */
+    private function warmServicesUnderOctane(): void
+    {
+        $warm = config('octane.warm');
+
+        if (! is_array($warm)) {
+            return;
+        }
+
+        config(['octane.warm' => array_values(array_unique([...$warm, ...self::SERVICES]))]);
     }
 
     private function registerSingletons(): void
@@ -221,11 +250,13 @@ final class LadaCacheServiceProvider extends ServiceProvider
         $this->app->singleton('command.lada-cache.flush', static fn () => new FlushCommand);
         $this->app->singleton('command.lada-cache.enable', static fn () => new EnableCommand);
         $this->app->singleton('command.lada-cache.disable', static fn () => new DisableCommand);
+        $this->app->singleton('command.lada-cache.invalidate', static fn () => new InvalidateCommand);
 
         $this->commands([
             'command.lada-cache.flush',
             'command.lada-cache.enable',
             'command.lada-cache.disable',
+            'command.lada-cache.invalidate',
         ]);
     }
 

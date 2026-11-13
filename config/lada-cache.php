@@ -84,6 +84,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Cache Scope
+    |--------------------------------------------------------------------------
+    |
+    | Determines which reads are cached.
+    |
+    | "all":    every query on a Lada connection is cached, including
+    |           DB::table() queries and models without LadaCacheTrait.
+    | "models": only queries issued by models using LadaCacheTrait are
+    |           cached. Writes from any builder still invalidate, so cached
+    |           models never go stale through DB::table() or other models.
+    |
+    */
+    'scope' => env('LADA_CACHE_SCOPE', 'all'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Include Tables
     |--------------------------------------------------------------------------
     |

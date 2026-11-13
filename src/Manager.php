@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use Illuminate\Support\Facades\Config;
+use Spiritix\LadaCache\Support\ConfigValue;
 
 /**
  * Manager decides whether the current query, as reflected by a `Reflector`, should be cached.
@@ -13,10 +14,13 @@ use Illuminate\Support\Facades\Config;
  * - This class is immutable and declared as readonly; configuration values are captured at construction.
  * - Inclusion has precedence: when `lada-cache.include_tables` is non-empty, all referenced tables must be included.
  * - Otherwise an exclusion list `lada-cache.exclude_tables` is honored.
+ * - With `lada-cache.scope` set to `models`, only reads issued by models using LadaCacheTrait are cached.
  */
 final readonly class Manager
 {
     private bool $cacheActive;
+
+    private CacheScope $scope;
 
     /** @var string[] */
     private array $includeTables;
@@ -27,11 +31,29 @@ final readonly class Manager
     public function __construct(private Reflector $reflector)
     {
         $this->cacheActive = (bool) Config::get('lada-cache.active', true);
-        $this->includeTables = (array) Config::get('lada-cache.include_tables', []);
-        $this->excludeTables = (array) Config::get('lada-cache.exclude_tables', []);
+        $this->scope = ConfigValue::scope();
+        $this->includeTables = ConfigValue::includeTables();
+        $this->excludeTables = ConfigValue::excludeTables();
     }
 
     public function shouldCache(): bool
+    {
+        // Writes are not scoped (see shouldInvalidate()), so cached model reads
+        // never go stale through builders whose reads are not cached.
+        if ($this->scope === CacheScope::Models && ! $this->reflector->isModelQuery()) {
+            return false;
+        }
+
+        return $this->shouldCacheAsSubQuery();
+    }
+
+    /**
+     * Whether the query may contribute tags to a cached outer query.
+     *
+     * The scope selects which reads are cached, not which parts of a cached
+     * read are tracked, so it does not apply here.
+     */
+    public function shouldCacheAsSubQuery(): bool
     {
         // Avoid caching while a DB transaction is active to prevent serving
         // stale data within the same transaction (invalidations flush on commit).

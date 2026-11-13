@@ -123,9 +123,16 @@ class CacheTest extends TestCase
         $this->redis->set('p:k2', '1');
         $this->redis->set('p:k3', '1');
         $cache = new Cache($this->redis, $this->encoder, 0);
-        $cache->flush();
+        $this->assertSame(3, $cache->flush());
         $this->assertSame(0, (int) $this->redis->exists('p:k1'));
         $this->assertSame(0, (int) $this->redis->exists('p:k2'));
         $this->assertSame(0, (int) $this->redis->exists('p:k3'));
+    }
+
+    public function testFlushReportsNothingDeletedWhenEmpty(): void
+    {
+        $cache = new Cache($this->redis, $this->encoder, 0);
+
+        $this->assertSame(0, $cache->flush());
     }
 }

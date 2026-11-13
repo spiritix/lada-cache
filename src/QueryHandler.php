@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Spiritix\LadaCache;
 
 use Closure;
+use Illuminate\Database\Connection;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\App;
+use RuntimeException;
 use Spiritix\LadaCache\Database\QueryBuilder;
 use Spiritix\LadaCache\Debug\CacheCollector;
 use Throwable;
@@ -54,7 +56,7 @@ final class QueryHandler
             $reflector = new Reflector($this->builder);
             $manager = new Manager($reflector);
 
-            if (! $manager->shouldCache()) {
+            if (! $manager->shouldCacheAsSubQuery()) {
                 return;
             }
 
@@ -120,6 +122,33 @@ final class QueryHandler
                 // ignore
             }
         }
+    }
+
+    /**
+     * Invalidate every cached entry of the given tables, as truncating them would.
+     *
+     * Meant for changes made outside Laravel's connection; unlike invalidateQuery(),
+     * errors are not swallowed so callers can report them.
+     *
+     * @param  array<string>  $tables
+     * @return array<string>  The invalidated cache keys
+     */
+    public function invalidateTables(Connection $connection, array $tables): array
+    {
+        $tags = [];
+
+        foreach ($tables as $table) {
+            $builder = $connection->query()->from($table);
+
+            if (! $builder instanceof QueryBuilder) {
+                throw new RuntimeException("Connection [{$connection->getName()}] does not use Lada Cache.");
+            }
+
+            $tagger = new Tagger(new Reflector($builder, Reflector::QUERY_TYPE_TRUNCATE));
+            $tags = [...$tags, ...$tagger->getTags()];
+        }
+
+        return $this->invalidator->invalidate(array_values(array_unique($tags)));
     }
 
     /**
