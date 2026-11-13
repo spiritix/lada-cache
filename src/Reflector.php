@@ -91,6 +91,17 @@ final readonly class Reflector
         return RowExtractor::extractRows($this->queryBuilder);
     }
 
+    /**
+     * Whether the primary key of the given table holds strings rather than integers.
+     * Only a model's own table is known to; every other table is assumed to use integer keys.
+     */
+    public function usesStringKeys(string $table): bool
+    {
+        $model = $this->queryBuilder->getModel();
+
+        return $model !== null && $model->getTable() === $table && $model->getKeyType() !== 'int';
+    }
+
     public function getType(): string
     {
         // Prefer the declared operation when set to a known type.

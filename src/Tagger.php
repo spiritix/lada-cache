@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Spiritix\LadaCache;
 
+use Spiritix\LadaCache\Support\RowKeys;
+
 /**
  * Generates cache tags for queries based on database, tables, and targeted rows.
  *
@@ -55,7 +57,8 @@ final readonly class Tagger
 
         foreach ($tables as $table) {
             [$database, $name] = $this->locate($table);
-            $tableRows = $rows[$table] ?? [];
+            // Keys row tags cannot represent safely fall back to table tags.
+            $tableRows = RowKeys::canonicalize($rows[$table] ?? [], $this->reflector->usesStringKeys($table)) ?? [];
             $tableTags = $this->getTableTags([$name], [$name => $tableRows]);
 
             if ($tableRows !== []) {
